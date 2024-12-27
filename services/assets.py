@@ -14,7 +14,7 @@ from typing_extensions import assert_type
 
 from api.model.assets import AssetCreateApiModel, AssetFlowApiModel
 from db.models.asset.models import AssetBasicInfo, AssetManufacturesInfo, AssetPartsInfo, AssetPositionsInfo, \
-    AssetContractsInfo, AssetCustomersInfo, AssetBelongsInfo, AssetType, AssetFlowsInfo
+    AssetContractsInfo, AssetCustomersInfo, AssetBelongsInfo, AssetType, AssetFlowsInfo, AssetManufactureRelationInfo
 from db.models.asset.sql import AssetSQL
 from math import ceil
 from oslo_log import log
@@ -185,8 +185,16 @@ class AssetsService:
             # 资产的id重新生成覆盖
             asset.asset_id = asset_basic_info_db.id
             asset_id = asset_basic_info_db.id
-            # 2、资产厂商信息
-            asset_manufacture_info_db = self.convert_asset_manufacturer_info_db(asset)
+            # 2、资产厂商信息 资产关联的厂商可能已经存在也可能不存在
+            asset_manufacture_info_db = None
+            asset_manufacture_info_db_new = None
+            if asset.asset_manufacturer:
+                asset_manufacture_info_db = self.check_manufacturer_exists(asset)
+            # 数据库不存在当前厂商
+            if not asset_manufacture_info_db:
+                asset_manufacture_info_db_new = self.convert_asset_manufacturer_info_db(asset)
+            # 建立资产与厂商关联关系对象
+            asset_manufacture_relation_info_db = self.convert_manufacturer_relation_info_db(asset, asset_manufacture_info_db, asset_manufacture_info_db_new)
             # 3、资产位置信息
             asset_position_info_db = self.convert_asset_position_info_db(asset)
             # 4、资产合同信息
@@ -200,13 +208,27 @@ class AssetsService:
             # 8、资产流量信息
             asset_flow_info_db = None # self.convert_asset_flow_info_db_from_asset(asset)
             # 保存对象
-            AssetSQL.create_asset(asset_basic_info_db, asset_manufacture_info_db, asset_position_info_db, asset_contract_info_db, asset_belong_info_db, asset_customer_info_db, asset_part_info_db, asset_flow_info_db)
+            AssetSQL.create_asset(asset_basic_info_db, asset_manufacture_info_db_new, asset_manufacture_relation_info_db, asset_position_info_db, asset_contract_info_db, asset_belong_info_db, asset_customer_info_db, asset_part_info_db, asset_flow_info_db)
         except Exception as e:
             import traceback
             traceback.print_exc()
             raise e
         # 成功返回资产id
         return asset_id
+
+
+    def check_manufacturer_exists(self, asset):
+        # 默认空
+        asset_manufacture_info_db = None
+        # 首先根据条件查询
+        if asset.asset_manufacturer:
+            # 先根据id查询
+            if asset.asset_manufacturer.id:
+                return AssetSQL.get_manufacture_by_id(asset.asset_manufacturer.id)
+            if asset.asset_manufacturer.name:
+                return AssetSQL.get_manufacture_by_name(asset.asset_manufacturer.name)
+        # 返回
+        return asset_manufacture_info_db
 
 
     # 资产创建时基础对象数据转换
@@ -244,6 +266,26 @@ class AssetsService:
         # 返回数据
         return asset_manufacturer_info_db
 
+
+    # 创建资产与厂商关联关系
+    def convert_manufacturer_relation_info_db(self, asset, manufacturer_info_db, manufacturer_info_db_new):
+        # 判空
+        if asset.asset_manufacturer is None:
+            return None
+        # 数据转化为db对象
+        manufacturer_relation_info_db = AssetManufactureRelationInfo(
+            id=uuid.uuid4().hex,
+            asset_id=asset.asset_id,
+            manufacture_id=None,
+        )
+        # 数据库中的厂商
+        if manufacturer_info_db:
+            manufacturer_relation_info_db.manufacture_id = manufacturer_info_db.id
+        # 新建的厂商
+        if manufacturer_info_db_new:
+            manufacturer_relation_info_db.manufacture_id = manufacturer_info_db_new.id
+        # 返回数据
+        return manufacturer_relation_info_db
 
     # 资产创建时配件对象数据转换
     def convert_asset_part_info_db(self, asset):
@@ -976,8 +1018,180 @@ class AssetsService:
 
 
     def update_asset(self, asset_id, asset):
-        pass
+        # 判空
+        if not asset_id or not asset:
+            raise Exception
+        # 根据id数据
+        asset_basic_info_db = AssetSQL.get_asset_basic_info_by_id(asset_id)
+        # 基础数据不存在
+        if asset_basic_info_db is None:
+            raise Exception
+        # 1、资产基础信息数据
+        asset_basic_info_db = self.reset_asset_basic_info_db(asset_basic_info_db, asset)
+        # 2、资产厂商信息 资产关联的厂商可能已经存在也可能不存在
+        asset_manufacture_info_db = None
+        asset_manufacture_info_db_new = None
+        asset_manufacture_relation_info_db = None
+        if asset.asset_manufacturer:
+            asset_manufacture_info_db = self.check_manufacturer_exists(asset)
+        # 数据库不存在当前厂商
+        if not asset_manufacture_info_db:
+            asset_manufacture_info_db_new = self.convert_asset_manufacturer_info_db(asset)
+        # 建立资产与厂商关联关系对象
+        asset_manufacture_relation_info_db = self.convert_manufacturer_relation_info_db(asset, asset_manufacture_info_db, asset_manufacture_info_db_new)
+        # 3、资产位置信息
+        asset_position_info_db = None
+        if asset.asset_position:
+            # 根据资产id查询
+            asset_position_info_db = AssetSQL.get_position_by_asset_id(asset_id)
+            if asset_position_info_db:
+                asset_position_info_db = self.reset_asset_position_info_db(asset_position_info_db, asset)
+            else:
+                asset_position_info_db = self.convert_asset_position_info_db(asset)
+        # 4、资产合同信息
+        asset_contract_info_db = None
+        if asset.asset_contract:
+            # 根据资产id查询
+            asset_contract_info_db = AssetSQL.get_contract_by_asset_id(asset_id)
+            if asset_contract_info_db:
+                asset_contract_info_db = self.reset_asset_contract_info_db(asset_contract_info_db, asset)
+            else:
+                asset_contract_info_db = self.convert_asset_contract_info_db(asset)
+        # 5、资产归属信息
+        asset_belong_info_db = None
+        if asset.asset_belong:
+            # 根据资产id查询
+            asset_belong_info_db = AssetSQL.get_belong_by_asset_id(asset_id)
+            if asset_belong_info_db:
+                asset_belong_info_db = self.reset_asset_belong_info_db(asset_belong_info_db, asset)
+            else:
+                asset_belong_info_db = self.convert_asset_belong_info_db(asset)
+        # 6、资产租赁信息
+        asset_customer_info_db = None
+        if asset.asset_customer:
+            # 根据资产id查询
+            asset_customer_info_db = AssetSQL.get_customer_by_asset_id(asset_id)
+            if asset_customer_info_db:
+                asset_customer_info_db = self.reset_asset_customer_info_db(asset_customer_info_db, asset)
+            else:
+                asset_customer_info_db = self.convert_asset_customer_info_db(asset)
+        # 7、资产配件信息
+        asset_part_info_db = None
+        # 配件是列表重新保存
+        if asset.asset_part:
+            asset_part_info_db = self.convert_asset_part_info_db(asset)
+        # 更新资产相关的数据
+        AssetSQL.update_asset(asset_basic_info_db, asset_manufacture_info_db_new, asset_manufacture_relation_info_db, asset_position_info_db, asset_contract_info_db, asset_belong_info_db, asset_customer_info_db, asset_part_info_db, None)
 
+
+    # 资产创建时基础对象数据转换
+    def reset_asset_basic_info_db(self, asset_basic_info_db, asset):
+        # 更新存在的字段
+        if asset.asset_type_id:
+            asset_basic_info_db.asset_type_id = asset.asset_type_id
+        if asset.asset_category:
+            asset_basic_info_db.asset_category = asset.asset_category
+        if asset.asset_type:
+            asset_basic_info_db.asset_type = asset.asset_type
+        if asset.asset_name:
+            asset_basic_info_db.name = asset.asset_name
+        if asset.asset_description:
+            asset_basic_info_db.description = asset.asset_description
+        if asset.equipment_number:
+            asset_basic_info_db.equipment_number = asset.equipment_number
+        if asset.sn_number:
+            asset_basic_info_db.sn_number = asset.sn_number
+        if asset.asset_number:
+            asset_basic_info_db.asset_number = asset.asset_number
+        if asset.asset_status:
+            asset_basic_info_db.asset_status = asset.asset_status
+        if asset.extra:
+            asset_basic_info_db.asset_status = json.dumps(asset.extra)
+        # 返回数据
+        return asset_basic_info_db
+
+
+    # 重新设置位置信息
+    def reset_asset_position_info_db(self, asset_position_info_db, asset):
+        # 判空
+        if asset.asset_position is None:
+            return asset_position_info_db
+        # 参数重设
+        if asset.asset_position.frame_position:
+            asset_position_info_db.frame_position=asset.asset_position.frame_position
+        if asset.asset_position.cabinet_position:
+            asset_position_info_db.cabinet_position=asset.asset_position.cabinet_position
+        if asset.asset_position.u_position:
+            asset_position_info_db.u_position=asset.asset_position.u_position
+        if asset.asset_position.description:
+            asset_position_info_db.description=asset.asset_position.description
+        # 返回
+        return asset_position_info_db
+
+    # 重新设置合同信息
+    def reset_asset_contract_info_db(self, asset_contract_info_db, asset):
+        # 判空
+        if asset.asset_contract is None:
+            return asset_contract_info_db
+        # 参数重设
+        if asset.asset_contract.contract_number:
+            asset_contract_info_db.contract_number=asset.asset_contract.contract_number
+        if asset.asset_contract.purchase_date and asset.asset_contract.purchase_date > 0:
+            asset_contract_info_db.purchase_date=datetime.fromtimestamp(asset.asset_contract.purchase_date/1000)
+        if asset.asset_contract.batch_number:
+            asset_contract_info_db.batch_number=asset.asset_contract.batch_number
+        if asset.asset_contract.description:
+            asset_contract_info_db.description=asset.asset_contract.description
+        # 返回
+        return asset_contract_info_db
+
+    # 重新设置归属信息
+    def reset_asset_belong_info_db(self, asset_belong_info_db, asset):
+        # 判空
+        if asset.asset_belong is None:
+            return asset_belong_info_db
+        # 参数重设
+        if asset.asset_belong.department_id:
+            asset_belong_info_db.department_id=asset.asset_belong.department_id
+        if asset.asset_belong.department_name:
+            asset_belong_info_db.department_name=asset.asset_belong.department_name
+        if asset.asset_belong.user_id:
+            asset_belong_info_db.user_id=asset.asset_belong.user_id
+        if asset.asset_belong.user_name:
+            asset_belong_info_db.user_name=asset.asset_belong.user_name
+        if asset.asset_belong.tel_number:
+            asset_belong_info_db.tel_number=asset.asset_belong.tel_number
+        if asset.asset_belong.description:
+            asset_belong_info_db.description=asset.asset_belong.description
+        # 返回
+        return asset_belong_info_db
+
+        # 重新设置归属信息
+    def reset_asset_customer_info_db(self, asset_customer_info_db, asset):
+        # 判空
+        if asset.asset_customer is None:
+            return asset_customer_info_db
+        # 参数重设
+        if asset.asset_customer.customer_id:
+            asset_customer_info_db.customer_id=asset.asset_customer.customer_id
+        if asset.asset_customer.customer_name:
+            asset_customer_info_db.customer_name=asset.asset_customer.customer_name
+        if asset.asset_customer.rental_duration:
+            asset_customer_info_db.rental_duration=asset.asset_customer.rental_duration
+        if asset.asset_customer.start_date:
+            asset_customer_info_db.start_date=datetime.fromtimestamp(asset.asset_customer.start_date/1000)
+        if asset.asset_customer.end_date:
+            asset_customer_info_db.end_date=datetime.fromtimestamp(asset.asset_customer.end_date/1000)
+        if asset.asset_customer.vlan_id:
+            asset_customer_info_db.vlan_id=asset.asset_customer.vlan_id
+        if asset.asset_customer.float_ip:
+            asset_customer_info_db.float_ip=asset.asset_customer.float_ip
+        if asset.asset_customer.band_width:
+            asset_customer_info_db.band_width=asset.asset_customer.band_width
+        if asset.asset_customer.description:
+            asset_customer_info_db.description=asset.asset_customer.description
+        # 返回
+        return asset_customer_info_db
 
     # 以下厂商相关功能 创建、查询、删除、修改
     def create_manufacture(self, manufacture):

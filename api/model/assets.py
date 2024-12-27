@@ -46,6 +46,7 @@ class AssetFlowApiModel(BaseModel):
 
 # 资产生产厂商信息
 class AssetManufacturerApiModel(BaseModel):
+    id: Optional[str] = Field(None, description="厂商的id")
     asset_id: Optional[str] = Field(None, description="厂商关联的资产设备编号信息")
     name: Optional[str] = Field(None, description="厂商的名称")
     description: Optional[str] = Field(None, description="厂商的描述信息")

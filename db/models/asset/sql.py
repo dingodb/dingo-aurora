@@ -8,7 +8,7 @@ from typing_extensions import assert_type
 
 from db.engines.mysql import get_session
 from db.models.asset.models import Asset, AssetBasicInfo, AssetPartsInfo, AssetManufacturesInfo, AssetPositionsInfo, \
-    AssetContractsInfo, AssetBelongsInfo, AssetCustomersInfo, AssetType, AssetFlowsInfo
+    AssetContractsInfo, AssetBelongsInfo, AssetCustomersInfo, AssetType, AssetFlowsInfo, AssetManufactureRelationInfo
 
 from enum import Enum
 
@@ -75,7 +75,8 @@ class AssetSQL:
                                   AssetCustomersInfo.description.label("customer_description"),
                                   )
             # 外连接
-            query = query.outerjoin(AssetManufacturesInfo, AssetManufacturesInfo.asset_id == AssetBasicInfo.id). \
+            query = query.outerjoin(AssetManufactureRelationInfo, AssetManufactureRelationInfo.asset_id == AssetBasicInfo.id). \
+                outerjoin(AssetManufacturesInfo, AssetManufacturesInfo.id == AssetManufactureRelationInfo.manufacture_id). \
                 outerjoin(AssetType, AssetType.id == AssetBasicInfo.asset_type_id). \
                 outerjoin(AssetPositionsInfo, AssetPositionsInfo.asset_id == AssetBasicInfo.id). \
                 outerjoin(AssetContractsInfo, AssetContractsInfo.asset_id == AssetBasicInfo.id). \
@@ -231,7 +232,7 @@ class AssetSQL:
 
 
     @classmethod
-    def create_asset(cls, basic_info, manufacture_info, position_info, contract_info, belong_info, customer_info, part_info, flow_info):
+    def create_asset(cls, basic_info, manufacture_info, manufacture_relation_info, position_info, contract_info, belong_info, customer_info, part_info, flow_info):
         # Session = sessionmaker(bind=engine, expire_on_commit=False)
         # session = Session()
         session = get_session()
@@ -239,6 +240,8 @@ class AssetSQL:
             session.add(basic_info)
             if manufacture_info is not None:
                 session.add(manufacture_info)
+            if manufacture_relation_info is not None:
+                session.add(manufacture_relation_info)
             if position_info is not None:
                 session.add(position_info)
             if contract_info is not None:
@@ -253,6 +256,31 @@ class AssetSQL:
                 session.add_all(flow_info)
 
 
+    @classmethod
+    def update_asset(cls, basic_info, manufacture_info, manufacture_relation_info, position_info, contract_info, belong_info, customer_info, part_info, flow_info):
+        session = get_session()
+        with session.begin():
+            if basic_info:
+                session.merge(basic_info)
+            if manufacture_info and manufacture_info.name:
+                session.add(manufacture_info)
+            if manufacture_relation_info:
+                session.query(AssetManufactureRelationInfo).filter(AssetManufactureRelationInfo.asset_id == basic_info.id).delete()
+                session.add(manufacture_relation_info)
+            if position_info:
+                session.merge(position_info)
+            if contract_info:
+                session.merge(contract_info)
+            if belong_info:
+                session.merge(belong_info)
+            if customer_info:
+                session.merge(customer_info)
+            if part_info:
+                session.query(AssetPartsInfo).filter(AssetPartsInfo.id == basic_info.id).delete()
+                session.add_all(part_info)
+            if flow_info:
+                session.add_all(flow_info)
+
 
     @classmethod
     def delete_asset(cls, asset_id):
@@ -264,8 +292,8 @@ class AssetSQL:
             session.query(AssetBasicInfo).filter(AssetBasicInfo.id == asset_id).delete()
             # 删除资产的配件信息
             session.query(AssetPartsInfo).filter(AssetPartsInfo.asset_id == asset_id).delete()
-            # 删除资产的厂商信息
-            session.query(AssetManufacturesInfo).filter(AssetManufacturesInfo.asset_id == asset_id).delete()
+            # 删除资产的关联厂商信息
+            session.query(AssetManufactureRelationInfo).filter(AssetManufactureRelationInfo.asset_id == asset_id).delete()
             # 删除资产的位置信息
             session.query(AssetPositionsInfo).filter(AssetPositionsInfo.asset_id == asset_id).delete()
             # 删除资产的合同信息
@@ -329,6 +357,21 @@ class AssetSQL:
             return session.query(AssetManufacturesInfo).filter(AssetManufacturesInfo.id == manufacture_id).first()
 
     @classmethod
+    def get_manufacture_by_name(cls, manufacture_name):
+        # Session = sessionmaker(bind=engine, expire_on_commit=False)
+        # session = Session()
+        session = get_session()
+        with session.begin():
+            return session.query(AssetManufacturesInfo).filter(AssetManufacturesInfo.name == manufacture_name).first()
+
+
+    @classmethod
+    def get_manufacture_by_asset_id(cls, asset_id):
+        session = get_session()
+        with session.begin():
+            return session.query(AssetManufacturesInfo).filter(AssetManufacturesInfo.asset_id == asset_id).first()
+
+    @classmethod
     def update_manufacture(cls, manufacture_db):
         # Session = sessionmaker(bind=engine, expire_on_commit=False)
         # session = Session()
@@ -336,6 +379,29 @@ class AssetSQL:
         with session.begin():
             return session.merge(manufacture_db)
 
+    @classmethod
+    def get_position_by_asset_id(cls, asset_id):
+        session = get_session()
+        with session.begin():
+            return session.query(AssetPositionsInfo).filter(AssetPositionsInfo.asset_id == asset_id).first()
+
+    @classmethod
+    def get_contract_by_asset_id(cls, asset_id):
+        session = get_session()
+        with session.begin():
+            return session.query(AssetContractsInfo).filter(AssetContractsInfo.asset_id == asset_id).first()
+
+    @classmethod
+    def get_belong_by_asset_id(cls, asset_id):
+        session = get_session()
+        with session.begin():
+            return session.query(AssetBelongsInfo).filter(AssetBelongsInfo.asset_id == asset_id).first()
+
+    @classmethod
+    def get_customer_by_asset_id(cls, asset_id):
+        session = get_session()
+        with session.begin():
+            return session.query(AssetCustomersInfo).filter(AssetCustomersInfo.asset_id == asset_id).first()
 
     # 资产类型查询列表
     @classmethod
@@ -472,6 +538,13 @@ class AssetSQL:
         with session.begin():
             # 删除资产的厂商信息
             session.query(AssetPartsInfo).filter(AssetPartsInfo.id == asset_part_id).delete()
+
+    @classmethod
+    def delete_asset_part_by_asset_id(cls, asset_id):
+        session = get_session()
+        with session.begin():
+            # 删除资产的厂商信息
+            session.query(AssetPartsInfo).filter(AssetPartsInfo.id == asset_id).delete()
 
     @classmethod
     def get_asset_part_by_id(cls, asset_part_id):

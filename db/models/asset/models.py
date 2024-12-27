@@ -73,6 +73,15 @@ class AssetManufacturesInfo(Base):
     extra = Column(Text)
 
 
+# 资产设备的厂商关联信息对象
+class AssetManufactureRelationInfo(Base):
+    __tablename__ = "ops_assets_manufactures_relations_info"
+
+    id = Column(String(length=128), primary_key= True, nullable=False, index=True, unique=False)
+    asset_id = Column(String(length=128), nullable=True)
+    manufacture_id = Column(String(length=128), nullable=True)
+
+
 # 资产设备的位置信息对象
 class AssetPositionsInfo(Base):
     __tablename__ = "ops_assets_positions_info"
