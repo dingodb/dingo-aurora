@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from mako.testing.helpers import result_lines
 
 from api.model.assets import AssetCreateApiModel, AssetManufacturerApiModel, AssetUpdateStatusApiModel, \
-    AssetPartApiModel, AssetTypeApiModel, AssetFlowApiModel, AssetBatchDownloadApiModel
+    AssetPartApiModel, AssetTypeApiModel, AssetFlowApiModel, AssetBatchDownloadApiModel, AssetBatchUpdateApiModel
 from api.response import ResponseModel, success_response
 from services.assets import AssetsService
 from utils.constant import EXCEL_TEMP_DIR, ASSET_TEMPLATE_ASSET_SHEET, ASSET_TEMPLATE_PART_SHEET, \
@@ -259,6 +259,19 @@ async def create_asset(asset:AssetCreateApiModel):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail="asset create error")
+
+
+@router.post("/assets/update_basic", summary="批量更新资产信息", description="批量更新资产信息")
+async def update_asset_batch(asset_batch:AssetBatchUpdateApiModel):
+    # 更新资产设备
+    try:
+        # 修改成功
+        result = assert_service.update_asset_list(asset_batch)
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail="asset update error")
 
 
 @router.post("/assets/update_status", summary="批量更新状态", description="批量更新状态")

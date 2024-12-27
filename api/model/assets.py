@@ -136,4 +136,9 @@ class AssetBatchDownloadApiModel(BaseModel):
     asset_type: str = Field(None, description="资产类型")
     asset_ids: str = Field(None, description="资产数据的id的拼装字符串")
 
+# 资产更新的信息
+class AssetBatchUpdateApiModel(BaseModel):
+    asset_ids: str = Field(None, description="资产数据的id的拼装字符串")
+    asset_type_id: Optional[str] = Field(..., description="资产设备的类型id")
+    asset_type: Optional[str] = Field(None, description="资产类型")
 

@@ -1016,6 +1016,42 @@ class AssetsService:
             traceback.print_exc()
             raise e
 
+    # 批量更新
+    def update_asset_list(self, asset_batch):
+        try:
+            # 判空
+            if not asset_batch or not asset_batch.asset_ids:
+                raise Exception
+            # id分割
+            asset_ids = asset_batch.asset_ids.split(',')
+            # 判空
+            if not asset_ids:
+                raise Exception
+            # 遍历
+            for temp_asset_id in asset_ids:
+                # 基础信息
+                asset_basic_info_db = AssetSQL.get_asset_basic_info_by_id(temp_asset_id)
+                # 判空
+                if not asset_basic_info_db:
+                    raise Exception
+                # 临时更新对象
+                temp_asset = AssetCreateApiModel(
+                    asset_name=asset_basic_info_db.name,
+                    asset_type_id=asset_basic_info_db.asset_type_id)
+                # 设置更新参数
+                if asset_batch.asset_type_id:
+                    temp_asset.asset_type_id = asset_batch.asset_type_id
+                if asset_batch.asset_type:
+                    temp_asset.asset_type = asset_batch.asset_type
+                # 更新
+                self.update_asset(temp_asset_id, temp_asset)
+            # 成功返回id
+            return asset_ids
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+
 
     def update_asset(self, asset_id, asset):
         # 判空
