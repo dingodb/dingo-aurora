@@ -14,7 +14,8 @@ from typing_extensions import assert_type
 
 from api.model.assets import AssetCreateApiModel, AssetFlowApiModel
 from db.models.asset.models import AssetBasicInfo, AssetManufacturesInfo, AssetPartsInfo, AssetPositionsInfo, \
-    AssetContractsInfo, AssetCustomersInfo, AssetBelongsInfo, AssetType, AssetFlowsInfo, AssetManufactureRelationInfo
+    AssetContractsInfo, AssetCustomersInfo, AssetBelongsInfo, AssetType, AssetFlowsInfo, AssetManufactureRelationInfo, \
+    AssetExtendsColumnsInfo
 from db.models.asset.sql import AssetSQL
 from math import ceil
 from oslo_log import log
@@ -39,11 +40,11 @@ thin_border = Border(
 class AssetsService:
 
     # 查询资产列表
-    def list_assets(self, asset_id, asset_ids, asset_name, asset_category, asset_type, asset_status, frame_position, cabinet_position, u_position, equipment_number, asset_number, sn_number, department_name, user_name, page, page_size, sort_keys, sort_dirs):
+    def list_assets(self, asset_id, asset_ids, asset_name, asset_category, asset_type, asset_status, frame_position, cabinet_position, u_position, equipment_number, asset_number, sn_number, department_name, user_name, manufacture_name, page, page_size, sort_keys, sort_dirs):
         # 业务逻辑
         try:
             # 按照条件从数据库中查询数据
-            count, data = AssetSQL.list_asset(asset_id, asset_ids, asset_name, asset_category, asset_type, asset_status, frame_position, cabinet_position, u_position, equipment_number, asset_number, sn_number, department_name, user_name, page, page_size, sort_keys, sort_dirs)
+            count, data = AssetSQL.list_asset(asset_id, asset_ids, asset_name, asset_category, asset_type, asset_status, frame_position, cabinet_position, u_position, equipment_number, asset_number, sn_number, department_name, user_name, manufacture_name, page, page_size, sort_keys, sort_dirs)
             # 数据处理
             ret = []
             # 遍历
@@ -60,6 +61,7 @@ class AssetsService:
                 temp["sn_number"] = r.sn_number
                 temp["asset_number"] = r.asset_number
                 temp["asset_status"] = r.asset_status
+                temp["asset_status_description"] = r.asset_status_description
                 temp["asset_description"] = r.description
                 temp["extra"] = r.extra
                 # 厂商信息
@@ -167,7 +169,7 @@ class AssetsService:
             if asset.asset_name is None or asset.asset_type_id is None:
                 raise Exception
             # 2、重名
-            count, _ = AssetSQL.list_asset(None,None, asset.asset_name, None,None, None, None, None, None, None, None, None, None, None, 1,10,None,None)
+            count, _ = AssetSQL.list_asset(None,None, asset.asset_name, None,None, None, None, None, None, None, None, None, None, None,None, 1,10,None,None)
             if count > 0:
                 LOG.error("asset name exist")
                 raise Exception
@@ -245,7 +247,8 @@ class AssetsService:
             sn_number=asset.sn_number,
             asset_number=asset.asset_number,
             asset_status=asset.asset_status,
-            extra=json.dumps(asset.extra) if asset.extra else asset.extra
+            extra=json.dumps(asset.extra) if asset.extra else asset.extra,
+            extend_column_extra=json.dumps(asset.extend_column_extra) if asset.extend_column_extra else asset.extend_column_extra
         )
         # 返回数据
         return asset_basic_info_db
@@ -426,7 +429,7 @@ class AssetsService:
         # 详情
         try:
             # 根据id查询
-            res = self.list_assets(asset_id, None,None, None,None,None, None, None, None, None, None, None, None, None, 1, 10, None, None)
+            res = self.list_assets(asset_id, None,None, None,None,None, None, None, None, None, None, None, None, None,None, 1, 10, None, None)
             # 空
             if not res or not res.get("data"):
                 return None
@@ -461,8 +464,27 @@ class AssetsService:
                     pass
                 # 设置更新的字段
                 asset_basic_info_db.asset_status = asset_temp.asset_status
+                # 故障状态单
+                if asset_temp.asset_status == "3":
+                    if asset_temp.asset_status_description:
+                        asset_basic_info_db.asset_status_description = json.dumps(asset_temp.asset_status_description)
+                # 分配状态单
+                asset_customer_info_db = None
+                if asset_temp.asset_status == "2":
+                    # 创建资产设备的归属西悉尼
+                    if asset_temp.asset_customer:
+                        # 根据资产id查询
+                        asset_customer_info_db = AssetSQL.get_customer_by_asset_id(asset_temp.asset_id)
+                        if asset_customer_info_db:
+                            asset_customer_info_db = self.reset_asset_customer_info_db(asset_customer_info_db, asset_temp)
+                        else:
+                            asset_customer_info_db = self.convert_asset_customer_info_db(asset_temp)
                 # 更新数据
+                # 基础状态信息更新
                 AssetSQL.update_asset_basic_info(asset_basic_info_db)
+                # 分配状态信息更新
+                if asset_customer_info_db:
+                    AssetSQL.create_asset_customer(asset_customer_info_db)
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -766,7 +788,7 @@ class AssetsService:
             page = 1
             page_size = 100
             # 查询一页
-            res = self.list_assets(None,None, None, "SERVER", None,None, None, None, None, None, None, None, None, None, page, page_size, None, None)
+            res = self.list_assets(None,None, None, "SERVER", None,None, None, None, None, None, None, None, None, None,None, page, page_size, None, None)
             while res and res['data']:
                 # 写入数据
                 for temp in res['data']:
@@ -796,7 +818,7 @@ class AssetsService:
                     break
                 # 查询下一页
                 page = page + 1
-                res = self.list_assets(None,None, None,None,None, None, None, None, None, None, None, None, None, None, page, page_size, None, None)
+                res = self.list_assets(None,None, None,None,None, None, None, None, None, None, None, None, None, None,None, page, page_size, None, None)
             # 加载模板文件
             book = load_workbook(result_file_path)
             sheet = book['asset']  # 默认使用第一个工作表
@@ -831,7 +853,7 @@ class AssetsService:
             page = 1
             page_size = 100
             # 查询一页
-            res = self.list_assets(None,None, None, "NETWORK", None,None, None, None, None, None, None, None, None, None, page, page_size, None, None)
+            res = self.list_assets(None,None, None, "NETWORK", None,None, None, None, None, None, None, None, None, None,None, page, page_size, None, None)
             while res and res['data']:
                 # 写入数据
                 for temp in res['data']:
@@ -848,7 +870,7 @@ class AssetsService:
                     break
                 # 查询下一页
                 page = page + 1
-                res = self.list_assets(None,None, None,None,None, None, None, None, None, None, None, None, None, None, page, page_size, None, None)
+                res = self.list_assets(None,None, None,None,None, None, None, None, None, None, None, None, None, None,None, page, page_size, None, None)
             # 加载模板文件
             book = load_workbook(result_file_path)
             sheet = book.active  # 默认使用第一个工作表
@@ -874,7 +896,7 @@ class AssetsService:
             page = 1
             page_size = 100
             # 查询一页
-            res = self.list_assets(None, ids, None, "NETWORK", None,None, None, None, None, None, None, None, None, None, page, page_size, None, None)
+            res = self.list_assets(None, ids, None, "NETWORK", None,None, None, None, None, None, None, None, None, None,None, page, page_size, None, None)
             while res and res['data']:
                 # 写入数据
                 for temp in res['data']:
@@ -891,7 +913,7 @@ class AssetsService:
                     break
                 # 查询下一页
                 page = page + 1
-                res = self.list_assets(None, ids, None,"NETWORK",None, None, None, None, None, None, None, None, None, None, page, page_size, None, None)
+                res = self.list_assets(None, ids, None,"NETWORK",None, None, None, None, None, None, None, None, None, None,None, page, page_size, None, None)
             # 加载模板文件
             book = load_workbook(result_file_path)
             sheet = book.active  # 默认使用第一个工作表
@@ -959,7 +981,7 @@ class AssetsService:
         page = 1
         page_size = 100
         # 查询一页
-        res = self.list_assets(None, ids,None, "SERVER", None,None, None, None, None, None, None, None, None, None, page, page_size, None, None)
+        res = self.list_assets(None, ids,None, "SERVER", None,None, None, None, None, None, None, None, None, None,None, page, page_size, None, None)
         while res and res['data']:
             # 写入数据
             for temp in res['data']:
@@ -989,7 +1011,7 @@ class AssetsService:
                 break
             # 查询下一页
             page = page + 1
-            res = self.list_assets(None, ids,None,"SERVER",None, None, None, None, None, None, None, None, None, None, page, page_size, None, None)
+            res = self.list_assets(None, ids,None,"SERVER",None, None, None, None, None, None, None, None, None, None,None, page, page_size, None, None)
         try:
             # 加载模板文件
             book = load_workbook(result_file_path)
@@ -1142,7 +1164,9 @@ class AssetsService:
         if asset.asset_status:
             asset_basic_info_db.asset_status = asset.asset_status
         if asset.extra:
-            asset_basic_info_db.asset_status = json.dumps(asset.extra)
+            asset_basic_info_db.extra = json.dumps(asset.extra)
+        if asset.extend_column_extra:
+            asset_basic_info_db.extend_column_extra = json.dumps(asset.extend_column_extra)
         # 返回数据
         return asset_basic_info_db
 
@@ -2002,3 +2026,145 @@ class AssetsService:
             description = None,
         )
         return asset_network_flow_api_model
+
+
+# 以下是资产-扩展字段相关的service
+    # 查询资产扩展字段列表
+    def list_assets_columns(self, asset_type):
+        # 业务逻辑
+        try:
+            # 按照条件从数据库中查询数据
+            data = AssetSQL.list_asset_column(asset_type)
+            # 数据处理
+            ret = []
+            # 遍历
+            for r in data:
+                # 填充数据
+                temp = {}
+                temp["id"] = r.id
+                temp["asset_type"] = r.asset_type
+                temp["role_type"] = r.role_type
+                temp["column_key"] = r.column_key
+                temp["column_name"] = r.column_name
+                temp["column_type"] = r.column_type
+                temp["required_flag"] = r.required_flag
+                temp["default_flag"] = r.default_flag
+                temp["queue"] = r.queue
+                temp["description"] = r.description
+                # 加入列表
+                ret.append(temp)
+            # 返回数据
+            return ret
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return None
+
+    # 创建资产扩展字段
+    def create_asset_column(self, asset_column):
+        # 判空
+        if asset_column is None:
+            raise Exception
+        # 定义id
+        asset_column_id = None
+        try:
+            # 数据组装
+            asset_column_info_db = self.convert_asset_column_info_db_4api(asset_column)
+            asset_column_id = asset_column_info_db.id
+            # 顺序追加
+            current_max_queue = AssetSQL.get_asset_column_max_queue(asset_column_info_db.asset_type)
+            if current_max_queue >= 0:
+                asset_column_info_db.queue = current_max_queue + 1
+            # 保存对象
+            AssetSQL.create_asset_column(asset_column_info_db)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+        # 成功返回资产id
+        return asset_column_id
+
+    # 转换api请求对象为数据库对象
+    def convert_asset_column_info_db_4api(self, asset_column):
+        # 判空
+        if asset_column is None:
+            return None
+        # 数据转化为db对象
+        asset_column_info_db = AssetExtendsColumnsInfo(
+            id=uuid.uuid4().hex,
+            asset_type=asset_column.asset_type,
+            role_type=asset_column.role_type,
+            column_key=asset_column.column_key,
+            column_name=asset_column.column_name,
+            column_type=asset_column.column_type,
+            required_flag=asset_column.required_flag,
+            default_flag=asset_column.default_flag,
+            queue=asset_column.queue,
+            description=asset_column.description,
+        )
+        # 返回数据
+        return asset_column_info_db
+
+    # 删除扩展字段
+    def delete_asset_column_by_id(self, column_id):
+        # 业务校验
+        if column_id is None or len(column_id) <= 0:
+            raise Exception
+        # 删除
+        try:
+            # 删除对象
+            AssetSQL.delete_asset_column_by_id(column_id)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+        # 成功返回资产id
+        return column_id
+
+    # 根据id修改资产类型
+    def update_asset_column_by_id(self, id, asset_column):
+        # 判空
+        if not id:
+            raise Exception
+        # 业务校验
+        if asset_column is None:
+            return None
+        try:
+            # 资产类型信息
+            assert_column_db = AssetSQL.get_asset_column_by_id(id)
+            # 判空
+            if assert_column_db is None:
+                raise Exception
+            # 填充需要修改的数据
+            assert_column_db = self.reset_asset_column_info_db(assert_column_db, asset_column)
+            # 保存对象
+            AssetSQL.update_asset_column(assert_column_db)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+        # 成功返回id
+        return id
+
+    # 重新设置位置信息
+    def reset_asset_column_info_db(self, asset_column_info_db, asset_column):
+        # 判空
+        if asset_column is None:
+            return asset_column_info_db
+        # 参数重设
+        if asset_column.asset_type:
+            asset_column_info_db.asset_type=asset_column.asset_type
+        if asset_column.role_type:
+            asset_column_info_db.role_type=asset_column.role_type
+        if asset_column.column_key:
+            asset_column_info_db.column_key=asset_column.column_key
+        if asset_column.column_name:
+            asset_column_info_db.column_name=asset_column.column_name
+        if asset_column.column_type:
+            asset_column_info_db.column_type=asset_column.column_type
+        if asset_column.required_flag:
+            asset_column_info_db.required_flag=asset_column.required_flag
+        if asset_column.description:
+            asset_column_info_db.description=asset_column.description
+        # 返回
+        return asset_column_info_db

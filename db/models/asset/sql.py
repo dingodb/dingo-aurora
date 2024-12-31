@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from sqlalchemy.orm import sessionmaker, aliased
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func
 from typing_extensions import assert_type
 
 from db.engines.mysql import get_session
 from db.models.asset.models import Asset, AssetBasicInfo, AssetPartsInfo, AssetManufacturesInfo, AssetPositionsInfo, \
-    AssetContractsInfo, AssetBelongsInfo, AssetCustomersInfo, AssetType, AssetFlowsInfo, AssetManufactureRelationInfo
+    AssetContractsInfo, AssetBelongsInfo, AssetCustomersInfo, AssetType, AssetFlowsInfo, AssetManufactureRelationInfo, \
+    AssetExtendsColumnsInfo
 
 from enum import Enum
 
@@ -24,7 +25,7 @@ flow_columns = [getattr(AssetFlowsInfo, column.name).label(column.name) for colu
 class AssetSQL:
 
     @classmethod
-    def list_asset(cls, asset_id, asset_ids, asset_name, asset_category, asset_type, asset_status, frame_position, cabinet_position, u_position, equipment_number, asset_number, sn_number, department_name, user_name, page=1, page_size=10, sort_keys=None, sort_dirs="asc"):
+    def list_asset(cls, asset_id, asset_ids, asset_name, asset_category, asset_type, asset_status, frame_position, cabinet_position, u_position, equipment_number, asset_number, sn_number, department_name, user_name, manufacture_name, page=1, page_size=10, sort_keys=None, sort_dirs="asc"):
         # Session = sessionmaker(bind=engine,expire_on_commit=False)
         # session = Session()
         session = get_session()
@@ -39,6 +40,7 @@ class AssetSQL:
                                   AssetBasicInfo.sn_number.label("sn_number"),
                                   AssetBasicInfo.asset_number.label("asset_number"),
                                   AssetBasicInfo.asset_status.label("asset_status"),
+                                  AssetBasicInfo.asset_status_description.label("asset_status_description"),
                                   AssetBasicInfo.description.label("description"),
                                   AssetBasicInfo.extra.label("extra"),
                                   AssetType.asset_type_name_zh.label("asset_type_name_zh"),
@@ -111,8 +113,9 @@ class AssetSQL:
                 query = query.filter(AssetBelongsInfo.department_name.like('%' + department_name + '%'))
             if user_name is not None and len(user_name) > 0 :
                 query = query.filter(AssetBelongsInfo.user_name.like('%' + user_name + '%'))
-
-                # 总数
+            if manufacture_name is not None and len(manufacture_name) > 0 :
+                query = query.filter(AssetManufacturesInfo.name.like('%' + manufacture_name + '%'))
+            # 总数
             count = query.count()
             # 排序
             if sort_keys is not None and asset_dir_dic[sort_keys] is not None:
@@ -403,6 +406,12 @@ class AssetSQL:
         with session.begin():
             return session.query(AssetCustomersInfo).filter(AssetCustomersInfo.asset_id == asset_id).first()
 
+    @classmethod
+    def create_asset_customer(cls, customer_db):
+        session = get_session()
+        with session.begin():
+            return session.merge(customer_db)
+
     # 资产类型查询列表
     @classmethod
     def list_asset_type(cls, id, parent_id, asset_type_name, asset_type_name_zh):
@@ -614,3 +623,56 @@ class AssetSQL:
         session = get_session()
         with session.begin():
             session.merge(asset_flow_info)
+
+    # 资产流量查询列表
+    @classmethod
+    def list_asset_column(cls, asset_type=None):
+        session = get_session()
+        with session.begin():
+            query = session.query(AssetExtendsColumnsInfo)
+            # 数据库查询参数
+            if asset_type is not None:
+                query = query.filter(AssetExtendsColumnsInfo.asset_type == asset_type)
+            # 排序
+            query = query.order_by(AssetExtendsColumnsInfo.queue.asc())
+            # 查询所有数据
+            assert_flow_list = query.all()
+            # 返回
+            return assert_flow_list
+
+    @classmethod
+    def create_asset_column(cls, asset_column_info):
+        session = get_session()
+        with session.begin():
+            session.add(asset_column_info)
+
+    @classmethod
+    def delete_asset_column_by_id(cls, id):
+        session = get_session()
+        with session.begin():
+            # 删除扩展字段信息
+            session.query(AssetExtendsColumnsInfo).filter(AssetExtendsColumnsInfo.id == id).delete()
+
+    @classmethod
+    def get_asset_column_by_id(cls, id):
+        session = get_session()
+        with session.begin():
+            return session.query(AssetExtendsColumnsInfo).filter(AssetExtendsColumnsInfo.id == id).first()
+
+    @classmethod
+    def update_asset_column(cls, asset_column_info):
+        session = get_session()
+        with session.begin():
+            session.merge(asset_column_info)
+
+    @classmethod
+    def get_asset_column_max_queue(cls, asset_type):
+        session = get_session()
+        with session.begin():
+            # 查询最大顺序
+            query = session.query(func.max(AssetExtendsColumnsInfo.queue))
+            # 条件
+            if asset_type:
+                query = query.filter(AssetExtendsColumnsInfo.asset_type == asset_type)
+            # 查询
+            return query.scalar()

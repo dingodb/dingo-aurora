@@ -10,7 +10,8 @@ from fastapi.responses import FileResponse
 from mako.testing.helpers import result_lines
 
 from api.model.assets import AssetCreateApiModel, AssetManufacturerApiModel, AssetUpdateStatusApiModel, \
-    AssetPartApiModel, AssetTypeApiModel, AssetFlowApiModel, AssetBatchDownloadApiModel, AssetBatchUpdateApiModel
+    AssetPartApiModel, AssetTypeApiModel, AssetFlowApiModel, AssetBatchDownloadApiModel, AssetBatchUpdateApiModel, \
+    AssetExtendColumnApiModel
 from api.response import ResponseModel, success_response
 from services.assets import AssetsService
 from utils.constant import EXCEL_TEMP_DIR, ASSET_TEMPLATE_ASSET_SHEET, ASSET_TEMPLATE_PART_SHEET, \
@@ -74,6 +75,53 @@ async def update_asset_flow_by_id(id:str, asset_flow:AssetFlowApiModel):
 
 
 # 以上是资产-网络设备的流表信息的类型相关的接口 end
+
+# 以下是扩展字段的相关接口 start
+@router.get("/assets/columns", summary="查询资产的扩展字段列表", description="根据各种条件查询资产扩展字段信息列表")
+async def list_assets_columns(
+        asset_type:str = Query(None, description="资产类型")):
+    # 返回数据接口
+    try:
+        # 查询成功
+        result = assert_service.list_assets_columns(asset_type)
+        return result
+    except Exception as e:
+        return None
+
+@router.post("/assets/columns", summary="创建扩展字段", description="根据输入信息创建扩展字段数据")
+async def create_assets_columns(asset_column:AssetExtendColumnApiModel):
+    # 创建扩展字段
+    try:
+        # 调用创建接口
+        result = assert_service.create_asset_column(asset_column)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="asset column create error")
+
+@router.delete("/assets/columns/{id}", summary="删除扩展字段", description="根据id删除扩展字段")
+async def delete_asset_column_by_id(id:str):
+    # 删除扩展字段
+    try:
+        # 删除成功
+        result = assert_service.delete_asset_column_by_id(id)
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail="asset extend column delete error")
+
+@router.put("/assets/columns/{id}", summary="更新扩展字段信息", description="根据id更新扩展字段信息")
+async def update_asset_column_by_id(id:str, asset_column:AssetExtendColumnApiModel):
+    # 更新资产类型
+    try:
+        # 更新成功
+        result = assert_service.update_asset_column_by_id(id, asset_column)
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail="asset extend column update error")
+# 以上是扩展字段的相关接口 end
 
 # 以下是资产的类型相关的接口 start
 
@@ -197,6 +245,7 @@ async def list_assets(
         sn_number:str = Query(None, description="序列号"),
         department_name:str = Query(None, description="部门"),
         user_name:str = Query(None, description="负责人"),
+        asset_manufacture_name:str = Query(None, description="厂商名称"),
         page: int = Query(1, description="页码"),
         page_size: int = Query(10, description="页数量大小"),
         sort_keys:str = Query(None, description="排序字段"),
@@ -205,7 +254,7 @@ async def list_assets(
     # 返回数据接口
     try:
         # 查询成功
-        result = assert_service.list_assets(asset_id, None, asset_name, asset_category, asset_type, asset_status, frame_position, cabinet_position, u_position, equipment_number, asset_number, sn_number, department_name, user_name, page, page_size, sort_keys, sort_dirs)
+        result = assert_service.list_assets(asset_id, None, asset_name, asset_category, asset_type, asset_status, frame_position, cabinet_position, u_position, equipment_number, asset_number, sn_number, department_name, user_name, asset_manufacture_name, page, page_size, sort_keys, sort_dirs)
         return result
         # return success_response(result)
     except Exception as e:

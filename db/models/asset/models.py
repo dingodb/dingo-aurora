@@ -42,7 +42,9 @@ class AssetBasicInfo(Base):
     sn_number = Column(String(length=128), nullable=True)
     asset_number = Column(String(length=128), nullable=True)
     asset_status = Column(String(length=40), nullable=True)
+    asset_status_description = Column(Text)
     extra = Column(Text)
+    extend_column_extra = Column(Text)
 
 
 # 资产设备的配件信息对象
@@ -153,6 +155,22 @@ class AssetFlowsInfo(Base):
     cable_length = Column(Integer(), nullable=True)
     description = Column(String(length=255), nullable=True)
     extra = Column(Text)
+
+# 资产设备的扩展字段信息
+class AssetExtendsColumnsInfo(Base):
+    __tablename__ = "ops_assets_extends_columns_info"
+
+    id = Column(String(length=128), primary_key= True, nullable=False, index=True, unique=False)
+    asset_type = Column(String(length=128), nullable=True)
+    role_type = Column(String(length=128), nullable=True)
+    column_key = Column(String(length=128), nullable=True)
+    column_name = Column(String(length=128), nullable=True)
+    column_type = Column(String(length=128), nullable=True)
+    required_flag = Column(Boolean, nullable=True, default=False)
+    default_flag = Column(Boolean, nullable=True, default=False)
+    queue = Column(Integer, nullable=True, default=0)
+    description = Column(String(length=255), nullable=True)
+
 
 # 资产对象
 # class Asset(Base) = Table(

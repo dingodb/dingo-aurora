@@ -101,6 +101,7 @@ class AssetCreateApiModel(BaseModel):
     asset_number: Optional[str] = Field(None, description="资产设备的资产编号")
     asset_status: Optional[str] = Field("0", description="资产设备的状态")
     extra: Optional[Dict[str, Any]] = Field(None, description="资产设备的扩展信息")
+    extend_column_extra: Optional[Dict[str, Any]] = Field(None, description="资产设备的扩展字段的信息")
     # 配件信息
     asset_part: Optional[List[AssetPartApiModel]] = Field(None, description="资产设备的配件信息")
     # 位置信息
@@ -120,7 +121,9 @@ class AssetCreateApiModel(BaseModel):
 class AssetUpdateStatusApiModel(BaseModel):
     asset_id: str = Field(None, description="资产设备的id")
     asset_status: str = Field(None, description="资产设备的状态")
-    asset_status_description: Optional[str] = Field(None, description="状态的描述信息，错误情况填写工单url之类信息")
+    asset_status_description: Optional[Dict[str, Any]] = Field(None, description="状态的描述信息，错误情况填写工单url之类信息")
+    # 租户信息
+    asset_customer: Optional[AssetCustomerApiModel] = Field(None, description="资产设备的租户信息")
 
 
 class AssetTypeApiModel(BaseModel):
@@ -142,3 +145,15 @@ class AssetBatchUpdateApiModel(BaseModel):
     asset_type_id: Optional[str] = Field(..., description="资产设备的类型id")
     asset_type: Optional[str] = Field(None, description="资产类型")
 
+# 资产扩展字段信息
+class AssetExtendColumnApiModel(BaseModel):
+    id: Optional[str] = Field(None, description="扩展字段信息的id")
+    asset_type: Optional[str] = Field(None, description="扩展字段的对应资产类型")
+    role_type: Optional[str] = Field(None, description="扩展字段对应的角色类型")
+    column_key: str = Field(None, description="扩展字段的键值key")
+    column_name: Optional[str] = Field(None, description="扩展字段的中文名称")
+    column_type: Optional[str] = Field("str", description="扩展字段的类型")
+    required_flag: Optional[bool] = Field(None, description="扩展字段是否必填")
+    default_flag: Optional[bool] = Field(False, description="是否默认字段")
+    queue: Optional[int] = Field(None, description="字段展示顺序")
+    description: Optional[str] = Field(None, description="扩展字段的备注描述")
