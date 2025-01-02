@@ -23,6 +23,8 @@ def format_unix_timestamp(timestamp, date_format=TIMESTAMP_FORMAT):
 def get_now_time():
     return datetime.now()
 
+def get_now_time_in_timestamp_format(new_format=TIMESTAMP_FORMAT):
+    return get_now_time().strftime(new_format)
 
 def get_time_delta(now, old):
     delta = now - old
