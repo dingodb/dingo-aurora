@@ -34,7 +34,7 @@ class BigScreensService:
         else:
             return None
         # 通过get请求读取实时监控数据 指标项的查询语句 + / 需要转义
-        request_url = prometheus_query_url + urllib.parse.quote(query)
+        request_url = prometheus_query_url + "query?query=" + urllib.parse.quote(query)
         response = requests.get(request_url)
         return self.__handle_response(response)
 
@@ -49,7 +49,7 @@ class BigScreensService:
                     json_data_result = json_data['result']
                     print(f"json_data_result：{json_data_result}")
                     if json_data_result == []:
-                        return None
+                        return 0
                     return json_data_result[0]['value'][1]
         except Exception as e:
             raise e
