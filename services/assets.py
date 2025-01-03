@@ -2049,6 +2049,7 @@ class AssetsService:
                 temp["column_type"] = r.column_type
                 temp["required_flag"] = r.required_flag
                 temp["default_flag"] = r.default_flag
+                temp["hidden_flag"] = r.hidden_flag
                 temp["queue"] = r.queue
                 temp["description"] = r.description
                 # 加入列表
