@@ -12,8 +12,10 @@ from mako.testing.helpers import result_lines
 from api.model.assets import AssetCreateApiModel, AssetManufacturerApiModel, AssetUpdateStatusApiModel, \
     AssetPartApiModel, AssetTypeApiModel, AssetFlowApiModel, AssetBatchDownloadApiModel, AssetBatchUpdateApiModel, \
     AssetExtendColumnApiModel
+from api.model.system import OperateLogApiModel
 from api.response import ResponseModel, success_response
 from services.assets import AssetsService
+from services.system import SystemService
 from utils.constant import EXCEL_TEMP_DIR, ASSET_TEMPLATE_ASSET_SHEET, ASSET_TEMPLATE_PART_SHEET, \
     ASSET_TEMPLATE_ASSET_TYPE, ASSET_TEMPLATE_NETWORK_SHEET
 from utils.datetime import format_unix_timestamp, format_d8q_timestamp
@@ -23,6 +25,7 @@ LOG = log.getLogger(__name__)
 
 router = APIRouter()
 assert_service = AssetsService()
+system_service = SystemService()
 
 # 以下是资产-网络设备的流表信息的类型相关的接口 start
 @router.get("/assets/flows", summary="查询资产网络设备流信息列表", description="根据各种条件查询资产网络设备流信息列表")
@@ -419,6 +422,8 @@ async def create_manufacture(manufacture:AssetManufacturerApiModel):
     try:
         # 创建成功
         result = assert_service.create_manufacture(manufacture)
+        # 记录操作日志
+        system_service.create_system_log(OperateLogApiModel(operate_type="create", resource_type="manufacture", resource_id=result, resource_name=manufacture.name, operate_flag=True))
         return result
     except Exception as e:
         import traceback
