@@ -18,22 +18,19 @@ from alembic import context
 from databases import DatabaseURL
 from sqlalchemy import create_engine, pool
 
-from skyline_apiserver.config import CONF, configure
-from skyline_apiserver.db.models import METADATA
-from skyline_apiserver.log import setup as log_setup
+from db import CONF
 
-configure("dingoops")
 basicConfig()
-log_setup(StreamHandler())
+# log_setup(StreamHandler())
 
 config = context.config
-config.set_main_option("sqlalchemy.url", CONF.default.database_url)
+config.set_main_option("sqlalchemy.url", CONF.database.connection)
 
-db_url = DatabaseURL(CONF.default.database_url)
+db_url = DatabaseURL(CONF.database.connection)
 if db_url.scheme == "mysql":
     db_url = db_url.replace(dialect="mysql+pymysql")
 
-target_metadata = METADATA
+target_metadata = None
 
 
 def run_migrations_offline():
