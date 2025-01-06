@@ -155,5 +155,6 @@ class AssetExtendColumnApiModel(BaseModel):
     column_type: Optional[str] = Field("str", description="扩展字段的类型")
     required_flag: Optional[bool] = Field(None, description="扩展字段是否必填")
     default_flag: Optional[bool] = Field(False, description="是否默认字段")
+    hidden: Optional[bool] = Field(False, description="是否默认隐藏字段")
     queue: Optional[int] = Field(None, description="字段展示顺序")
     description: Optional[str] = Field(None, description="扩展字段的备注描述")

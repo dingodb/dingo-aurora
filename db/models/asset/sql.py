@@ -43,6 +43,7 @@ class AssetSQL:
                                   AssetBasicInfo.asset_status_description.label("asset_status_description"),
                                   AssetBasicInfo.description.label("description"),
                                   AssetBasicInfo.extra.label("extra"),
+                                  AssetBasicInfo.extend_column_extra.label("extend_column_extra"),
                                   AssetType.asset_type_name_zh.label("asset_type_name_zh"),
                                   AssetManufacturesInfo.id.label("manufacture_id"),
                                   AssetManufacturesInfo.name.label("manufacture_name"),

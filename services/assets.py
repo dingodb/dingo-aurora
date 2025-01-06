@@ -64,6 +64,7 @@ class AssetsService:
                 temp["asset_status_description"] = r.asset_status_description
                 temp["asset_description"] = r.description
                 temp["extra"] = r.extra
+                temp["extend_column_extra"] = r.extend_column_extra
                 # 厂商信息
                 temp_manufacture = {}
                 temp_manufacture["id"] = r.manufacture_id
@@ -2049,7 +2050,7 @@ class AssetsService:
                 temp["column_type"] = r.column_type
                 temp["required_flag"] = r.required_flag
                 temp["default_flag"] = r.default_flag
-                temp["hidden_flag"] = r.hidden_flag
+                temp["hidden"] = r.hidden_flag
                 temp["queue"] = r.queue
                 temp["description"] = r.description
                 # 加入列表
@@ -2100,6 +2101,7 @@ class AssetsService:
             column_type=asset_column.column_type,
             required_flag=asset_column.required_flag,
             default_flag=asset_column.default_flag,
+            hidden_flag=asset_column.hidden,
             queue=asset_column.queue,
             description=asset_column.description,
         )
@@ -2165,6 +2167,8 @@ class AssetsService:
             asset_column_info_db.column_type=asset_column.column_type
         if asset_column.required_flag:
             asset_column_info_db.required_flag=asset_column.required_flag
+        if asset_column.hidden:
+            asset_column_info_db.hidden_flag=asset_column.hidden
         if asset_column.description:
             asset_column_info_db.description=asset_column.description
         # 返回
