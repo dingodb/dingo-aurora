@@ -2167,7 +2167,7 @@ class AssetsService:
             asset_column_info_db.column_type=asset_column.column_type
         if asset_column.required_flag:
             asset_column_info_db.required_flag=asset_column.required_flag
-        if asset_column.hidden:
+        if asset_column.hidden is not None:
             asset_column_info_db.hidden_flag=asset_column.hidden
         if asset_column.description:
             asset_column_info_db.description=asset_column.description
