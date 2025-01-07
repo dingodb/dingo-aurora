@@ -11,13 +11,14 @@ system_service = SystemService()
 @router.get("/system/logs", summary="获取系统操作日志列表数据")
 async def get_system_logs(
         resource_id: str = Query(None, description="资源id"),
+        operate_type: str = Query(None, description="操作类型"),
         page: int = Query(1, description="页码"),
         page_size: int = Query(10, description="页数量大小"),
-        sort_keys:str = Query(None, description="排序字段"),
-        sort_dirs:str = Query(None, description="排序方式"),):
+        sort_keys:str = Query("log_date", description="排序字段"),
+        sort_dirs:str = Query("descend", description="排序方式"),):
     # 创建资产类型
     try:
-        return system_service.list_system_logs(resource_id, page, page_size, sort_keys, sort_dirs)
+        return system_service.list_system_logs(resource_id, operate_type, page, page_size, sort_keys, sort_dirs)
     except Exception as e:
         import traceback
         traceback.print_exc()

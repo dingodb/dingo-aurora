@@ -65,6 +65,7 @@ def upgrade() -> None:
         "ops_assets_parts_info",
         sa.Column("id", sa.String(length=128), nullable=False),
         sa.Column("asset_id", sa.String(length=128), nullable=True),
+        sa.Column("manufacturer_id", sa.String(length=128), nullable=True),
         sa.Column("part_type", sa.String(length=128), nullable=True),
         sa.Column("part_brand", sa.String(length=128), nullable=True),
         sa.Column("part_config", sa.String(length=128), nullable=True),

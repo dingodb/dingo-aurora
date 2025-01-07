@@ -248,8 +248,8 @@ class AssetsService:
             sn_number=asset.sn_number,
             asset_number=asset.asset_number,
             asset_status=asset.asset_status,
-            extra=json.dumps(asset.extra) if asset.extra else asset.extra,
-            extend_column_extra=json.dumps(asset.extend_column_extra) if asset.extend_column_extra else asset.extend_column_extra
+            extra=json.dumps(asset.extra) if asset.extra else None,
+            extend_column_extra=json.dumps(asset.extend_column_extra) if asset.extend_column_extra else None
         )
         # 返回数据
         return asset_basic_info_db
@@ -1087,6 +1087,12 @@ class AssetsService:
             raise Exception
         # 1、资产基础信息数据
         asset_basic_info_db = self.reset_asset_basic_info_db(asset_basic_info_db, asset)
+        # 重新设置类型
+        if asset_basic_info_db.asset_type_id is not None:
+            # 根据类型id重查类型名称
+            asset_type = AssetSQL.get_asset_type_by_id(asset_basic_info_db.asset_type_id)
+            if asset_type is not None:
+                asset_basic_info_db.asset_type = asset_type.asset_type_name
         # 2、资产厂商信息 资产关联的厂商可能已经存在也可能不存在
         asset_manufacture_info_db = None
         asset_manufacture_info_db_new = None
@@ -1611,6 +1617,8 @@ class AssetsService:
                 temp["asset_name"] = r.asset_name
                 temp["asset_number"] = r.asset_number
                 temp["asset_id"] = r.asset_id
+                temp["manufacture_name"] = r.manufacture_name
+                temp["manufacture_id"] = r.manufacture_id
                 temp["part_type"] = r.part_type
                 temp["part_brand"] = r.part_brand
                 temp["part_config"] = r.part_config
@@ -1664,6 +1672,7 @@ class AssetsService:
         asset_part_info_db = AssetPartsInfo(
             id=uuid.uuid4().hex,
             asset_id=asset_part.asset_id,
+            manufacturer_id=asset_part.manufacturer_id,
             name=asset_part.name,
             part_type=asset_part.part_type,
             part_brand=asset_part.part_brand,

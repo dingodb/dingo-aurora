@@ -25,7 +25,7 @@ flow_columns = [getattr(AssetFlowsInfo, column.name).label(column.name) for colu
 class AssetSQL:
 
     @classmethod
-    def list_asset(cls, asset_id, asset_ids, asset_name, asset_category, asset_type, asset_status, frame_position, cabinet_position, u_position, equipment_number, asset_number, sn_number, department_name, user_name, manufacture_name, page=1, page_size=10, sort_keys=None, sort_dirs="asc"):
+    def list_asset(cls, asset_id, asset_ids, asset_name, asset_category, asset_type, asset_status, frame_position, cabinet_position, u_position, equipment_number, asset_number, sn_number, department_name, user_name, manufacture_name, page=1, page_size=10, sort_keys=None, sort_dirs="ascend"):
         # Session = sessionmaker(bind=engine,expire_on_commit=False)
         # session = Session()
         session = get_session()
@@ -119,10 +119,10 @@ class AssetSQL:
             # 总数
             count = query.count()
             # 排序
-            if sort_keys is not None and asset_dir_dic[sort_keys] is not None:
-                if sort_dirs == "asc" or sort_dirs is None :
+            if sort_keys is not None and sort_keys in asset_dir_dic:
+                if sort_dirs == "ascend" or sort_dirs is None :
                     query = query.order_by(asset_dir_dic[sort_keys].asc())
-                elif sort_dirs == "desc":
+                elif sort_dirs == "descend":
                     query = query.order_by(asset_dir_dic[sort_keys].desc())
             # 分页条件
             page_size = int(page_size)
@@ -139,7 +139,7 @@ class AssetSQL:
 
 
     @classmethod
-    def list_asset_bak(cls, asset_name=None, page=1, page_size=10, field=None, dir="ASC"):
+    def list_asset_bak(cls, asset_name=None, page=1, page_size=10, field=None, dir="ascend"):
         # Session = sessionmaker(bind=engine,expire_on_commit=False)
         # session = Session()
         session = get_session()
@@ -166,7 +166,7 @@ class AssetSQL:
 
 
     @classmethod
-    def list_asset_basic_info(cls, asset_name=None, page=1, page_size=10, field=None, dir="ASC"):
+    def list_asset_basic_info(cls, asset_name=None, page=1, page_size=10, field=None, dir="ascend"):
         # Session = sessionmaker(bind=engine,expire_on_commit=False)
         # session = Session()
         session = get_session()
@@ -309,7 +309,7 @@ class AssetSQL:
 
 
     @classmethod
-    def list_manufacture(cls, manufacture_name=None, page=1, page_size=10, field=None, dir="ASC"):
+    def list_manufacture(cls, manufacture_name=None, page=1, page_size=10, field=None, dir="ascend"):
         # Session = sessionmaker(bind=engine,expire_on_commit=False)
         # session = Session()
         session = get_session()
@@ -490,15 +490,17 @@ class AssetSQL:
 
 
     @classmethod
-    def list_asset_part_page(cls, part_catalog=None, asset_id=None, name=None, page=1, page_size=10, field=None, dir="asc"):
+    def list_asset_part_page(cls, part_catalog=None, asset_id=None, name=None, page=1, page_size=10, field=None, dir="ascend"):
         # Session = sessionmaker(bind=engine,expire_on_commit=False)
         # session = Session()
         session = get_session()
         with session.begin():
-            query = session.query(*part_columns, AssetBasicInfo.name.label("asset_name"), AssetBasicInfo.asset_number.label("asset_number"))
+            query = session.query(*part_columns, AssetBasicInfo.name.label("asset_name"), AssetBasicInfo.asset_number.label("asset_number"),
+                                  AssetManufacturesInfo.name.label("manufacture_name"))
             # 外连接
-            query = query.outerjoin(AssetBasicInfo, AssetBasicInfo.id == AssetPartsInfo.asset_id)
-            # 数据库查询参数
+            query = query.outerjoin(AssetBasicInfo, AssetBasicInfo.id == AssetPartsInfo.asset_id). \
+                outerjoin(AssetManufacturesInfo, AssetManufacturesInfo.id == AssetPartsInfo.manufacture_id)
+                # 数据库查询参数
             if name is not None:
                 query = query.filter(AssetPartsInfo.name.like('%' + name + '%'))
             if asset_id is not None:
