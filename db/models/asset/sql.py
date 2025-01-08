@@ -21,6 +21,8 @@ asset_dir_dic= {"frame_position":AssetPositionsInfo.frame_position, "asset_statu
 part_columns = [getattr(AssetPartsInfo, column.name).label(column.name) for column in AssetPartsInfo.__table__.columns]
 # 流的所有列
 flow_columns = [getattr(AssetFlowsInfo, column.name).label(column.name) for column in AssetFlowsInfo.__table__.columns]
+# 资产排序字段字典
+asset_manufacturer_dir_dic= {"name":AssetManufacturesInfo.name}
 
 class AssetSQL:
 
@@ -294,6 +296,12 @@ class AssetSQL:
 
             # 总数
             count = query.count()
+            # 排序
+            if field is not None and field in asset_manufacturer_dir_dic:
+                if dir == "ascend" or dir is None :
+                    query = query.order_by(asset_manufacturer_dir_dic[field].asc())
+                elif dir == "descend":
+                    query = query.order_by(asset_manufacturer_dir_dic[field].desc())
             # 分页条件
             page_size = int(page_size)
             page_num = int(page)

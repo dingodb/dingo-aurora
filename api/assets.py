@@ -502,7 +502,7 @@ async def create_manufacture(manufacture:AssetManufacturerApiModel):
 
 @router.get("/manufactures", summary="查询厂商", description="根据条件查询厂商分页列表信息")
 async def list_manufactures(
-        manufacture_name:str = None,
+        name:str = None,
         page: int = 1,
         page_size: int = 10,
         sort_keys:str = None,
@@ -510,7 +510,7 @@ async def list_manufactures(
     # 返回数据接口
     try:
         # 查询成功
-        result = assert_service.list_manufactures(manufacture_name, page, page_size, sort_keys, sort_dirs)
+        result = assert_service.list_manufactures(name, page, page_size, sort_keys, sort_dirs)
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail="manufacture list error")

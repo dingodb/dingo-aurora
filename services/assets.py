@@ -1155,6 +1155,8 @@ class AssetsService:
                 asset_customer_info_db = self.reset_asset_customer_info_db(asset_customer_info_db, asset)
             else:
                 asset_customer_info_db = self.convert_asset_customer_info_db(asset)
+            # 重新设置资产id
+            asset_customer_info_db.asset_id = asset_id
         # 7、资产配件信息
         asset_part_info_db = None
         # 配件是列表重新保存
@@ -1256,20 +1258,36 @@ class AssetsService:
         # 参数重设
         if asset.asset_customer.customer_id:
             asset_customer_info_db.customer_id=asset.asset_customer.customer_id
+        else:
+            asset_customer_info_db.customer_id=None
         if asset.asset_customer.customer_name:
             asset_customer_info_db.customer_name=asset.asset_customer.customer_name
+        else:
+            asset_customer_info_db.customer_name=None
         if asset.asset_customer.rental_duration:
             asset_customer_info_db.rental_duration=asset.asset_customer.rental_duration
+        else:
+            asset_customer_info_db.rental_duration=None
         if asset.asset_customer.start_date:
             asset_customer_info_db.start_date=datetime.fromtimestamp(asset.asset_customer.start_date/1000)
+        else:
+            asset_customer_info_db.start_date=None
         if asset.asset_customer.end_date:
             asset_customer_info_db.end_date=datetime.fromtimestamp(asset.asset_customer.end_date/1000)
+        else:
+            asset_customer_info_db.end_date=None
         if asset.asset_customer.vlan_id:
             asset_customer_info_db.vlan_id=asset.asset_customer.vlan_id
+        else:
+            asset_customer_info_db.vlan_id=None
         if asset.asset_customer.float_ip:
             asset_customer_info_db.float_ip=asset.asset_customer.float_ip
+        else:
+            asset_customer_info_db.float_ip=None
         if asset.asset_customer.band_width:
             asset_customer_info_db.band_width=asset.asset_customer.band_width
+        else:
+            asset_customer_info_db.band_width=None
         if asset.asset_customer.description:
             asset_customer_info_db.description=asset.asset_customer.description
         # 返回
