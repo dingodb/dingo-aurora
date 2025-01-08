@@ -76,7 +76,7 @@ def upgrade() -> None:
         sa.Column("extra", sa.Text(), nullable=True),
         sa.Column("description", sa.String(length=255), nullable=True),
     )
-    op.create_index(op.f("ix_ops_assets_manufactures_info_id"), "ops_assets_manufactures_info", ["id"], unique=False)
+    op.create_index(op.f("ix_ops_assets_parts_info_id"), "ops_assets_parts_info", ["id"], unique=False)
 
     # ### 资产厂商信息 ###
     op.create_table(

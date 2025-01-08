@@ -6,7 +6,7 @@ from typing import List
 
 import pandas
 from fastapi import APIRouter, UploadFile, File, Query, Path, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse, Response
 from mako.testing.helpers import result_lines
 
 from api.model.assets import AssetCreateApiModel, AssetManufacturerApiModel, AssetUpdateStatusApiModel, \
@@ -20,6 +20,7 @@ from utils.constant import EXCEL_TEMP_DIR, ASSET_TEMPLATE_ASSET_SHEET, ASSET_TEM
     ASSET_TEMPLATE_ASSET_TYPE, ASSET_TEMPLATE_NETWORK_SHEET
 from utils.datetime import format_unix_timestamp, format_d8q_timestamp
 from oslo_log import log
+import io
 
 LOG = log.getLogger(__name__)
 
@@ -240,11 +241,24 @@ async def download_assets_xlsx_4select(item:AssetBatchDownloadApiModel):
         traceback.print_exc()
     # 文件存在则下载
     if os.path.exists(result_file_path):
-        return FileResponse(
-            path=result_file_path,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            filename=result_file_name  # 下载时显示的文件名
-        )
+        # 打开文件并读取内容
+        file_stream = io.BytesIO()
+        with open(result_file_path, "rb") as f:
+            hex_content = f.read()
+            # print(hex_content)
+            file_stream.write(hex_content)
+            file_stream.seek(0)  # 重置指针以便后续读取
+        # 设置响应头和文件名
+        headers = {
+            'Content-Disposition': f'attachment; filename="{result_file_name}"'
+        }
+        # 返回文件流
+        return StreamingResponse(file_stream, headers=headers, media_type='application/octet-stream')
+        # return FileResponse(
+        #         path=result_file_path,
+        #         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        #         filename=result_file_name  # 下载时显示的文件名
+        #     )
     return {"error": "File not found"}
 
 
@@ -264,6 +278,7 @@ async def list_assets(
         sn_number:str = Query(None, description="序列号"),
         department_name:str = Query(None, description="部门"),
         user_name:str = Query(None, description="负责人"),
+        host_name:str = Query(None, description="主机名称"),
         asset_manufacture_name:str = Query(None, description="厂商名称"),
         page: int = Query(1, description="页码"),
         page_size: int = Query(10, description="页数量大小"),
@@ -272,8 +287,41 @@ async def list_assets(
     # 接收查询参数
     # 返回数据接口
     try:
+        # 声明查询条件的dict
+        query_params = {}
+        # 查询条件组装
+        if asset_id:
+            query_params['asset_id'] = asset_id
+        if asset_name:
+            query_params['asset_name'] = asset_name
+        if asset_category:
+            query_params['asset_category'] = asset_category
+        if asset_type:
+            query_params['asset_type'] = asset_type
+        if asset_status:
+            query_params['asset_status'] = asset_status
+        if frame_position:
+            query_params['frame_position'] = frame_position
+        if cabinet_position:
+            query_params['cabinet_position'] = cabinet_position
+        if u_position:
+            query_params['u_position'] = u_position
+        if equipment_number:
+            query_params['equipment_number'] = equipment_number
+        if asset_number:
+            query_params['asset_number'] = asset_number
+        if sn_number:
+            query_params['sn_number'] = sn_number
+        if department_name:
+            query_params['department_name'] = department_name
+        if user_name:
+            query_params['user_name'] = user_name
+        if host_name:
+            query_params['host_name'] = host_name
+        if host_name:
+            query_params['host_name'] = host_name
         # 查询成功
-        result = assert_service.list_assets(asset_id, None, asset_name, asset_category, asset_type, asset_status, frame_position, cabinet_position, u_position, equipment_number, asset_number, sn_number, department_name, user_name, asset_manufacture_name, page, page_size, sort_keys, sort_dirs)
+        result = assert_service.list_assets(query_params, page, page_size, sort_keys, sort_dirs)
         return result
         # return success_response(result)
     except Exception as e:

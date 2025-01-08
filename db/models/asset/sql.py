@@ -25,9 +25,8 @@ flow_columns = [getattr(AssetFlowsInfo, column.name).label(column.name) for colu
 class AssetSQL:
 
     @classmethod
-    def list_asset(cls, asset_id, asset_ids, asset_name, asset_category, asset_type, asset_status, frame_position, cabinet_position, u_position, equipment_number, asset_number, sn_number, department_name, user_name, manufacture_name, page=1, page_size=10, sort_keys=None, sort_dirs="ascend"):
-        # Session = sessionmaker(bind=engine,expire_on_commit=False)
-        # session = Session()
+    def list_asset(cls, query_params, page=1, page_size=10, sort_keys=None, sort_dirs="ascend"):
+        # 获取session
         session = get_session()
         with session.begin():
             # 查询语句
@@ -86,36 +85,36 @@ class AssetSQL:
                 outerjoin(AssetBelongsInfo, AssetBelongsInfo.asset_id == AssetBasicInfo.id). \
                 outerjoin(AssetCustomersInfo, AssetCustomersInfo.asset_id == AssetBasicInfo.id)
             # 数据库查询参数
-            if asset_name is not None and len(asset_name) > 0 :
-                query = query.filter(AssetBasicInfo.name.like('%' + asset_name + '%'))
-            if asset_id is not None and len(asset_id) > 0 :
-                query = query.filter(AssetBasicInfo.id == asset_id)
-            if asset_ids is not None and len(asset_ids) > 0 :
-                query = query.filter(AssetBasicInfo.id.in_(asset_ids.split(',')))
-            if asset_category is not None and len(asset_category) > 0 :
-                query = query.filter(AssetBasicInfo.asset_category == asset_category)
-            if asset_type is not None and len(asset_type) > 0 :
-                query = query.filter(AssetBasicInfo.asset_type == asset_type)
-            if asset_status is not None and len(asset_status) > 0 :
-                query = query.filter(AssetBasicInfo.asset_status == asset_status)
-            if frame_position is not None and len(frame_position) > 0 :
-                query = query.filter(AssetPositionsInfo.frame_position.like('%' + frame_position + '%'))
-            if cabinet_position is not None and len(cabinet_position) > 0 :
-                query = query.filter(AssetPositionsInfo.cabinet_position.like('%' + cabinet_position + '%'))
-            if u_position is not None and len(u_position) > 0 :
-                query = query.filter(AssetPositionsInfo.u_position.like('%' + u_position + '%'))
-            if equipment_number is not None and len(equipment_number) > 0 :
-                query = query.filter(AssetBasicInfo.equipment_number.like('%' + equipment_number + '%'))
-            if asset_number is not None and len(asset_number) > 0 :
-                query = query.filter(AssetBasicInfo.asset_number.like('%' + asset_number + '%'))
-            if sn_number is not None and len(sn_number) > 0 :
-                query = query.filter(AssetBasicInfo.sn_number.like('%' + sn_number + '%'))
-            if department_name is not None and len(department_name) > 0 :
-                query = query.filter(AssetBelongsInfo.department_name.like('%' + department_name + '%'))
-            if user_name is not None and len(user_name) > 0 :
-                query = query.filter(AssetBelongsInfo.user_name.like('%' + user_name + '%'))
-            if manufacture_name is not None and len(manufacture_name) > 0 :
-                query = query.filter(AssetManufacturesInfo.name.like('%' + manufacture_name + '%'))
+            if "asset_name" in query_params and query_params["asset_name"]:
+                query = query.filter(AssetBasicInfo.name.like('%' + query_params["asset_name"] + '%'))
+            if "asset_id" in query_params and query_params["asset_id"]:
+                query = query.filter(AssetBasicInfo.id == query_params["asset_id"])
+            if "asset_ids" in query_params and query_params["asset_ids"]:
+                query = query.filter(AssetBasicInfo.id.in_(query_params["asset_ids"].split(',')))
+            if "asset_category" in query_params and query_params["asset_category"]:
+                query = query.filter(AssetBasicInfo.asset_category == query_params["asset_category"])
+            if "asset_type" in query_params and query_params["asset_type"]:
+                query = query.filter(AssetBasicInfo.asset_type.like('%' + query_params["asset_type"] + '%'))
+            if "asset_status" in query_params and query_params["asset_status"]:
+                query = query.filter(AssetBasicInfo.asset_status == query_params["asset_status"])
+            if "frame_position" in query_params and query_params["frame_position"]:
+                query = query.filter(AssetPositionsInfo.frame_position.like('%' + query_params["frame_position"] + '%'))
+            if "cabinet_position" in query_params and query_params["cabinet_position"]:
+                query = query.filter(AssetPositionsInfo.cabinet_position.like('%' + query_params["cabinet_position"] + '%'))
+            if "u_position" in query_params and query_params["u_position"]:
+                query = query.filter(AssetPositionsInfo.u_position.like('%' + query_params["u_position"] + '%'))
+            if "equipment_number" in query_params and query_params["equipment_number"]:
+                query = query.filter(AssetBasicInfo.equipment_number.like('%' + query_params["equipment_number"] + '%'))
+            if "asset_number" in query_params and query_params["asset_number"]:
+                query = query.filter(AssetBasicInfo.asset_number.like('%' + query_params["asset_number"] + '%'))
+            if "sn_number" in query_params and query_params["sn_number"]:
+                query = query.filter(AssetBasicInfo.sn_number.like('%' + query_params["sn_number"] + '%'))
+            if "department_name" in query_params and query_params["department_name"]:
+                query = query.filter(AssetBelongsInfo.department_name.like('%' + query_params["department_name"] + '%'))
+            if "user_name" in query_params and query_params["user_name"]:
+                query = query.filter(AssetBelongsInfo.user_name.like('%' + query_params["user_name"] + '%'))
+            if "manufacture_name" in query_params and query_params["manufacture_name"]:
+                query = query.filter(AssetManufacturesInfo.name.like('%' + query_params["manufacture_name"] + '%'))
             # 总数
             count = query.count()
             # 排序
@@ -124,33 +123,6 @@ class AssetSQL:
                     query = query.order_by(asset_dir_dic[sort_keys].asc())
                 elif sort_dirs == "descend":
                     query = query.order_by(asset_dir_dic[sort_keys].desc())
-            # 分页条件
-            page_size = int(page_size)
-            page_num = int(page)
-            # 查询所有数据
-            if page_size == -1:
-                return count, query.all()
-            # 页数计算
-            start = (page_num - 1) * page_size
-            query = query.limit(page_size).offset(start)
-            assert_list = query.all()
-            # 返回
-            return count, assert_list
-
-
-    @classmethod
-    def list_asset_bak(cls, asset_name=None, page=1, page_size=10, field=None, dir="ascend"):
-        # Session = sessionmaker(bind=engine,expire_on_commit=False)
-        # session = Session()
-        session = get_session()
-        with session.begin():
-            query = session.query(Asset)
-            # 数据库查询参数
-            if asset_name is not None:
-                query = query.filter(Asset.asset_name.like('%' + asset_name + '%'))
-
-            # 总数
-            count = query.count()
             # 分页条件
             page_size = int(page_size)
             page_num = int(page)
@@ -496,10 +468,11 @@ class AssetSQL:
         session = get_session()
         with session.begin():
             query = session.query(*part_columns, AssetBasicInfo.name.label("asset_name"), AssetBasicInfo.asset_number.label("asset_number"),
-                                  AssetManufacturesInfo.name.label("manufacture_name"))
+                                  AssetManufacturesInfo.name.label("manufacturer_name"), AssetType.asset_type_name.label("part_type_name"))
             # 外连接
             query = query.outerjoin(AssetBasicInfo, AssetBasicInfo.id == AssetPartsInfo.asset_id). \
-                outerjoin(AssetManufacturesInfo, AssetManufacturesInfo.id == AssetPartsInfo.manufacture_id)
+                outerjoin(AssetManufacturesInfo, AssetManufacturesInfo.id == AssetPartsInfo.manufacturer_id). \
+                outerjoin(AssetType, AssetType.id == AssetPartsInfo.part_type_id)
                 # 数据库查询参数
             if name is not None:
                 query = query.filter(AssetPartsInfo.name.like('%' + name + '%'))

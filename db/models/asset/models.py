@@ -53,7 +53,8 @@ class AssetPartsInfo(Base):
 
     id = Column(String(length=128), primary_key= True, nullable=False, index=True, unique=False)
     asset_id = Column(String(length=128), nullable=True)
-    manufacture_id = Column(String(length=128), nullable=True)
+    manufacturer_id = Column(String(length=128), nullable=True)
+    part_type_id = Column(String(length=128), nullable=True)
     part_type = Column(String(length=128), nullable=True)
     part_brand = Column(String(length=128), nullable=True)
     part_config = Column(String(length=128), nullable=True)

@@ -21,6 +21,7 @@ class AssetPartApiModel(BaseModel):
     asset_id: Optional[str] = Field(None, description="配件关联的资产设备的id")
     manufacturer_id: Optional[str] = Field(None, description="配件关联的厂商的id")
     part_type: Optional[str] = Field(None, description="配件的类型")
+    part_type_id: Optional[str] = Field(None, description="配件的类型id")
     part_brand: Optional[str] = Field(None, description="配件的品牌")
     part_config: Optional[str] = Field(None, description="配件的配置")
     part_number: Optional[str] = Field(None, description="配件的编号")

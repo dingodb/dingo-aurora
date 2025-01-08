@@ -40,11 +40,11 @@ thin_border = Border(
 class AssetsService:
 
     # 查询资产列表
-    def list_assets(self, asset_id, asset_ids, asset_name, asset_category, asset_type, asset_status, frame_position, cabinet_position, u_position, equipment_number, asset_number, sn_number, department_name, user_name, manufacture_name, page, page_size, sort_keys, sort_dirs):
+    def list_assets(self, query_params, page, page_size, sort_keys, sort_dirs):
         # 业务逻辑
         try:
             # 按照条件从数据库中查询数据
-            count, data = AssetSQL.list_asset(asset_id, asset_ids, asset_name, asset_category, asset_type, asset_status, frame_position, cabinet_position, u_position, equipment_number, asset_number, sn_number, department_name, user_name, manufacture_name, page, page_size, sort_keys, sort_dirs)
+            count, data = AssetSQL.list_asset(query_params, page, page_size, sort_keys, sort_dirs)
             # 数据处理
             ret = []
             # 遍历
@@ -170,9 +170,12 @@ class AssetsService:
             if asset.asset_name is None or asset.asset_type_id is None:
                 raise Exception
             # 2、重名
-            count, _ = AssetSQL.list_asset(None,None, asset.asset_name, None,None, None, None, None, None, None, None, None, None, None,None, 1,10,None,None)
+            query_params = {}
+            query_params["asset_name"] = asset.asset_name
+            query_params["asset_number"] = asset.asset_number
+            count, _ = AssetSQL.list_asset(query_params, 1,10,None,None)
             if count > 0:
-                LOG.error("asset name exist")
+                LOG.error("asset name or number exist")
                 raise Exception
             # 3. 查询资产类型
             asset_type_list = AssetSQL.list_asset_type(asset.asset_type_id, None, None, None)
@@ -430,7 +433,9 @@ class AssetsService:
         # 详情
         try:
             # 根据id查询
-            res = self.list_assets(asset_id, None,None, None,None,None, None, None, None, None, None, None, None, None,None, 1, 10, None, None)
+            query_params = {}
+            query_params["asset_id"] = asset_id
+            res = self.list_assets(query_params, 1, 10, None, None)
             # 空
             if not res or not res.get("data"):
                 return None
@@ -789,7 +794,9 @@ class AssetsService:
             page = 1
             page_size = 100
             # 查询一页
-            res = self.list_assets(None,None, None, "SERVER", None,None, None, None, None, None, None, None, None, None,None, page, page_size, None, None)
+            query_params = {}
+            query_params["asset_category"] = "SERVER"
+            res = self.list_assets(query_params, page, page_size, None, None)
             while res and res['data']:
                 # 写入数据
                 for temp in res['data']:
@@ -819,7 +826,7 @@ class AssetsService:
                     break
                 # 查询下一页
                 page = page + 1
-                res = self.list_assets(None,None, None,None,None, None, None, None, None, None, None, None, None, None,None, page, page_size, None, None)
+                res = self.list_assets(query_params, page, page_size, None, None)
             # 加载模板文件
             book = load_workbook(result_file_path)
             sheet = book['asset']  # 默认使用第一个工作表
@@ -854,7 +861,9 @@ class AssetsService:
             page = 1
             page_size = 100
             # 查询一页
-            res = self.list_assets(None,None, None, "NETWORK", None,None, None, None, None, None, None, None, None, None,None, page, page_size, None, None)
+            query_params = {}
+            query_params["asset_category"] = "NETWORK"
+            res = self.list_assets(query_params, page, page_size, None, None)
             while res and res['data']:
                 # 写入数据
                 for temp in res['data']:
@@ -871,7 +880,7 @@ class AssetsService:
                     break
                 # 查询下一页
                 page = page + 1
-                res = self.list_assets(None,None, None,None,None, None, None, None, None, None, None, None, None, None,None, page, page_size, None, None)
+                res = self.list_assets(query_params, page, page_size, None, None)
             # 加载模板文件
             book = load_workbook(result_file_path)
             sheet = book.active  # 默认使用第一个工作表
@@ -897,7 +906,10 @@ class AssetsService:
             page = 1
             page_size = 100
             # 查询一页
-            res = self.list_assets(None, ids, None, "NETWORK", None,None, None, None, None, None, None, None, None, None,None, page, page_size, None, None)
+            query_params = {}
+            query_params["asset_ids"] = ids
+            query_params["asset_category"] = "NETWORK"
+            res = self.list_assets(query_params, page, page_size, None, None)
             while res and res['data']:
                 # 写入数据
                 for temp in res['data']:
@@ -914,7 +926,7 @@ class AssetsService:
                     break
                 # 查询下一页
                 page = page + 1
-                res = self.list_assets(None, ids, None,"NETWORK",None, None, None, None, None, None, None, None, None, None,None, page, page_size, None, None)
+                res = self.list_assets(query_params, page, page_size, None, None)
             # 加载模板文件
             book = load_workbook(result_file_path)
             sheet = book.active  # 默认使用第一个工作表
@@ -938,11 +950,11 @@ class AssetsService:
             return None
         # 模板路径
         current_template_file = None
-        if item.asset_type == "server":
+        if item.asset_type == "SERVER":
             current_template_file = os.getcwd() + ASSET_SERVER_TEMPLATE_FILE_DIR
-        elif item.asset_type == "network":
+        elif item.asset_type == "NETWORK":
             current_template_file = os.getcwd() + ASSET_NETWORK_TEMPLATE_FILE_DIR
-        elif item.asset_type == "network_flow":
+        elif item.asset_type == "NETWORK_FLOW":
             current_template_file = os.getcwd() + ASSET_NETWORK_FLOW_TEMPLATE_FILE_DIR
         else:
             pass
@@ -954,13 +966,13 @@ class AssetsService:
             # 复制模板文件到临时目录
             shutil.copy2(current_template_file, result_file_path)
             # 服务器类型的文件
-            if item.asset_type == "server":
+            if item.asset_type == "SERVER":
                 self.create_asset_excel_4select(result_file_path, item.asset_ids)
             # 网络类型的文件
-            elif item.asset_type == "network":
+            elif item.asset_type == "NETWORK":
                 self.create_asset_network_excel_4select(result_file_path, item.asset_ids)
             # 网络类型流入流出的文件
-            elif item.asset_type == "network_flow":
+            elif item.asset_type == "NETWORK_FLOW":
                 self.create_asset_network_flow_excel(result_file_path, item.asset_ids)
             else:
                 pass
@@ -982,7 +994,10 @@ class AssetsService:
         page = 1
         page_size = 100
         # 查询一页
-        res = self.list_assets(None, ids,None, "SERVER", None,None, None, None, None, None, None, None, None, None,None, page, page_size, None, None)
+        query_params = {}
+        query_params["asset_ids"] = ids
+        query_params["asset_category"] = "SERVER"
+        res = self.list_assets(query_params, page, page_size, None, None)
         while res and res['data']:
             # 写入数据
             for temp in res['data']:
@@ -1012,7 +1027,7 @@ class AssetsService:
                 break
             # 查询下一页
             page = page + 1
-            res = self.list_assets(None, ids,None,"SERVER",None, None, None, None, None, None, None, None, None, None,None, page, page_size, None, None)
+            res = self.list_assets(query_params, page, page_size, None, None)
         try:
             # 加载模板文件
             book = load_workbook(result_file_path)
@@ -1617,9 +1632,13 @@ class AssetsService:
                 temp["asset_name"] = r.asset_name
                 temp["asset_number"] = r.asset_number
                 temp["asset_id"] = r.asset_id
-                temp["manufacture_name"] = r.manufacture_name
-                temp["manufacture_id"] = r.manufacture_id
-                temp["part_type"] = r.part_type
+                temp["manufacturer_name"] = r.manufacturer_name
+                temp["manufacturer_id"] = r.manufacturer_id
+                temp["part_type_id"] = r.part_type_id
+                if r.part_type:
+                    temp["part_type"] = r.part_type
+                else:
+                    temp["part_type"] = r.part_type_name
                 temp["part_brand"] = r.part_brand
                 temp["part_config"] = r.part_config
                 temp["part_number"] = r.part_number
@@ -1674,6 +1693,7 @@ class AssetsService:
             asset_id=asset_part.asset_id,
             manufacturer_id=asset_part.manufacturer_id,
             name=asset_part.name,
+            part_type_id=asset_part.part_type_id,
             part_type=asset_part.part_type,
             part_brand=asset_part.part_brand,
             part_config=asset_part.part_config,
@@ -1700,9 +1720,15 @@ class AssetsService:
             # 名称
             if asset_part.name is not None and len(asset_part.name) > 0:
                 asset_part_db.name = asset_part.name
+            # 厂商id
+            if asset_part.manufacturer_id is not None and len(asset_part.manufacturer_id) > 0:
+                asset_part_db.manufacturer_id = asset_part.manufacturer_id
             # 类型
             if asset_part.part_type is not None and len(asset_part.part_type) > 0:
                 asset_part_db.part_type = asset_part.part_type
+            # 类型
+            if asset_part.part_type_id is not None and len(asset_part.part_type_id) > 0:
+                asset_part_db.part_type_id = asset_part.part_type_id
             # 品牌
             if asset_part.part_brand is not None and len(asset_part.part_brand) > 0:
                 asset_part_db.part_brand = asset_part.part_brand
