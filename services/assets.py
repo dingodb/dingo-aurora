@@ -20,6 +20,7 @@ from db.models.asset.sql import AssetSQL
 from math import ceil
 from oslo_log import log
 
+from services.custom_exception import Fail
 from utils.constant import ASSET_SERVER_TEMPLATE_FILE_DIR, asset_equipment_columns, asset_basic_info_columns, \
     asset_manufacture_info_columns, asset_position_info_columns, asset_contract_info_columns, asset_belong_info_columns, \
     asset_customer_info_columns, asset_part_info_columns, asset_network_basic_info_columns, \
@@ -168,7 +169,7 @@ class AssetsService:
             # 数据校验
             # 1、名称空
             if asset.asset_name is None or asset.asset_type_id is None:
-                raise Exception
+                raise Fail("name empty", error_message="名称是空")
             # 2、重名
             query_params = {}
             query_params["asset_name"] = asset.asset_name
@@ -176,12 +177,12 @@ class AssetsService:
             count, _ = AssetSQL.list_asset(query_params, 1,10,None,None)
             if count > 0:
                 LOG.error("asset name or number exist")
-                raise Exception
+                raise Fail("asset exists", error_message="资产名称或编号重复")
             # 3. 查询资产类型
             asset_type_list = AssetSQL.list_asset_type(asset.asset_type_id, None, None, None)
             if not asset_type_list:
                 LOG.error("asset type not exist")
-                raise Exception
+                raise Fail("asset type not exists", error_message="资产类型不存在")
             asset_type_name = asset_type_list[0].asset_type_name
             # 数据组装
             # 1、资产基础信息
@@ -215,6 +216,8 @@ class AssetsService:
             asset_flow_info_db = None # self.convert_asset_flow_info_db_from_asset(asset)
             # 保存对象
             AssetSQL.create_asset(asset_basic_info_db, asset_manufacture_info_db_new, asset_manufacture_relation_info_db, asset_position_info_db, asset_contract_info_db, asset_belong_info_db, asset_customer_info_db, asset_part_info_db, asset_flow_info_db)
+        except Fail as e:
+            raise e
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -790,6 +793,7 @@ class AssetsService:
             # 导出的excel数据
             excel_asset_data = []
             excel_part_data = []
+            excel_part_header = []
             # 读取数据数据
             page = 1
             page_size = 100
@@ -803,11 +807,21 @@ class AssetsService:
                     # df.loc[index,"设备名称"] = temp["asset_name"]
                     # 下一行
                     # index = index + 1
+                    extra_json = {}
+                    try:
+                        extra_json = json.loads(temp['extra'])
+                    except Exception as e:
+                        LOG.error(e)
+                    host_name = extra_json["host_name"] if extra_json is not None and "host_name" in extra_json else None
+                    ip = extra_json["ip"] if extra_json is not None and "ip" in extra_json else None
+                    idrac = extra_json["idrac"] if extra_json is not None and "idrac" in extra_json else None
+                    use_to = extra_json["use_to"] if extra_json is not None and "use_to" in extra_json else None
+                    operate_system = extra_json["operate_system"] if extra_json is not None and "operate_system" in extra_json else None
                     # 修改或添加新数据
                     temp_asset_data = {'机架': temp['asset_position']['frame_position'],'机柜': temp['asset_position']['cabinet_position'],'U位': temp['asset_position']['u_position'],
                                        '设备名称': temp['asset_name'],'设备型号': temp['equipment_number'],'资产编号': temp['asset_number'],'序列号': temp['sn_number'],
-                                       '部门': temp['asset_belong']['department_name'],'负责人': temp['asset_belong']['user_name'],'主机名': None,'IP': None,
-                                       'IDRAC': None,'用途': None,'密码': None,'操作系统': None,
+                                       '部门': temp['asset_belong']['department_name'],'负责人': temp['asset_belong']['user_name'],'主机名': host_name,'IP': ip,
+                                       'IDRAC': idrac,'用途': use_to,'密码': None,'操作系统': operate_system,
                                        '购买日期': temp['asset_contract']['purchase_date'],'厂商': temp['asset_manufacturer']['name'],'批次': temp['asset_contract']['batch_number'],'备注': temp['asset_description'],}
                     # 配件数据
                     if temp['asset_part']:
@@ -817,6 +831,10 @@ class AssetsService:
                             # 表头存在
                             if asset_part_info_columns.get(temp_part['part_type'], None):
                                 temp_part_data[asset_part_info_columns.get(temp_part['part_type'], None)] = temp_part['part_config']
+                            else:
+                                # 说明当前列头是自定义列头
+                                excel_part_header.append(temp_part['part_type'])
+                                temp_part_data[temp_part['part_type']] = temp_part['part_config']
                         # 数据追加
                         excel_part_data.append(temp_part_data)
                     # 加入excel导出数据列表
@@ -840,11 +858,23 @@ class AssetsService:
             book.save(result_file_path)
             # 配件sheet
             part_sheet = book['part']
+            # 创建自定义列头
+            if excel_part_header:
+                # 自定义表头去重
+                excel_part_header = set(excel_part_header)
+                # 当前表头
+                current_headers = [cell.value for cell in part_sheet[1]]
+                current_headers_length = len(current_headers)
+                # 下表
+                header_index = 1
+                for temp_header in excel_part_header:
+                    part_sheet.cell(row=1, column=current_headers_length + header_index, value=temp_header)
+                    header_index = header_index + 1
             start_row = 2  # 自动追加到最后一行之后
             # 写入数据到模板文件
             for idx, row in pd.DataFrame(excel_part_data).iterrows():
-                for col_idx, value in enumerate(row, start=1):  # 列从 1 开始
-                    part_sheet.cell(row=start_row + idx, column=col_idx, value=value)
+                for col_idx, value in enumerate(part_sheet[1], start=1):  # 列从 1 开始
+                    part_sheet.cell(row=start_row + idx, column=col_idx, value=row.get(value.value, "")).border = thin_border
                     # 保存修改
             book.save(result_file_path)
         except Exception as e:
@@ -990,6 +1020,7 @@ class AssetsService:
         # 导出的excel数据
         excel_asset_data = []
         excel_part_data = []
+        excel_part_header = []
         # 读取数据数据
         page = 1
         page_size = 100
@@ -1004,11 +1035,17 @@ class AssetsService:
                 # df.loc[index,"设备名称"] = temp["asset_name"]
                 # 下一行
                 # index = index + 1
+                extra_json = json.loads(temp['extra'])
+                host_name = extra_json["host_name"] if "host_name" in extra_json else None
+                ip = extra_json["ip"] if "ip" in extra_json else None
+                idrac = extra_json["idrac"] if "idrac" in extra_json else None
+                use_to = extra_json["use_to"] if "use_to" in extra_json else None
+                operate_system = extra_json["operate_system"] if "operate_system" in extra_json else None
                 # 修改或添加新数据
                 temp_asset_data = {'机架': temp['asset_position']['frame_position'],'机柜': temp['asset_position']['cabinet_position'],'U位': temp['asset_position']['u_position'],
                                    '设备名称': temp['asset_name'],'设备型号': temp['equipment_number'],'资产编号': temp['asset_number'],'序列号': temp['sn_number'],
-                                   '部门': temp['asset_belong']['department_name'],'负责人': temp['asset_belong']['user_name'],'主机名': None,'IP': None,
-                                   'IDRAC': None,'用途': None,'密码': None,'操作系统': None,
+                                   '部门': temp['asset_belong']['department_name'],'负责人': temp['asset_belong']['user_name'],'主机名': host_name,'IP': ip,
+                                   'IDRAC': idrac,'用途': use_to,'密码': None,'操作系统': operate_system,
                                    '购买日期': temp['asset_contract']['purchase_date'],'厂商': temp['asset_manufacturer']['name'],'批次': temp['asset_contract']['batch_number'],'备注': temp['asset_description'],}
                 # 配件数据
                 if temp['asset_part']:
@@ -1018,6 +1055,10 @@ class AssetsService:
                         # 表头存在
                         if asset_part_info_columns.get(temp_part['part_type'], None):
                             temp_part_data[asset_part_info_columns.get(temp_part['part_type'], None)] = temp_part['part_config']
+                        else:
+                            # 说明当前列头是自定义列头
+                            excel_part_header.append(temp_part['part_type'])
+                            temp_part_data[temp_part['part_type']] = temp_part['part_config']
                     # 数据追加
                     excel_part_data.append(temp_part_data)
                 # 加入excel导出数据列表
@@ -1042,11 +1083,29 @@ class AssetsService:
             # book.save(result_file_path)
             # 配件sheet
             part_sheet = book['part']
+            # 创建自定义列头
+            if excel_part_header:
+                # 自定义表头去重
+                excel_part_header = set(excel_part_header)
+                # 当前表头
+                current_headers = [cell.value for cell in part_sheet[1]]
+                current_headers_length = len(current_headers)
+                # 下表
+                header_index = 1
+                for temp_header in excel_part_header:
+                    part_sheet.cell(row=1, column=current_headers_length + header_index, value=temp_header)
+                    header_index = header_index + 1
+                # # 保存新建的表头
+                # book.save(result_file_path)
+                # # 重新读取
+                # book = load_workbook(result_file_path)
+                # part_sheet = book['part']
+                # 保存更新后的 Excel 文件到内存
             start_row = 2  # 自动追加到最后一行之后
             # 写入数据到模板文件
             for idx, row in pd.DataFrame(excel_part_data).iterrows():
-                for col_idx, value in enumerate(row, start=1):  # 列从 1 开始
-                    part_sheet.cell(row=start_row + idx, column=col_idx, value=value).border = thin_border
+                for col_idx, value in enumerate(part_sheet[1], start=1):  # 列从 1 开始
+                    part_sheet.cell(row=start_row + idx, column=col_idx, value=row.get(value.value, "")).border = thin_border
                     # 保存修改
             book.save(result_file_path)
         except Exception as e:
@@ -1072,17 +1131,51 @@ class AssetsService:
                 # 判空
                 if not asset_basic_info_db:
                     raise Exception
+                # 已分配状态直接过滤
+                if asset_basic_info_db.asset_status == '2':
+                    continue
                 # 临时更新对象
                 temp_asset = AssetCreateApiModel(
                     asset_name=asset_basic_info_db.name,
-                    asset_type_id=asset_basic_info_db.asset_type_id)
+                    asset_type_id=asset_basic_info_db.asset_type_id,
+                    asset_status=asset_basic_info_db.asset_status,
+                )
                 # 设置更新参数
                 if asset_batch.asset_type_id:
                     temp_asset.asset_type_id = asset_batch.asset_type_id
                 if asset_batch.asset_type:
                     temp_asset.asset_type = asset_batch.asset_type
+                if asset_batch.description:
+                    temp_asset.asset_description = asset_batch.description
                 # 更新
                 self.update_asset(temp_asset_id, temp_asset)
+                # 归属信息
+                if asset_batch.department_name or asset_batch.user_name or asset_batch.tel_number:
+                    # 查库
+                    asset_belong_db = AssetSQL.get_belong_by_asset_id(temp_asset_id)
+                    # 非空
+                    if asset_belong_db:
+                        if asset_batch.department_name:
+                            asset_belong_db.department_name = asset_batch.department_name
+                        if asset_batch.user_name:
+                            asset_belong_db.user_name = asset_batch.user_name
+                        if asset_batch.tel_number:
+                            asset_belong_db.tel_number = asset_batch.tel_number
+                    else:
+                        asset_belong_db = AssetBelongsInfo(id=uuid.uuid4().hex,asset_id=temp_asset_id,department_name=asset_batch.department_name,user_name=asset_batch.user_name,tel_number=asset_batch.tel_number)
+                    # 更新
+                    AssetSQL.update_belong(asset_belong_db)
+                # 厂商关联信息
+                if asset_batch.manufacturer_id:
+                    # 查库
+                    manufacture_relation_db = AssetSQL.get_manufacture_relation_by_asset_id(temp_asset_id)
+                    # 非空
+                    if manufacture_relation_db:
+                        manufacture_relation_db.manufacture_id = asset_batch.manufacturer_id
+                    else:
+                        manufacture_relation_db = AssetManufactureRelationInfo(id=uuid.uuid4().hex,asset_id=temp_asset_id,manufacture_id=asset_batch.manufacturer_id)
+                    # 更新
+                    AssetSQL.update_manufacture_relation(manufacture_relation_db)
             # 成功返回id
             return asset_ids
         except Exception as e:

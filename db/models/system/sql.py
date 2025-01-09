@@ -18,7 +18,8 @@ class SystemSQL:
             if "resource_id" in query_params and query_params["resource_id"]:
                 query = query.filter(OperateLog.resource_id == query_params["resource_id"])
             if "operate_type" in query_params and query_params["operate_type"]:
-                query = query.filter(OperateLog.operate_type == query_params["operate_type"])
+                operate_type_arr = query_params["operate_type"].split(",")
+                query = query.filter(OperateLog.operate_type.in_(operate_type_arr))
             # 默认排序，按照时间降序
             # 排序
             if sort_keys is not None and sort_keys in operate_log_dir_dic:

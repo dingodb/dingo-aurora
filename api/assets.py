@@ -15,6 +15,7 @@ from api.model.assets import AssetCreateApiModel, AssetManufacturerApiModel, Ass
 from api.model.system import OperateLogApiModel
 from api.response import ResponseModel, success_response
 from services.assets import AssetsService
+from services.custom_exception import Fail
 from services.system import SystemService
 from utils.constant import EXCEL_TEMP_DIR, ASSET_TEMPLATE_ASSET_SHEET, ASSET_TEMPLATE_PART_SHEET, \
     ASSET_TEMPLATE_ASSET_TYPE, ASSET_TEMPLATE_NETWORK_SHEET
@@ -404,6 +405,8 @@ async def create_asset(asset:AssetCreateApiModel):
         system_service.create_system_log(OperateLogApiModel(operate_type="create", resource_type="asset", resource_id=result, resource_name=asset.asset_name, operate_flag=True))
         return result
         # return success_response(result)
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()

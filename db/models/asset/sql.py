@@ -370,6 +370,18 @@ class AssetSQL:
             return session.merge(manufacture_db)
 
     @classmethod
+    def get_manufacture_relation_by_asset_id(cls, asset_id):
+        session = get_session()
+        with session.begin():
+            return session.query(AssetManufactureRelationInfo).filter(AssetManufactureRelationInfo.asset_id == asset_id).first()
+
+    @classmethod
+    def update_manufacture_relation(cls, manufacture_relation_db):
+        session = get_session()
+        with session.begin():
+            return session.merge(manufacture_relation_db)
+
+    @classmethod
     def get_position_by_asset_id(cls, asset_id):
         session = get_session()
         with session.begin():
@@ -386,6 +398,12 @@ class AssetSQL:
         session = get_session()
         with session.begin():
             return session.query(AssetBelongsInfo).filter(AssetBelongsInfo.asset_id == asset_id).first()
+
+    @classmethod
+    def update_belong(cls, belong_info):
+        session = get_session()
+        with session.begin():
+            session.merge(belong_info)
 
     @classmethod
     def get_customer_by_asset_id(cls, asset_id):

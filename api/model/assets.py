@@ -144,8 +144,15 @@ class AssetBatchDownloadApiModel(BaseModel):
 # 资产更新的信息
 class AssetBatchUpdateApiModel(BaseModel):
     asset_ids: str = Field(None, description="资产数据的id的拼装字符串")
-    asset_type_id: Optional[str] = Field(..., description="资产设备的类型id")
+    asset_type_id: Optional[str] = Field(None, description="资产设备的类型id")
     asset_type: Optional[str] = Field(None, description="资产类型")
+    manufacturer_id: Optional[str] = Field(None, description="厂商id")
+    department_id: Optional[str] = Field(None, description="资产归属的部门id")
+    department_name: Optional[str] = Field(None, description="资产归属的部门名称")
+    user_id: Optional[str] = Field(None, description="资产归属的用户id")
+    user_name: Optional[str] = Field(None, description="资产归属的用户名称")
+    tel_number: Optional[str] = Field(None, description="资产归属的用户的电话号码")
+    description: Optional[str] = Field(None, description="资产的描述信息")
 
 # 资产扩展字段信息
 class AssetExtendColumnApiModel(BaseModel):
