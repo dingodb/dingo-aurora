@@ -66,6 +66,7 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=128), nullable=False),
         sa.Column("asset_id", sa.String(length=128), nullable=True),
         sa.Column("manufacturer_id", sa.String(length=128), nullable=True),
+        sa.Column("part_type_id", sa.String(length=128), nullable=True),
         sa.Column("part_type", sa.String(length=128), nullable=True),
         sa.Column("part_brand", sa.String(length=128), nullable=True),
         sa.Column("part_config", sa.String(length=128), nullable=True),
@@ -172,7 +173,7 @@ def upgrade() -> None:
     op.create_index(op.f("ix_ops_assets_flows_info_id"), "ops_assets_flows_info", ["id"], unique=False)
 
     # ### 资产设备的扩展字段信息 ###
-    op.create_table(
+    assets_extends_columns_table = op.create_table(
         "ops_assets_extends_columns_info",
         sa.Column("id", sa.String(length=128), nullable=False),
         sa.Column("asset_type", sa.String(length=128), nullable=True),
@@ -187,6 +188,51 @@ def upgrade() -> None:
         sa.Column("description", sa.String(length=255), nullable=True),
     )
     op.create_index(op.f("ix_ops_assets_extends_columns_info_id"), "ops_assets_extends_columns_info", ["id"], unique=False)
+    # ### 资产类型初始化信息 ###
+    op.bulk_insert(assets_extends_columns_table,
+                   [
+                       # 服务器默认配置
+                       {'id':'b596ad7c-c8eb-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'asset_id', 'column_name':'ID', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':0, 'description':None},
+                       {'id':'b5a32c2c-c8eb-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'asset_name', 'column_name':'设备名称', 'column_type':'str', 'required_flag':1, 'default_flag':1, 'hidden_flag':0, 'queue':1, 'description':None},
+                       {'id':'b5a98102-c8eb-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'asset_status', 'column_name':'资产状态', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':2, 'description':None},
+                       {'id':'b5af5c71-c8eb-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'asset_type', 'column_name':'类型', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':3, 'description':None},
+                       {'id':'b5b94dd5-c8eb-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'frame_position', 'column_name':'机架', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':4, 'description':None},
+                       {'id':'b5c07800-c8eb-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'cabinet_position', 'column_name':'机柜', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':5, 'description':None},
+                       {'id':'b5c58057-c8eb-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'u_position', 'column_name':'U位', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':6, 'description':None},
+                       {'id':'b5c9edd2-c8eb-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'equipment_number', 'column_name':'设备型号', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':7, 'description':None},
+                       {'id':'b5d36bac-c8eb-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'asset_number', 'column_name':'资产编号', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':8, 'description':None},
+                       {'id':'b5d9a733-c8eb-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'sn_number', 'column_name':'序列号', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':9, 'description':None},
+                       {'id':'b5e0d00a-c8eb-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'department_name', 'column_name':'部门', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':10, 'description':None},
+                       {'id':'b5e84c8d-c8eb-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'user_name', 'column_name':'负责人', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':11, 'description':None},
+                       {'id':'b5ee533c-c8eb-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'host_name', 'column_name':'主机名', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':12, 'description':None},
+                       {'id':'b5f3a4d1-c8eb-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'ip', 'column_name':'IP', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':13, 'description':None},
+                       {'id':'b5f8c5f4-c8eb-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'idrac', 'column_name':'IDRAC', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':14, 'description':None},
+                       {'id':'b601c7af-c8eb-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'use_to', 'column_name':'用途', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':15, 'description':None},
+                       {'id':'b6129347-c8eb-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'operate_system', 'column_name':'操作系统', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':16, 'description':None},
+                       {'id':'b61b907e-c8eb-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'manufacturer_name', 'column_name':'厂商', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':17, 'description':None},
+                       {'id':'b621f7f2-c8eb-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'asset_description', 'column_name':'备注', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':18, 'description':None},
+                       {'id':'b7688486-cd88-11ef-90c8-44a842237864', 'asset_type':'SERVER', 'role_type':None, 'column_key':'asset_part', 'column_name':'配件', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':19, 'description':None},
+                       # 网络默认配置
+                       {'id':'c59bf2bb-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'asset_id', 'column_name':'ID', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':0, 'description':None},
+                       {'id':'c5a636d4-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'asset_name', 'column_name':'名称', 'column_type':'str', 'required_flag':1, 'default_flag':1, 'hidden_flag':0, 'queue':1, 'description':None},
+                       {'id':'c5b10003-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'asset_status', 'column_name':'状态', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':2, 'description':None},
+                       {'id':'c5be0288-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'asset_type', 'column_name':'类型', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':3, 'description':None},
+                       {'id':'c5c82409-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'frame_position', 'column_name':'机架', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':4, 'description':None},
+                       {'id':'c5d2cc24-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'cabinet_position', 'column_name':'机柜', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':5, 'description':None},
+                       {'id':'c5df1fb1-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'u_position', 'column_name':'U位', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':6, 'description':None},
+                       {'id':'c5ec3535-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'equipment_number', 'column_name':'型号', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':7, 'description':None},
+                       {'id':'c5f78b5a-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'asset_number', 'column_name':'编号', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':8, 'description':None},
+                       {'id':'c603c734-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'sn_number', 'column_name':'序列号', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':9, 'description':None},
+                       {'id':'c6100795-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'extra', 'column_name':'网络配置信息', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':9, 'description':None},
+                       {'id':'c61c31be-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'department_name', 'column_name':'部门', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':10, 'description':None},
+                       {'id':'c6273f56-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'user_name', 'column_name':'负责人', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':11, 'description':None},
+                       {'id':'c632d180-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'host_name', 'column_name':'主机名', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':12, 'description':None},
+                       {'id':'c65a3393-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'use_to', 'column_name':'用途', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':15, 'description':None},
+                       {'id':'c684c110-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'manufacturer_name', 'column_name':'厂商', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':17, 'description':None},
+                       {'id':'c690c3aa-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'asset_description', 'column_name':'备注', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':18, 'description':None},
+                       {'id':'dde7ea52-cd88-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'asset_part', 'column_name':'配件', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':19, 'description':None},
+                   ]
+                   )
 
     # ### 操作日志信息 ###
     op.create_table(

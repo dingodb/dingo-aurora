@@ -197,6 +197,33 @@ async def update_asset_type_by_id(id:str, asset_type:AssetTypeApiModel):
 
 # 以下是资产的类型相关的接口 end
 
+@router.get("/assets/download/batch", summary="批量下载资产信息", description="根据不同类型下载对应的资产文件")
+async def download_assets_xlsx(asset_type: str, asset_ids: str):
+    # 类型是空
+    if asset_type is None or len(asset_type) <= 0:
+        return None
+    # 把数据库中的资产数据导出资产信息数据
+    result_file_name = "asset_" + format_d8q_timestamp() + ".xlsx"
+    # 导出文件路径
+    result_file_path = EXCEL_TEMP_DIR + result_file_name
+    # 生成文件
+    # 读取excel文件内容
+    try:
+        item = AssetBatchDownloadApiModel(asset_type=asset_type, asset_ids=asset_ids)
+        # 生成文件
+        assert_service.create_asset_excel_4batch(item, result_file_path)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+    # 文件存在则下载
+    if os.path.exists(result_file_path):
+        return FileResponse(
+            path=result_file_path,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename=result_file_name  # 下载时显示的文件名
+        )
+    return {"error": "File not found"}
+
 @router.get("/assets/download", summary="下载资产信息", description="根据不同类型下载对应的资产文件")
 async def download_assets_xlsx(asset_type: str):
     # 类型是空
@@ -550,6 +577,13 @@ async def update_manufacture_by_id(manufacture_id:str, manufacture:AssetManufact
 async def list_assets_parts(
         part_catalog: str = Query(None, description="配件分类：库存配件(inventory)、已用配件(used)"),
         asset_id: str = Query(None, description="资产id"),
+        asset_name: str = Query(None, description="资产名称"),
+        part_type: str = Query(None, description="配件类型"),
+        part_config: str = Query(None, description="配件内容"),
+        part_number: str = Query(None, description="配件型号"),
+        surplus: str = Query(None, description="剩余数量"),
+        description: str = Query(None, description="描述信息"),
+        personal_used_flag: bool = Query(None, description="是否剩余"),
         name: str = Query(None, description="配件名称"),
         page: int = Query(1, description="页码"),
         page_size: int = Query(10, description="页数量大小"),
@@ -557,8 +591,31 @@ async def list_assets_parts(
         sort_dirs: str = Query(None, description="排序方式"),):
     # 返回数据接口
     try:
+        # 查询条件
+        query_params = {}
+        # 组装
+        if part_catalog:
+            query_params["part_catalog"] = part_catalog
+        if asset_id:
+            query_params["asset_id"] = asset_id
+        if asset_name:
+            query_params["asset_name"] = asset_name
+        if part_type:
+            query_params["part_type"] = part_type
+        if part_config:
+            query_params["part_config"] = part_config
+        if part_number:
+            query_params["part_number"] = part_number
+        if surplus:
+            query_params["surplus"] = surplus
+        if description:
+            query_params["description"] = description
+        if personal_used_flag is not None:
+            query_params["personal_used_flag"] = personal_used_flag
+        if name:
+            query_params["name"] = name
         # 查询成功
-        result = assert_service.list_assets_parts_pages(part_catalog, asset_id, name, page, page_size, sort_keys, sort_dirs)
+        result = assert_service.list_assets_parts_pages(query_params, page, page_size, sort_keys, sort_dirs)
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail="asset part not found")

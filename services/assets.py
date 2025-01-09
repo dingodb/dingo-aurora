@@ -753,11 +753,11 @@ class AssetsService:
             return None
         # 模板路径
         current_template_file = None
-        if asset_type == "server":
+        if asset_type == "SERVER":
             current_template_file = os.getcwd() + ASSET_SERVER_TEMPLATE_FILE_DIR
-        elif asset_type == "network":
+        elif asset_type == "NETWORK":
             current_template_file = os.getcwd() + ASSET_NETWORK_TEMPLATE_FILE_DIR
-        elif asset_type == "network_flow":
+        elif asset_type == "NETWORK_FLOW":
             current_template_file = os.getcwd() + ASSET_NETWORK_FLOW_TEMPLATE_FILE_DIR
         else:
             pass
@@ -769,13 +769,13 @@ class AssetsService:
             # 复制模板文件到临时目录
             shutil.copy2(current_template_file, result_file_path)
             # 服务器类型的文件
-            if asset_type == "server":
+            if asset_type == "SERVER":
                 self.create_asset_server_excel(result_file_path)
             # 网络类型的文件
-            elif asset_type == "network":
+            elif asset_type == "NETWORK":
                 self.create_asset_network_excel(result_file_path)
             # 网络类型流入流出的文件
-            elif asset_type == "network_flow":
+            elif asset_type == "NETWORK_FLOW":
                 self.create_asset_network_flow_excel(result_file_path, None)
             else:
                 pass
@@ -1634,11 +1634,11 @@ class AssetsService:
             return None
 
     # 查询资产配件列表
-    def list_assets_parts_pages(self, part_catalog, asset_id, name, page, page_size, sort_keys, sort_dirs):
+    def list_assets_parts_pages(self, query_params, page, page_size, sort_keys, sort_dirs):
         # 业务逻辑
         try:
             # 按照条件从数据库中查询数据
-            count, data = AssetSQL.list_asset_part_page(part_catalog, asset_id, name, page, page_size, sort_keys, sort_dirs)
+            count, data = AssetSQL.list_asset_part_page(query_params, page, page_size, sort_keys, sort_dirs)
             # 数据处理
             ret = []
             # 遍历
@@ -1720,6 +1720,11 @@ class AssetsService:
             surplus=asset_part.surplus,
             description=asset_part.description,
         )
+        # 重新设置part_type
+        if asset_part_info_db.part_type_id:
+            asset_type = AssetSQL.get_asset_type_by_id(asset_part_info_db.part_type_id)
+            if asset_type and asset_type.asset_type_name:
+                asset_part_info_db.part_type = asset_type.asset_type_name
         # 返回数据
         return asset_part_info_db
 
@@ -1747,6 +1752,12 @@ class AssetsService:
             # 类型
             if asset_part.part_type_id is not None and len(asset_part.part_type_id) > 0:
                 asset_part_db.part_type_id = asset_part.part_type_id
+                # 重新设置part_type
+                asset_type = AssetSQL.get_asset_type_by_id(asset_part_db.part_type_id)
+                if asset_type:
+                    asset_part_db.part_type = asset_type.asset_type_name
+                else:
+                    asset_part_db.part_type = None
             # 品牌
             if asset_part.part_brand is not None and len(asset_part.part_brand) > 0:
                 asset_part_db.part_brand = asset_part.part_brand

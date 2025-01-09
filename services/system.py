@@ -13,11 +13,11 @@ LOG = log.getLogger(__name__)
 
 class SystemService:
 
-    def list_system_logs(self, resource_id, operate_type, page, page_size, sort_keys, sort_dirs):
+    def list_system_logs(self, query_params, page, page_size, sort_keys, sort_dirs):
         # 业务逻辑
         try:
             # 查询数据库
-            count, data = SystemSQL.list_operate_log(resource_id, operate_type, page, page_size, sort_keys, sort_dirs)
+            count, data = SystemSQL.list_operate_log(query_params, page, page_size, sort_keys, sort_dirs)
             # 数据处理
             ret = []
             # 遍历

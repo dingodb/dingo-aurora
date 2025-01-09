@@ -5,20 +5,20 @@ from db.engines.mysql import get_session
 from db.models.system.models import OperateLog
 
 # 日志排序字段
-operate_log_dir_dic= {"log_date":OperateLog.log_date, "operate_type":OperateLog.operate_type,}
+operate_log_dir_dic= {"log_date":OperateLog.log_date, "operate_type":OperateLog.operate_type, "user_id":OperateLog.user_id,}
 
 class SystemSQL:
 
     @classmethod
-    def list_operate_log(cls, resource_id=None, operate_type=None, page=1, page_size=10, sort_keys=None, sort_dirs="ascend"):
+    def list_operate_log(cls, query_params, page=1, page_size=10, sort_keys=None, sort_dirs="ascend"):
         session = get_session()
         with session.begin():
             query = session.query(OperateLog)
             # 数据库查询参数
-            if resource_id is not None:
-                query = query.filter(OperateLog.resource_id == resource_id)
-            if operate_type is not None:
-                query = query.filter(OperateLog.operate_type == operate_type)
+            if "resource_id" in query_params and query_params["resource_id"]:
+                query = query.filter(OperateLog.resource_id == query_params["resource_id"])
+            if "operate_type" in query_params and query_params["operate_type"]:
+                query = query.filter(OperateLog.operate_type == query_params["operate_type"])
             # 默认排序，按照时间降序
             # 排序
             if sort_keys is not None and sort_keys in operate_log_dir_dic:

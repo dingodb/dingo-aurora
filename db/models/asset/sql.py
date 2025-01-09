@@ -16,13 +16,17 @@ from enum import Enum
 #链接数据库，可以使用配置文件进行定义
 # engine = create_engine("mysql+pymysql://root:HworLIIDvmTRsPfQauNskuJF8PcoTuULfu3dEHFg@10.220.56.254:3306/dingoops?charset=utf8mb3", echo=True)
 # 资产排序字段字典
-asset_dir_dic= {"frame_position":AssetPositionsInfo.frame_position, "asset_status":AssetBasicInfo.asset_status, "asset_name":AssetBasicInfo.name, "id": AssetBasicInfo.id}
+asset_dir_dic= {"asset_type":AssetBasicInfo.asset_type, "frame_position":AssetPositionsInfo.frame_position, "u_position":AssetPositionsInfo.u_position, "cabinet_position":AssetPositionsInfo.cabinet_position,
+                "asset_status":AssetBasicInfo.asset_status, "asset_name":AssetBasicInfo.name, "id": AssetBasicInfo.id, "equipment_number":AssetBasicInfo.equipment_number, "asset_number":AssetBasicInfo.asset_number,
+                "sn_number":AssetBasicInfo.asset_number, "department_name":AssetBelongsInfo.department_name, "user_name":AssetBelongsInfo.user_name, "manufacturer_name":AssetManufacturesInfo.name, }
 # 配件的所有列
 part_columns = [getattr(AssetPartsInfo, column.name).label(column.name) for column in AssetPartsInfo.__table__.columns]
 # 流的所有列
 flow_columns = [getattr(AssetFlowsInfo, column.name).label(column.name) for column in AssetFlowsInfo.__table__.columns]
 # 资产排序字段字典
 asset_manufacturer_dir_dic= {"name":AssetManufacturesInfo.name}
+# 配件排序字段字典
+asset_part_dir_dic= {"asset_name":AssetBasicInfo.name,"name":AssetPartsInfo.name,"part_type":AssetPartsInfo.part_type,"part_config":AssetPartsInfo.part_config,"part_number":AssetPartsInfo.part_number,"surplus":AssetPartsInfo.surplus,"description":AssetPartsInfo.description,"personal_used_flag":AssetPartsInfo.personal_used_flag}
 
 class AssetSQL:
 
@@ -98,7 +102,9 @@ class AssetSQL:
             if "asset_type" in query_params and query_params["asset_type"]:
                 query = query.filter(AssetBasicInfo.asset_type.like('%' + query_params["asset_type"] + '%'))
             if "asset_status" in query_params and query_params["asset_status"]:
-                query = query.filter(AssetBasicInfo.asset_status == query_params["asset_status"])
+                # 状态拆分
+                asset_status_arr = query_params["asset_status"].split(",")
+                query = query.filter(AssetBasicInfo.asset_status.in_(asset_status_arr))
             if "frame_position" in query_params and query_params["frame_position"]:
                 query = query.filter(AssetPositionsInfo.frame_position.like('%' + query_params["frame_position"] + '%'))
             if "cabinet_position" in query_params and query_params["cabinet_position"]:
@@ -254,7 +260,7 @@ class AssetSQL:
             if customer_info:
                 session.merge(customer_info)
             if part_info:
-                session.query(AssetPartsInfo).filter(AssetPartsInfo.id == basic_info.id).delete()
+                session.query(AssetPartsInfo).filter(AssetPartsInfo.asset_id == basic_info.id).delete()
                 session.add_all(part_info)
             if flow_info:
                 session.add_all(flow_info)
@@ -470,9 +476,7 @@ class AssetSQL:
 
 
     @classmethod
-    def list_asset_part_page(cls, part_catalog=None, asset_id=None, name=None, page=1, page_size=10, field=None, dir="ascend"):
-        # Session = sessionmaker(bind=engine,expire_on_commit=False)
-        # session = Session()
+    def list_asset_part_page(cls, query_params, page=1, page_size=10, field=None, dir="ascend"):
         session = get_session()
         with session.begin():
             query = session.query(*part_columns, AssetBasicInfo.name.label("asset_name"), AssetBasicInfo.asset_number.label("asset_number"),
@@ -481,18 +485,44 @@ class AssetSQL:
             query = query.outerjoin(AssetBasicInfo, AssetBasicInfo.id == AssetPartsInfo.asset_id). \
                 outerjoin(AssetManufacturesInfo, AssetManufacturesInfo.id == AssetPartsInfo.manufacturer_id). \
                 outerjoin(AssetType, AssetType.id == AssetPartsInfo.part_type_id)
-                # 数据库查询参数
-            if name is not None:
-                query = query.filter(AssetPartsInfo.name.like('%' + name + '%'))
-            if asset_id is not None:
-                query = query.filter(AssetPartsInfo.asset_id == asset_id)
-            if part_catalog is not None:
-                if part_catalog == "inventory":
+            # 配件类型
+            part_catalog = None
+            # 数据库查询参数
+            if "part_catalog" in query_params and query_params["part_catalog"]:
+                part_catalog = query_params["part_catalog"]
+                if query_params["part_catalog"] == "inventory":
                     query = query.filter(AssetPartsInfo.asset_id == None)
-                if part_catalog == "used":
+                if query_params["part_catalog"] == "used":
                     query = query.filter(AssetPartsInfo.asset_id != None)
+            if "name" in query_params and query_params["name"]:
+                query = query.filter(AssetPartsInfo.name.like('%' + query_params["name"] + '%'))
+            if "asset_id" in query_params and query_params["asset_id"]:
+                query = query.filter(AssetPartsInfo.asset_id == query_params["asset_id"])
+            if "asset_name" in query_params and query_params["asset_name"]:
+                query = query.filter(AssetBasicInfo.name.like('%' + query_params["asset_name"] + '%'))
+            if "part_type" in query_params and query_params["part_type"]:
+                # 库存配件的开头默认PART_
+                part_type_start = "PART_" if part_catalog == "inventory" else ""
+                # 过滤
+                query = query.filter(AssetPartsInfo.part_type.like(part_type_start + '%' + query_params["part_type"] + '%'))
+            if "part_config" in query_params and query_params["part_config"]:
+                query = query.filter(AssetPartsInfo.part_config.like('%' + query_params["part_config"] + '%'))
+            if "part_number" in query_params and query_params["part_number"]:
+                query = query.filter(AssetPartsInfo.part_number.like('%' + query_params["part_number"] + '%'))
+            if "surplus" in query_params and query_params["surplus"]:
+                query = query.filter(AssetPartsInfo.surplus.like('%' + query_params["surplus"] + '%'))
+            if "description" in query_params and query_params["description"]:
+                query = query.filter(AssetPartsInfo.description.like('%' + query_params["description"] + '%'))
+            if "personal_used_flag" in query_params:
+                query = query.filter(AssetPartsInfo.personal_used_flag == query_params["personal_used_flag"])
             # 总数
             count = query.count()
+            # 排序
+            if field is not None and field in asset_part_dir_dic:
+                if dir == "ascend" or dir is None :
+                    query = query.order_by(asset_part_dir_dic[field].asc())
+                elif dir == "descend":
+                    query = query.order_by(asset_part_dir_dic[field].desc())
             # 分页条件
             page_size = int(page_size)
             page_num = int(page)
