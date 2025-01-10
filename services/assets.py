@@ -13,6 +13,7 @@ from openpyxl.styles import Border, Side
 from typing_extensions import assert_type
 
 from api.model.assets import AssetCreateApiModel, AssetFlowApiModel
+from api.model.system import OperateLogApiModel
 from db.models.asset.models import AssetBasicInfo, AssetManufacturesInfo, AssetPartsInfo, AssetPositionsInfo, \
     AssetContractsInfo, AssetCustomersInfo, AssetBelongsInfo, AssetType, AssetFlowsInfo, AssetManufactureRelationInfo, \
     AssetExtendsColumnsInfo
@@ -21,11 +22,14 @@ from math import ceil
 from oslo_log import log
 
 from services.custom_exception import Fail
+from services.system import SystemService
+from utils.common import format_excel_str
 from utils.constant import ASSET_SERVER_TEMPLATE_FILE_DIR, asset_equipment_columns, asset_basic_info_columns, \
     asset_manufacture_info_columns, asset_position_info_columns, asset_contract_info_columns, asset_belong_info_columns, \
     asset_customer_info_columns, asset_part_info_columns, asset_network_basic_info_columns, \
     asset_network_manufacture_info_columns, asset_network_position_info_columns, asset_network_basic_info_extra_columns, \
-    ASSET_NETWORK_TEMPLATE_FILE_DIR, ASSET_NETWORK_FLOW_TEMPLATE_FILE_DIR, asset_network_flow_info_columns
+    ASSET_NETWORK_TEMPLATE_FILE_DIR, ASSET_NETWORK_FLOW_TEMPLATE_FILE_DIR, asset_network_flow_info_columns, \
+    asset_basic_info_extra_columns
 from utils.datetime import change_excel_date_to_timestamp
 
 LOG = log.getLogger(__name__)
@@ -37,6 +41,8 @@ thin_border = Border(
     top=Side(border_style="thin", color="000000"),  # 上边框
     bottom=Side(border_style="thin", color="000000")  # 下边框
 )
+
+system_service = SystemService()
 
 class AssetsService:
 
@@ -184,6 +190,7 @@ class AssetsService:
                 LOG.error("asset type not exist")
                 raise Fail("asset type not exists", error_message="资产类型不存在")
             asset_type_name = asset_type_list[0].asset_type_name
+            # 资产位置重复
             # 数据组装
             # 1、资产基础信息
             asset_basic_info_db = self.convert_asset_basic_info_db(asset)
@@ -529,6 +536,18 @@ class AssetsService:
                 # 判断excel的数据是非nan
                 if pd.notna(row[basic_column]):
                     asset.__setattr__(basic_key, row[basic_column])
+            # 重设资产设备分类类型
+            if asset.asset_type:
+                asset_type_db = AssetSQL.get_asset_type_by_name("SERVER_" + asset.asset_type)
+                if asset_type_db:
+                    asset.asset_type_id = asset_type_db.id
+            # 组装extra
+            extra = {}
+            for extra_key, extra_column in asset_basic_info_extra_columns.items():
+                # 判断excel的数据是非nan
+                if pd.notna(row[extra_column]):
+                    extra[extra_key] = row[extra_column]
+            asset.extra = extra
             # 从excel中加载厂商信息数据
             for manufacture_key, manufacture_column in asset_manufacture_info_columns.items():
                 # 判断excel的数据是非nan
@@ -559,8 +578,10 @@ class AssetsService:
                 # 判断excel的数据是非nan
                 if pd.notna(row.get(customer_column, None)):
                     asset.asset_customer.__setattr__(customer_key, row.get(customer_column, None))
-                    # 调用创建
+            # 调用创建
             self.create_asset(asset)
+            # 记录操作日志
+            system_service.create_system_log(OperateLogApiModel(operate_type="create", resource_type="asset", resource_id=asset.asset_id, resource_name=asset.asset_name, operate_flag=True))
             # 组装数据
         except Exception as e:
             import traceback
@@ -576,9 +597,11 @@ class AssetsService:
                 asset_number = row["资产编号"]
             # 根据资产编号精准查询资产设备
             asset_id = None
+            asset_name = ""
             asset_basic_info_db = AssetSQL.get_asset_basic_info_by_asset_number(asset_number)
             if asset_basic_info_db:
                 asset_id = asset_basic_info_db.id
+                asset_name = asset_basic_info_db.name
             # 从excel中加载配件信息数据
             for part_key, part_column in asset_part_info_columns.items():
                 # 每一列的数据都作为一个配件
@@ -588,7 +611,8 @@ class AssetsService:
                 if pd.notna(row[part_column]):
                     asset_part.__setattr__("part_type", part_key)
                     asset_part.__setattr__("asset_id", asset_id)
-                    asset_part.__setattr__("name", row[part_column])
+                    asset_part.__setattr__("name", asset_name + "_" + part_key)
+                    asset_part.__setattr__("part_config", row[part_column])
                 # 入库
                 AssetSQL.create_asset_part(asset_part)
         except Exception as e:
@@ -608,6 +632,11 @@ class AssetsService:
                 # 判断excel的数据是非nan
                 if pd.notna(row[basic_column]):
                     asset.__setattr__(basic_key, row[basic_column])
+            # 重设资产设备分类类型
+            if asset.asset_type:
+                asset_type_db = AssetSQL.get_asset_type_by_name("NETWORK_" + asset.asset_type)
+                if asset_type_db:
+                    asset.asset_type_id = asset_type_db.id
             # 从网络设备的excel中加载基础信息的扩展信息数据
             extra = {}
             for basic_extra_key, basic_extra_column in asset_network_basic_info_extra_columns.items():
@@ -637,6 +666,8 @@ class AssetsService:
                     # 赋值
                     asset.asset_contract.__setattr__(contract_key, row_value)
             self.create_asset(asset)
+            # 记录操作日志
+            system_service.create_system_log(OperateLogApiModel(operate_type="create", resource_type="asset", resource_id=asset.asset_id, resource_name=asset.asset_name, operate_flag=True))
             # 组装数据
         except Exception as e:
             import traceback
@@ -750,7 +781,7 @@ class AssetsService:
         return asset_part
 
 
-    def create_asset_excel(self, asset_type, result_file_path):
+    def create_asset_excel(self, asset_type, asset_id, result_file_path):
         # 判空
         if not asset_type:
             return None
@@ -779,7 +810,7 @@ class AssetsService:
                 self.create_asset_network_excel(result_file_path)
             # 网络类型流入流出的文件
             elif asset_type == "NETWORK_FLOW":
-                self.create_asset_network_flow_excel(result_file_path, None)
+                self.create_asset_network_flow_excel(result_file_path, asset_id, None)
             else:
                 pass
         except Exception as e:
@@ -1003,7 +1034,7 @@ class AssetsService:
                 self.create_asset_network_excel_4select(result_file_path, item.asset_ids)
             # 网络类型流入流出的文件
             elif item.asset_type == "NETWORK_FLOW":
-                self.create_asset_network_flow_excel(result_file_path, item.asset_ids)
+                self.create_asset_network_flow_excel(result_file_path, None, item.asset_ids)
             else:
                 pass
         except Exception as e:
@@ -1637,6 +1668,11 @@ class AssetsService:
             return None
         # 删除
         try:
+            # 判断当前分类是否被资产使用
+            asset_count = AssetSQL.get_asset_count_number_by_asset_type_id(asset_type_id)
+            part_count = AssetSQL.get_asset_count_number_by_asset_type_id(asset_type_id)
+            if asset_count > 0 or part_count > 0:
+                raise Fail("type used", error_message="分类使用中")
             # 先删除下级然后再删除上级
             # 递归查询当前id的所有子类型
             child_data = self.list_child_asset_types(asset_type_id)
@@ -1647,6 +1683,8 @@ class AssetsService:
                     AssetSQL.delete_asset_type(temp_child_type.id)
             # 删除对象
             AssetSQL.delete_asset_type(asset_type_id)
+        except Fail as e:
+            raise e
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -2094,12 +2132,12 @@ class AssetsService:
         return id
 
     # 导出网络设备的流数据，或者指定id的流数据
-    def create_asset_network_flow_excel(self, result_file_path, ids):
+    def create_asset_network_flow_excel(self, result_file_path, asset_id, ids):
         try:
             # 导出的excel数据
             excel_asset_network_flow_data = []
             # 查询
-            res = self.list_assets_flows(None, ids)
+            res = self.list_assets_flows(asset_id, ids)
             # 空
             if not res:
                 return None
@@ -2151,11 +2189,11 @@ class AssetsService:
                         asset_network_flow.__setattr__(basic_key, row[basic_column])
             # 读取对应名称的资产设备信息
             if asset_name:
-                asset_db = AssetSQL.get_asset_basic_info_by_catalog_name("NETWORK", asset_name)
+                asset_db = AssetSQL.get_asset_basic_info_by_catalog_name("NETWORK", format_excel_str(asset_name))
                 if asset_db:
                     asset_network_flow.asset_id = asset_db.id
             if opposite_asset_name:
-                asset_db = AssetSQL.get_asset_basic_info_by_catalog_name("NETWORK", opposite_asset_name)
+                asset_db = AssetSQL.get_asset_basic_info_by_catalog_name("NETWORK", format_excel_str(opposite_asset_name))
                 if asset_db:
                     asset_network_flow.opposite_asset_id = asset_db.id
             # 保存
@@ -2306,6 +2344,26 @@ class AssetsService:
         # 成功返回id
         return id
 
+    # 根据id修改资产类型
+    def update_asset_columns(self, asset_columns):
+        # 判空
+        if not asset_columns:
+            raise Exception
+        ids = []
+        try:
+            # 遍历
+            for temp in asset_columns:
+                # 非空
+                if temp.id:
+                    self.update_asset_column_by_id(temp.id, temp)
+                    ids.append(temp.id)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+        # 成功返回id
+        return ids
+
     # 重新设置位置信息
     def reset_asset_column_info_db(self, asset_column_info_db, asset_column):
         # 判空
@@ -2322,6 +2380,8 @@ class AssetsService:
             asset_column_info_db.column_name=asset_column.column_name
         if asset_column.column_type:
             asset_column_info_db.column_type=asset_column.column_type
+        if asset_column.queue is not None:
+            asset_column_info_db.queue=asset_column.queue
         if asset_column.required_flag:
             asset_column_info_db.required_flag=asset_column.required_flag
         if asset_column.hidden is not None:

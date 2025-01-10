@@ -2,7 +2,7 @@
 import os
 import time
 from io import BytesIO
-from typing import List
+from typing import List, Optional
 
 import pandas
 from fastapi import APIRouter, UploadFile, File, Query, Path, HTTPException
@@ -136,6 +136,19 @@ async def update_asset_column_by_id(id:str, asset_column:AssetExtendColumnApiMod
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail="asset extend column update error")
+
+@router.post("/assets/columns/update", summary="批量更新扩展字段信息", description="根据id批量更新扩展字段信息")
+async def update_asset_columns(asset_columns:List[AssetExtendColumnApiModel]):
+    # 更新资产类型
+    try:
+        # 更新成功
+        result = assert_service.update_asset_columns(asset_columns)
+        # 操作日志
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail="asset extend column update error")
 # 以上是扩展字段的相关接口 end
 
 # 以下是资产的类型相关的接口 start
@@ -177,6 +190,8 @@ async def delete_asset_type_by_id(id:str):
         # 操作日志
         system_service.create_system_log(OperateLogApiModel(operate_type="delete", resource_type="asset_type", resource_id=id, resource_name=id, operate_flag=True))
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -226,7 +241,7 @@ async def download_assets_xlsx(asset_type: str, asset_ids: str):
     return {"error": "File not found"}
 
 @router.get("/assets/download", summary="下载资产信息", description="根据不同类型下载对应的资产文件")
-async def download_assets_xlsx(asset_type: str):
+async def download_assets_xlsx(asset_type: str, asset_id: Optional[str]=None):
     # 类型是空
     if asset_type is None or len(asset_type) <= 0:
         return None
@@ -238,7 +253,7 @@ async def download_assets_xlsx(asset_type: str):
     # 读取excel文件内容
     try:
         # 生成文件
-        assert_service.create_asset_excel(asset_type, result_file_path)
+        assert_service.create_asset_excel(asset_type, asset_id, result_file_path)
     except Exception as e:
         import traceback
         traceback.print_exc()

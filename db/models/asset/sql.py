@@ -131,6 +131,8 @@ class AssetSQL:
                     query = query.order_by(asset_dir_dic[sort_keys].asc())
                 elif sort_dirs == "descend":
                     query = query.order_by(asset_dir_dic[sort_keys].desc())
+            else:
+                query = query.order_by(AssetBasicInfo.id.desc())
             # 分页条件
             page_size = int(page_size)
             page_num = int(page)
@@ -196,6 +198,11 @@ class AssetSQL:
         with session.begin():
             return session.query(AssetBasicInfo).filter(AssetBasicInfo.asset_number == asset_number).first()
 
+    @classmethod
+    def get_asset_count_number_by_asset_type_id(cls, asset_type_id):
+        session = get_session()
+        with session.begin():
+            return session.query(func.count(AssetBasicInfo.id)).filter(AssetBasicInfo.asset_type_id == asset_type_id).scalar()
 
     @classmethod
     def update_asset_basic_info(cls, asset_basic_info_db):
@@ -469,6 +476,12 @@ class AssetSQL:
             return session.query(AssetType).filter(AssetType.id == asset_type_id).first()
 
     @classmethod
+    def get_asset_type_by_name(cls, asset_type_name):
+        session = get_session()
+        with session.begin():
+            return session.query(AssetType).filter(AssetType.asset_type_name == asset_type_name).first()
+
+    @classmethod
     def update_asset_type(cls, asset_type_info):
         # Session = sessionmaker(bind=engine, expire_on_commit=False)
         # session = Session()
@@ -487,6 +500,8 @@ class AssetSQL:
             # 数据库查询参数
             if asset_id is not None:
                 query = query.filter(AssetPartsInfo.asset_id == asset_id)
+            # 默认排序
+            query = query.order_by(AssetPartsInfo.part_type.asc())
             # 查询所有数据
             assert_part_list = query.all()
             # 返回
@@ -541,6 +556,8 @@ class AssetSQL:
                     query = query.order_by(asset_part_dir_dic[field].asc())
                 elif dir == "descend":
                     query = query.order_by(asset_part_dir_dic[field].desc())
+            else:
+                query = query.order_by(AssetPartsInfo.part_type.asc())
             # 分页条件
             page_size = int(page_size)
             page_num = int(page)
@@ -554,6 +571,11 @@ class AssetSQL:
             # 返回
             return count, assert_part_list
 
+    @classmethod
+    def get_part_count_number_by_asset_type_id(cls, asset_type_id):
+        session = get_session()
+        with session.begin():
+            return session.query(func.count(AssetPartsInfo.id)).filter(AssetPartsInfo.part_type_id == asset_type_id).scalar()
 
     @classmethod
     def create_asset_part(cls, asset_part_info):
