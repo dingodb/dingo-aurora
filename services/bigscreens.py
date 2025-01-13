@@ -23,6 +23,7 @@ class BigScreensService:
         memcached_client = Client((settings.memcached_address), timeout=1)
         try:
             memcached_metrics = memcached_client.get(f'{settings.memcached_key_prefix}{name}')
+            print(f"memcached_metrics: {memcached_metrics}")
             if memcached_metrics:
                 return memcached_metrics.decode()
         except Exception as e:
@@ -70,5 +71,6 @@ class BigScreensService:
         else:
             request_url = prometheus_query_url + "query?query=" + urllib.parse.quote(promql)
 
+        print(f"bigscreen_prom_request_url: {request_url}")
         response = requests.get(request_url)
         return response.json()
