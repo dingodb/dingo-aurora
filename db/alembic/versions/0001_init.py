@@ -37,7 +37,8 @@ def upgrade() -> None:
                    [
                        {'id':'603d61bb-be7b-11ef-90c8-44a842237864', 'parent_id': None, 'asset_type_name':'PART', 'asset_type_name_zh':'配件', 'queue':3, 'description':None},
                        {'id':'8fb707d8-b07e-11ef-90c8-44a842237864', 'parent_id': None, 'asset_type_name':'SERVER', 'asset_type_name_zh':'服务器', 'queue':1, 'description':None},
-                       {'id':'8fbc77f1-b07e-11ef-90c8-44a842237864', 'parent_id': None, 'asset_type_name':'NETWORK', 'asset_type_name_zh':'网络设备', 'queue':2, 'description':None}
+                       {'id':'8fbc77f1-b07e-11ef-90c8-44a842237864', 'parent_id': None, 'asset_type_name':'NETWORK', 'asset_type_name_zh':'网络设备', 'queue':2, 'description':None},
+                       {'id':'abc89126-d25d-11ef-90c8-44a842237864', 'parent_id': None, 'asset_type_name':'AREATYPE', 'asset_type_name_zh':'区域类型', 'queue':4, 'description':None}
                    ]
                    )
 
@@ -57,6 +58,7 @@ def upgrade() -> None:
         sa.Column("extra", sa.Text(), nullable=True),
         sa.Column("extend_column_extra", sa.Text(), nullable=True),
         sa.Column("description", sa.String(length=255), nullable=True),
+        sa.Column("create_date", sa.DateTime(), nullable=True),
     )
     op.create_index(op.f("ix_ops_assets_basic_info_id"), "ops_assets_basic_info", ["id"], unique=False)
 
@@ -249,6 +251,20 @@ def upgrade() -> None:
         sa.Column("description", sa.String(length=255), nullable=True),
     )
     op.create_index(op.f("ix_ops_operate_log_id"), "ops_operate_log", ["id"], unique=False)
+
+    # ### 资产订单信息 ###
+    op.create_table(
+        "ops_assets_orders_info",
+        sa.Column("id", sa.String(length=128), nullable=False),
+        sa.Column("order_no", sa.String(length=128), nullable=False),
+        sa.Column("order_status", sa.String(length=40), nullable=False),
+        sa.Column("order_type", sa.String(length=40), nullable=False),
+        sa.Column("user_id", sa.String(length=128), nullable=False),
+        sa.Column("user_account", sa.String(length=128), nullable=False),
+        sa.Column("create_date", sa.DateTime(), nullable=True),
+        sa.Column("description", sa.String(length=255), nullable=True),
+    )
+    op.create_index(op.f("ix_ops_assets_orders_info_id"), "ops_assets_orders_info", ["id"], unique=False)
 
 
 def downgrade() -> None:

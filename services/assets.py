@@ -261,6 +261,7 @@ class AssetsService:
             sn_number=asset.sn_number,
             asset_number=asset.asset_number,
             asset_status=asset.asset_status,
+            create_date=datetime.fromtimestamp(datetime.now().timestamp()), # 当前时间
             extra=json.dumps(asset.extra) if asset.extra else None,
             extend_column_extra=json.dumps(asset.extend_column_extra) if asset.extend_column_extra else None
         )
@@ -350,7 +351,7 @@ class AssetsService:
                 opposite_asset_id=asset.opposite_asset_id,
                 opposite_port=asset.opposite_label,
                 opposite_label=asset.opposite_label,
-                extra=json.dumps(temp.extra) if temp.extra else temp.extra,
+                extra=json.dumps(temp.extra) if temp.extra else None,
                 description=temp.description,
             )
             #
@@ -849,7 +850,7 @@ class AssetsService:
                     use_to = extra_json["use_to"] if extra_json is not None and "use_to" in extra_json else None
                     operate_system = extra_json["operate_system"] if extra_json is not None and "operate_system" in extra_json else None
                     # 修改或添加新数据
-                    temp_asset_data = {'机架': temp['asset_position']['frame_position'],'机柜': temp['asset_position']['cabinet_position'],'U位': temp['asset_position']['u_position'],
+                    temp_asset_data = {'机柜': temp['asset_position']['cabinet_position'],'U位': temp['asset_position']['u_position'],
                                        '设备名称': temp['asset_name'],'设备型号': temp['equipment_number'],'资产编号': temp['asset_number'],'序列号': temp['sn_number'],
                                        '部门': temp['asset_belong']['department_name'],'负责人': temp['asset_belong']['user_name'],'主机名': host_name,'IP': ip,
                                        'IDRAC': idrac,'用途': use_to,'密码': None,'操作系统': operate_system,
@@ -1073,7 +1074,7 @@ class AssetsService:
                 use_to = extra_json["use_to"] if "use_to" in extra_json else None
                 operate_system = extra_json["operate_system"] if "operate_system" in extra_json else None
                 # 修改或添加新数据
-                temp_asset_data = {'机架': temp['asset_position']['frame_position'],'机柜': temp['asset_position']['cabinet_position'],'U位': temp['asset_position']['u_position'],
+                temp_asset_data = {'机柜': temp['asset_position']['cabinet_position'],'U位': temp['asset_position']['u_position'],
                                    '设备名称': temp['asset_name'],'设备型号': temp['equipment_number'],'资产编号': temp['asset_number'],'序列号': temp['sn_number'],
                                    '部门': temp['asset_belong']['department_name'],'负责人': temp['asset_belong']['user_name'],'主机名': host_name,'IP': ip,
                                    'IDRAC': idrac,'用途': use_to,'密码': None,'操作系统': operate_system,
@@ -1453,7 +1454,7 @@ class AssetsService:
             asset_id=manufacture.asset_id,
             name=manufacture.name,
             description=manufacture.name,
-            extra=json.dumps(manufacture.extra) if manufacture.extra else manufacture.extra
+            extra=json.dumps(manufacture.extra) if manufacture.extra else None
         )
         # 返回数据
         return manufacturer_info_db
@@ -2061,7 +2062,7 @@ class AssetsService:
             cable_type=asset_flow_api_model.cable_type,
             cable_interface_type=asset_flow_api_model.cable_interface_type,
             cable_length=asset_flow_api_model.cable_length,
-            extra=json.dumps(asset_flow_api_model.extra) if asset_flow_api_model.extra else asset_flow_api_model.extra,
+            extra=json.dumps(asset_flow_api_model.extra) if asset_flow_api_model.extra else None,
             description=asset_flow_api_model.description,
         )
         # 返回数据

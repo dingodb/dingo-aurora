@@ -132,7 +132,7 @@ class AssetSQL:
                 elif sort_dirs == "descend":
                     query = query.order_by(asset_dir_dic[sort_keys].desc())
             else:
-                query = query.order_by(AssetBasicInfo.id.desc())
+                query = query.order_by(AssetBasicInfo.create_date.desc())
             # 分页条件
             page_size = int(page_size)
             page_num = int(page)

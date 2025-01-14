@@ -45,6 +45,7 @@ class AssetBasicInfo(Base):
     asset_status_description = Column(Text)
     extra = Column(Text)
     extend_column_extra = Column(Text)
+    create_date = Column(DateTime, nullable=True)
 
 
 # 资产设备的配件信息对象
