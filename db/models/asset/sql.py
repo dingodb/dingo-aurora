@@ -121,6 +121,8 @@ class AssetSQL:
                 query = query.filter(AssetBelongsInfo.department_name.like('%' + query_params["department_name"] + '%'))
             if "user_name" in query_params and query_params["user_name"]:
                 query = query.filter(AssetBelongsInfo.user_name.like('%' + query_params["user_name"] + '%'))
+            if "manufacture_id" in query_params and query_params["manufacture_id"]:
+                query = query.filter(AssetManufacturesInfo.id == query_params["manufacture_id"])
             if "manufacture_name" in query_params and query_params["manufacture_name"]:
                 query = query.filter(AssetManufacturesInfo.name.like('%' + query_params["manufacture_name"] + '%'))
             # 总数
@@ -192,8 +194,6 @@ class AssetSQL:
 
     @classmethod
     def get_asset_basic_info_by_asset_number(cls, asset_number):
-        # Session = sessionmaker(bind=engine, expire_on_commit=False)
-        # session = Session()
         session = get_session()
         with session.begin():
             return session.query(AssetBasicInfo).filter(AssetBasicInfo.asset_number == asset_number).first()
@@ -229,7 +229,7 @@ class AssetSQL:
         session = get_session()
         with session.begin():
             session.add(basic_info)
-            if manufacture_info is not None:
+            if manufacture_info is not None and manufacture_info.name is not None:
                 session.add(manufacture_info)
             if manufacture_relation_info is not None:
                 session.add(manufacture_relation_info)
@@ -296,17 +296,16 @@ class AssetSQL:
 
 
     @classmethod
-    def list_manufacture(cls, manufacture_name=None, page=1, page_size=10, field=None, dir="ascend"):
-        # Session = sessionmaker(bind=engine,expire_on_commit=False)
-        # session = Session()
+    def list_manufacture(cls, query_params, page=1, page_size=10, field=None, dir="ascend"):
         session = get_session()
         with session.begin():
             # 查询厂商表
             query = session.query(AssetManufacturesInfo)
             # 数据库查询参数
-            if manufacture_name is not None:
-                query = query.filter(AssetManufacturesInfo.name.like('%' + manufacture_name + '%'))
-
+            if "name" in query_params and query_params["name"]:
+                query = query.filter(AssetManufacturesInfo.name.like('%' + query_params["name"] + '%'))
+            if "description" in query_params and query_params["description"]:
+                query = query.filter(AssetManufacturesInfo.description.like('%' + query_params["description"] + '%'))
             # 总数
             count = query.count()
             # 排序

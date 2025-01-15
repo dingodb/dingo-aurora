@@ -230,7 +230,6 @@ def upgrade() -> None:
                        {'id':'c65a3393-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'use_to', 'column_name':'用途', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':15, 'description':None},
                        {'id':'c684c110-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'manufacturer_name', 'column_name':'厂商', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':17, 'description':None},
                        {'id':'c690c3aa-c8ec-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'asset_description', 'column_name':'备注', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':18, 'description':None},
-                       {'id':'dde7ea52-cd88-11ef-90c8-44a842237864', 'asset_type':'NETWORK', 'role_type':None, 'column_key':'asset_part', 'column_name':'配件', 'column_type':'str', 'required_flag':0, 'default_flag':1, 'hidden_flag':0, 'queue':19, 'description':None},
                    ]
                    )
 

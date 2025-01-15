@@ -322,6 +322,7 @@ async def list_assets(
         department_name:str = Query(None, description="部门"),
         user_name:str = Query(None, description="负责人"),
         host_name:str = Query(None, description="主机名称"),
+        asset_manufacture_id:str = Query(None, description="厂商id"),
         asset_manufacture_name:str = Query(None, description="厂商名称"),
         page: int = Query(1, description="页码"),
         page_size: int = Query(10, description="页数量大小"),
@@ -361,8 +362,10 @@ async def list_assets(
             query_params['user_name'] = user_name
         if host_name:
             query_params['host_name'] = host_name
-        if host_name:
-            query_params['host_name'] = host_name
+        if asset_manufacture_id:
+            query_params['manufacture_id'] = asset_manufacture_id
+        if asset_manufacture_name:
+            query_params['manufacture_name'] = asset_manufacture_name
         # 查询成功
         result = assert_service.list_assets(query_params, page, page_size, sort_keys, sort_dirs)
         return result
@@ -404,10 +407,12 @@ async def update_asset_by_id(asset_id:str, asset:AssetCreateApiModel):
         # 操作日志
         system_service.create_system_log(OperateLogApiModel(operate_type="update", resource_type="asset", resource_id=asset_id, resource_name=asset.asset_name, operate_flag=True))
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return None
+        raise HTTPException(status_code=400, detail="asset update error")
 
 
 @router.post("/assets", summary="创建资产", description="创建资产信息")
@@ -540,22 +545,32 @@ async def create_manufacture(manufacture:AssetManufacturerApiModel):
         # 记录操作日志
         system_service.create_system_log(OperateLogApiModel(operate_type="create", resource_type="manufacture", resource_id=result, resource_name=manufacture.name, operate_flag=True))
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return None
+        raise HTTPException(status_code=400, detail="manufacturer create error")
 
 @router.get("/manufactures", summary="查询厂商", description="根据条件查询厂商分页列表信息")
 async def list_manufactures(
         name:str = None,
+        description:str = None,
         page: int = 1,
         page_size: int = 10,
         sort_keys:str = None,
         sort_dirs:str = None,):
     # 返回数据接口
     try:
+        # 参数
+        query_params = {}
+        # 添加参数
+        if name:
+            query_params["name"] = name
+        if description:
+            query_params["description"] = description
         # 查询成功
-        result = assert_service.list_manufactures(name, page, page_size, sort_keys, sort_dirs)
+        result = assert_service.list_manufactures(query_params, page, page_size, sort_keys, sort_dirs)
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail="manufacture list error")
@@ -569,6 +584,8 @@ async def delete_manufacture_by_id(manufacture_id:str):
         # 操作日志
         system_service.create_system_log(OperateLogApiModel(operate_type="delete", resource_type="manufacture", resource_id=manufacture_id, resource_name=manufacture_id, operate_flag=True))
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()

@@ -632,7 +632,7 @@ class AssetsService:
             for basic_key, basic_column in asset_network_basic_info_columns.items():
                 # 判断excel的数据是非nan
                 if pd.notna(row[basic_column]):
-                    asset.__setattr__(basic_key, row[basic_column])
+                    asset.__setattr__(basic_key, str(row[basic_column]))
             # 重设资产设备分类类型
             if asset.asset_type:
                 asset_type_db = AssetSQL.get_asset_type_by_name("NETWORK_" + asset.asset_type)
@@ -929,12 +929,20 @@ class AssetsService:
             while res and res['data']:
                 # 写入数据
                 for temp in res['data']:
+                    # 定义扩展字段
+                    extra_json = {}
+                    try:
+                        extra_json = json.loads(temp['extra'])
+                    except Exception as e:
+                        LOG.error(e)
                     # 修改或添加新数据
                     temp_asset_data = {'机柜': temp['asset_position']['cabinet_position'],'U位': temp['asset_position']['u_position'],
+                                       '设备厂商': temp['asset_manufacturer']['name'],'设备类型': temp['asset_type'].replace("NETWORK_", "") if temp['asset_type'] else None,
                                        '设备名称': temp['asset_name'],'设备型号': temp['equipment_number'],'资产编号': temp['asset_number'],
-                                       '主机名': None,'管理地址': None,'带外网关': None,'m-lag mac': None,'网络设备角色': None,'序号': None,
-                                       'loopback': None,'vlanifv4': None,'预留': None,'BGP_AS': None,'用途': None,
-                                       '采购合同号': temp['asset_contract']['contract_number'],'厂商': temp['asset_manufacturer']['name'],}
+                                       '主机名': extra_json.get("host_name"),'管理地址': extra_json.get("manage_address"),'带外网关': extra_json.get("external_gateway"),
+                                       'm-lag mac': extra_json.get("m_lagmac"),'网络设备角色': extra_json.get("network_equipment_role"),'序号': extra_json.get("serial_number"),
+                                       'loopback': extra_json.get("loopback"),'vlanifv4': extra_json.get("vlanifv4"),'预留': None,'BGP_AS': extra_json.get("bgp_as"),'用途': extra_json.get("use_to"),
+                                       '采购合同号': temp['asset_contract']['contract_number']}
                     # 加入excel导出数据列表
                     excel_asset_network_data.append(temp_asset_data)
                 # 判断总页数已经大于等于当前已经查询的页数，已经查询完成，退出循环
@@ -950,8 +958,8 @@ class AssetsService:
             start_row = 2  # 自动追加到最后一行之后
             # 写入数据到模板文件
             for idx, row in pd.DataFrame(excel_asset_network_data).iterrows():
-                for col_idx, value in enumerate(row, start=1):  # 列从 1 开始
-                    sheet.cell(row=start_row + idx, column=col_idx, value=value)
+                for col_idx, value in enumerate(sheet[1], start=1):  # 列从 1 开始
+                    sheet.cell(row=start_row + idx, column=col_idx, value=row.get(value.value, "")).border = thin_border
             # 保存修改
             book.save(result_file_path)
         except Exception as e:
@@ -975,12 +983,20 @@ class AssetsService:
             while res and res['data']:
                 # 写入数据
                 for temp in res['data']:
+                    # 定义扩展字段
+                    extra_json = {}
+                    try:
+                        extra_json = json.loads(temp['extra'])
+                    except Exception as e:
+                        LOG.error(e)
                     # 修改或添加新数据
                     temp_asset_data = {'机柜': temp['asset_position']['cabinet_position'],'U位': temp['asset_position']['u_position'],
+                                       '设备厂商': temp['asset_manufacturer']['name'],'设备类型': temp['asset_type'].replace("NETWORK_", "") if temp['asset_type'] else None,
                                        '设备名称': temp['asset_name'],'设备型号': temp['equipment_number'],'资产编号': temp['asset_number'],
-                                       '主机名': None,'管理地址': None,'带外网关': None,'m-lag mac': None,'网络设备角色': None,'序号': None,
-                                       'loopback': None,'vlanifv4': None,'预留': None,'BGP_AS': None,'用途': None,
-                                       '采购合同号': temp['asset_contract']['contract_number'],'厂商': temp['asset_manufacturer']['name'],}
+                                       '主机名': extra_json.get("host_name"),'管理地址': extra_json.get("manage_address"),'带外网关': extra_json.get("external_gateway"),
+                                       'm-lag mac': extra_json.get("m_lagmac"),'网络设备角色': extra_json.get("network_equipment_role"),'序号': extra_json.get("serial_number"),
+                                       'loopback': extra_json.get("loopback"),'vlanifv4': extra_json.get("vlanifv4"),'预留': None,'BGP_AS': extra_json.get("bgp_as"),'用途': extra_json.get("use_to"),
+                                       '采购合同号': temp['asset_contract']['contract_number']}
                     # 加入excel导出数据列表
                     excel_asset_network_data.append(temp_asset_data)
                 # 判断总页数已经大于等于当前已经查询的页数，已经查询完成，退出循环
@@ -996,8 +1012,8 @@ class AssetsService:
             start_row = 2  # 自动追加到最后一行之后
             # 写入数据到模板文件
             for idx, row in pd.DataFrame(excel_asset_network_data).iterrows():
-                for col_idx, value in enumerate(row, start=1):  # 列从 1 开始
-                    sheet.cell(row=start_row + idx, column=col_idx, value=value)
+                for col_idx, value in enumerate(sheet[1], start=1):  # 列从 1 开始
+                    sheet.cell(row=start_row + idx, column=col_idx, value=row.get(value.value, "")).border = thin_border
             # 保存修改
             book.save(result_file_path)
         except Exception as e:
@@ -1428,18 +1444,22 @@ class AssetsService:
         try:
             # 重名校验
             if manufacture.name is not None:
-                count, _ = AssetSQL.list_manufacture(manufacture.name)
+                query_params = {"name":manufacture.name}
+                count, _ = AssetSQL.list_manufacture(query_params)
                 if count > 0:
-                    raise Exception
+                    raise Fail("manufacturer name already exists", error_message="厂商名称已存在")
             # 数据组装
             # 资产厂商信息
             manufacture_info_db = self.convert_manufacturer_info_db(manufacture)
             manufacture_id = manufacture_info_db.id
             # 保存对象
             AssetSQL.create_manufacture(manufacture_info_db)
+        except Fail as e:
+            raise e
         except Exception as e:
             import traceback
             traceback.print_exc()
+            raise e
         # 成功返回资产id
         return manufacture_id
 
@@ -1453,18 +1473,18 @@ class AssetsService:
             id=uuid.uuid4().hex,
             asset_id=manufacture.asset_id,
             name=manufacture.name,
-            description=manufacture.name,
+            description=manufacture.description,
             extra=json.dumps(manufacture.extra) if manufacture.extra else None
         )
         # 返回数据
         return manufacturer_info_db
 
     # 查询厂商列表
-    def list_manufactures(self, manufacture_name, page, page_size, sort_keys, sort_dirs):
+    def list_manufactures(self, query_params, page, page_size, sort_keys, sort_dirs):
         # 业务逻辑
         try:
             # 按照条件从数据库中查询数据
-            count, data = AssetSQL.list_manufacture(manufacture_name, page, page_size, sort_keys, sort_dirs)
+            count, data = AssetSQL.list_manufacture(query_params, page, page_size, sort_keys, sort_dirs)
             # 数据处理
             ret = []
             # 遍历
@@ -1500,11 +1520,19 @@ class AssetsService:
             return None
         # 删除
         try:
+            # 判断是否存在资产关联了厂商
+            query_params = {'manufacture_id':manufacture_id}
+            count, _ = AssetSQL.list_asset(query_params)
+            if count > 0:
+                raise Fail("manufacturer in use", error_message="厂商使用中")
             # 删除对象
             AssetSQL.delete_manufacture(manufacture_id)
+        except Fail as e:
+            raise e
         except Exception as e:
             import traceback
             traceback.print_exc()
+            raise e
         # 成功返回资产id
         return manufacture_id
 
@@ -1524,7 +1552,8 @@ class AssetsService:
             if manufacture_update_info.name is not None and len(manufacture_update_info.name) > 0:
                 # 重名校验 名称不是当前名称 查询是否与其他名称重复
                 if manufacture_update_info.name != manufacture_db.name:
-                    count, _ = AssetSQL.list_manufacture(manufacture_update_info.name)
+                    query_params = {"name":manufacture_update_info.name}
+                    count, _ = AssetSQL.list_manufacture(query_params)
                     if count > 0:
                         raise Exception
                 manufacture_db.name = manufacture_update_info.name
