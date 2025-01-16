@@ -28,7 +28,7 @@ asset_basic_info_extra_columns = {"host_name":"主机名","ip":"IP","idrac":"IDR
 # 资产设备厂商信息列名对应表的列
 asset_manufacture_info_columns = {"name":"厂商"}
 # 资产设备位置信息列名对应表的列
-asset_position_info_columns = {"frame_position":"机架","cabinet_position":"机柜","u_position":"U位"}
+asset_position_info_columns = {"cabinet_position":"机柜","u_position":"U位"}
 # 资产设备合同信息列名对应表的列
 asset_contract_info_columns = {"contract_number":"合同号","purchase_date":"购买日期","batch_number":"批次"}
 # 资产设备归属信息列名对应表的列

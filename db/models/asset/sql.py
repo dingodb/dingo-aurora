@@ -314,6 +314,8 @@ class AssetSQL:
                     query = query.order_by(asset_manufacturer_dir_dic[field].asc())
                 elif dir == "descend":
                     query = query.order_by(asset_manufacturer_dir_dic[field].desc())
+            else:
+                query = query.order_by(AssetManufacturesInfo.create_date.desc())
             # 分页条件
             page_size = int(page_size)
             page_num = int(page)
@@ -556,7 +558,7 @@ class AssetSQL:
                 elif dir == "descend":
                     query = query.order_by(asset_part_dir_dic[field].desc())
             else:
-                query = query.order_by(AssetPartsInfo.part_type.asc())
+                query = query.order_by(AssetPartsInfo.create_date.desc())
             # 分页条件
             page_size = int(page_size)
             page_num = int(page)

@@ -587,6 +587,7 @@ class AssetsService:
         except Exception as e:
             import traceback
             traceback.print_exc()
+            raise e
 
 
     def import_asset_part(self, row):
@@ -619,6 +620,7 @@ class AssetsService:
         except Exception as e:
             import traceback
             traceback.print_exc()
+            raise e
 
 
     def import_asset_network(self, row):
@@ -673,6 +675,7 @@ class AssetsService:
         except Exception as e:
             import traceback
             traceback.print_exc()
+            raise e
 
 
     # 初始化一个空的资产数据的结构对象
@@ -775,6 +778,7 @@ class AssetsService:
             personal_used_flag = None,
             surplus = None,
             name = None,
+            create_date = datetime.fromtimestamp(datetime.now().timestamp()),
             description = None,
             extra = None,
         )
@@ -1473,6 +1477,7 @@ class AssetsService:
             id=uuid.uuid4().hex,
             asset_id=manufacture.asset_id,
             name=manufacture.name,
+            create_date=datetime.fromtimestamp(datetime.now().timestamp()), # 当前时间
             description=manufacture.description,
             extra=json.dumps(manufacture.extra) if manufacture.extra else None
         )
@@ -1875,6 +1880,7 @@ class AssetsService:
             asset_id=asset_part.asset_id,
             manufacturer_id=asset_part.manufacturer_id,
             name=asset_part.name,
+            create_date=datetime.fromtimestamp(datetime.now().timestamp()), # 当前时间
             part_type_id=asset_part.part_type_id,
             part_type=asset_part.part_type,
             part_brand=asset_part.part_brand,
@@ -2235,6 +2241,7 @@ class AssetsService:
         except Exception as e:
             import traceback
             traceback.print_exc()
+            raise e
 
     # 初始化一个空的资产数据的结构对象
     def init_empty_asset_network_flow_api_model(self):

@@ -481,19 +481,19 @@ async def upload_asset_xlsx(asset_type: str, file: UploadFile = File(...)):
         # 资产的类型不能为空
         if not asset_type:
             LOG.error("asset type name exist")
-            raise Exception
+            raise Fail("asset type is not empty", error_message="资产类型不能为空")
         # 位置
         if asset_type not in ASSET_TEMPLATE_ASSET_TYPE:
             LOG.error("asset type is incompatible")
-            raise Exception
+            raise Fail("asset type not exists", error_message="资产类型不存在")
         # 文件是否是excel
         if not file.filename.endswith('.xlsx'):
             LOG.error("file suffix is xlsx")
-            raise Exception
+            raise Fail("file suffix is xlsx", error_message="文件类型后缀是xlsx")
         # 文件大小
         if file.size > 1024 * 1024 * 5:
             LOG.error("The file size cannot exceed 5MB!")
-            raise Exception
+            raise Fail("file size cannot exceed 5MB ", error_message="文件小于5MB")
         # 读取资产的数据
         contents = await file.read()
         buffer = BytesIO(contents)
@@ -502,35 +502,73 @@ async def upload_asset_xlsx(asset_type: str, file: UploadFile = File(...)):
             # 1、资产设备sheet
             df = pandas.read_excel(buffer, sheet_name=ASSET_TEMPLATE_ASSET_SHEET)
             # 遍历
-            for _, row in df.iterrows():
+            # 定义错误行号
+            server_error_index = []
+            for index, row in df.iterrows():
                 # 存入一行
-                assert_service.import_asset(row)
+                try:
+                    assert_service.import_asset(row)
+                except Exception as e:
+                    error_index = index + 2
+                    LOG.error(f"import server failed, error row number:{error_index}" )
+                    server_error_index.append(error_index)
+            if server_error_index:
+                raise Fail("import server data error", error_message=f"导入服务器失败, sheet[asset]页错误行号:{server_error_index}")
             # 2、资产设备sheet
             df = pandas.read_excel(buffer, sheet_name=ASSET_TEMPLATE_PART_SHEET)
             # 遍历
-            for _, row in df.iterrows():
+            # 定义错误行号
+            server_part_error_index = []
+            for index, row in df.iterrows():
                 # 存入一行
-                assert_service.import_asset_part(row)
+                try:
+                    assert_service.import_asset_part(row)
+                except Exception as e:
+                    error_index = index + 2
+                    LOG.error(f"import server part failed, error row number:{error_index}" )
+                    server_part_error_index.append(error_index)
+            if server_part_error_index:
+                raise Fail("import server part data error", error_message=f"导入服务器失败, sheet[part]页错误行号:{server_part_error_index}")
         elif asset_type == "network":
             # 1、网络设备sheet
             df = pandas.read_excel(buffer, sheet_name=ASSET_TEMPLATE_NETWORK_SHEET)
             # 遍历
-            for _, row in df.iterrows():
+            # 定义错误行号
+            network_error_index = []
+            for index, row in df.iterrows():
                 # 存入一行
-                assert_service.import_asset_network(row)
+                try:
+                    assert_service.import_asset_network(row)
+                except Exception as e:
+                    error_index = index + 2
+                    LOG.error(f"import network failed, error row number:{error_index}" )
+                    network_error_index.append(error_index)
+            if network_error_index:
+                raise Fail("import network data error", error_message=f"导入网络设备失败, sheet[network]页错误行号:{network_error_index}")
         elif asset_type == "network_flow":
             # 1、网络设备流sheet
             df = pandas.read_excel(buffer, sheet_name=ASSET_TEMPLATE_NETWORK_SHEET)
             # 遍历
-            for _, row in df.iterrows():
+            # 定义错误行号
+            network_flow_error_index = []
+            for index, row in df.iterrows():
                 # 存入一行
-                assert_service.import_asset_network_flow(row)
+                try:
+                    assert_service.import_asset_network_flow(row)
+                except Exception as e:
+                    error_index = index + 2
+                    LOG.error(f"import network flow failed, error row number:{error_index}" )
+                    network_flow_error_index.append(error_index)
+            if network_flow_error_index:
+                raise Fail("import network flow data error", error_message=f"导入网络设备出入口配置失败, sheet[network]页错误行号:{network_flow_error_index}")
         else:
             pass
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail="asset upload error")
+        raise HTTPException(status_code=400, detail="import file error")
 
 
 

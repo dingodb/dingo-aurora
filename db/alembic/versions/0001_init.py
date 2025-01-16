@@ -76,6 +76,7 @@ def upgrade() -> None:
         sa.Column("personal_used_flag", sa.Boolean(), nullable=True),
         sa.Column("surplus", sa.String(length=128), nullable=True),
         sa.Column("name", sa.String(length=128), nullable=True),
+        sa.Column("create_date", sa.DateTime(), nullable=True),
         sa.Column("extra", sa.Text(), nullable=True),
         sa.Column("description", sa.String(length=255), nullable=True),
     )
@@ -87,6 +88,7 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=128), nullable=False),
         sa.Column("asset_id", sa.String(length=128), nullable=True),
         sa.Column("name", sa.String(length=128), nullable=True),
+        sa.Column("create_date", sa.DateTime(), nullable=True),
         sa.Column("extra", sa.Text(), nullable=True),
         sa.Column("description", sa.String(length=255), nullable=True),
     )
@@ -170,6 +172,7 @@ def upgrade() -> None:
         sa.Column("cable_interface_type", sa.String(length=128), nullable=True),
         sa.Column("cable_length", sa.Integer(), nullable=True),
         sa.Column("extra", sa.Text(), nullable=True),
+        sa.Column("create_date", sa.DateTime(), nullable=True),
         sa.Column("description", sa.String(length=255), nullable=True),
     )
     op.create_index(op.f("ix_ops_assets_flows_info_id"), "ops_assets_flows_info", ["id"], unique=False)
