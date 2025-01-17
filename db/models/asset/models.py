@@ -160,7 +160,6 @@ class AssetFlowsInfo(Base):
     cable_interface_type = Column(String(length=128), nullable=True)
     cable_length = Column(Integer(), nullable=True)
     description = Column(String(length=255), nullable=True)
-    create_date = Column(DateTime, nullable=True)
     extra = Column(Text)
 
 # 资产设备的扩展字段信息
