@@ -2097,6 +2097,7 @@ class AssetsService:
             opposite_asset_id=asset_flow_api_model.opposite_asset_id,
             opposite_port=asset_flow_api_model.opposite_port,
             opposite_label=asset_flow_api_model.opposite_label,
+            create_date=datetime.fromtimestamp(datetime.now().timestamp()), # 当前时间
             cable_type=asset_flow_api_model.cable_type,
             cable_interface_type=asset_flow_api_model.cable_interface_type,
             cable_length=asset_flow_api_model.cable_length,

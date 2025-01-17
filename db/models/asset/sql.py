@@ -641,6 +641,8 @@ class AssetSQL:
                 query = query.filter(AssetFlowsInfo.asset_id == asset_id)
             if asset_ids is not None:
                 query = query.filter(AssetFlowsInfo.id.in_(asset_ids.split(',')))
+            # 排序
+            query = query.order_by(AssetFlowsInfo.create_date.desc())
             # 查询所有数据
             assert_flow_list = query.all()
             # 返回
