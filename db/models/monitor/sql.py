@@ -18,6 +18,12 @@ class MonitorSQL:
             # 数据库查询参数
             if "name" in query_params and query_params["name"]:
                 query = query.filter(MonitorUrlConfig.name.like('%' + query_params["name"] + '%'))
+            if "url_catalog" in query_params and query_params["url_catalog"]:
+                query = query.filter(MonitorUrlConfig.url_catalog.like('%' + query_params["url_catalog"] + '%'))
+            if "url_type" in query_params and query_params["url_type"]:
+                query = query.filter(MonitorUrlConfig.url_type.like('%' + query_params["url_type"] + '%'))
+            if "url" in query_params and query_params["url"]:
+                query = query.filter(MonitorUrlConfig.url.like('%' + query_params["url"] + '%'))
             # 总数
             count = query.count()
             # 排序
@@ -41,3 +47,33 @@ class MonitorSQL:
             # 返回
             return count, url_list
 
+    @classmethod
+    def create_monitor_url_config(cls, config_db):
+        session = get_session()
+        with session.begin():
+            session.add(config_db)
+
+    @classmethod
+    def update_monitor_url_config(cls, config_db):
+        session = get_session()
+        with session.begin():
+            session.merge(config_db)
+
+    @classmethod
+    def get_monitor_url_by_name(cls, name):
+        session = get_session()
+        with session.begin():
+            return session.query(MonitorUrlConfig).filter(MonitorUrlConfig.name == name).first()
+
+    @classmethod
+    def get_monitor_url_by_id(cls, id):
+        session = get_session()
+        with session.begin():
+            return session.query(MonitorUrlConfig).filter(MonitorUrlConfig.id == id).first()
+
+    @classmethod
+    def delete_monitor_url_by_id(cls, id):
+        session = get_session()
+        with session.begin():
+            # 删除监控url配置信息
+            session.query(MonitorUrlConfig).filter(MonitorUrlConfig.id == id).delete()

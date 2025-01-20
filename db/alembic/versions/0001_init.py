@@ -273,7 +273,7 @@ def upgrade() -> None:
         "ops_monitor_url_config_info",
         sa.Column("id", sa.String(length=128), nullable=False),
         sa.Column("name", sa.String(length=128), nullable=False),
-        sa.Column("url", sa.String(length=128), nullable=False),
+        sa.Column("url", sa.String(length=512), nullable=False),
         sa.Column("url_catalog", sa.String(length=40), nullable=False),
         sa.Column("url_type", sa.String(length=40), nullable=False),
         sa.Column("user_id", sa.String(length=128), nullable=False),
