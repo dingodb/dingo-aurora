@@ -4,14 +4,13 @@ import urllib
 
 import requests
 from pymemcache.client.base import Client
-from config.settings import settings
+from jobs import CONF
 
 from db.models.bigscreen.models import BigscreenMetricsConfig
 from db.models.bigscreen.sql import BigscreenSQL
-from config.settings import settings
 from utils import datetime
 
-prometheus_query_url = settings.prometheus_query_url
+prometheus_query_url = CONF.bigscreen.prometheus_query_url
 
 class BigScreensService:
     @classmethod
@@ -20,14 +19,15 @@ class BigScreensService:
 
     @classmethod
     def get_bigscreen_metrics(self, name):
-        memcached_client = Client((settings.memcached_address), timeout=1)
+        memcached_client = Client((CONF.bigscreen.memcached_address), timeout=1)
         try:
-            memcached_metrics = memcached_client.get(f'{settings.memcached_key_prefix}{name}')
-            print(f"memcached_metrics: {memcached_metrics}")
+            memcached_metrics = memcached_client.get(f'{CONF.bigscreen.memcached_key_prefix}{name}')
+            print(f"memcached_metrics: {name} -> {memcached_metrics.decode()}")
             if memcached_metrics:
+                print("fetch data from cache")
                 return memcached_metrics.decode()
         except Exception as e:
-            print("缓存读取失败，尝试从数据库读取数据")
+            print("fetch data from database")
 
         bigscreen_metrics_config = BigscreenSQL.get_bigscreen_metrics_config_by_name(name)
         if bigscreen_metrics_config:

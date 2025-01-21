@@ -20,7 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # ### 大屏指标配置信息 ###
-    assets_types_table = op.create_table(
+    bigscreen_metrics_configs_table = op.create_table(
         "ops_bigscreen_metrics_configs",
         sa.Column("id", sa.String(length=128), nullable=False, comment='大屏指标配置信息对象id'),
         sa.Column("name", sa.String(length=128), nullable=False, comment='指标名称'),
@@ -34,7 +34,7 @@ def upgrade() -> None:
         comment='大屏指标配置信息表'
     )
     # ### 初始化大屏指标配置信息 ###
-    op.bulk_insert(assets_types_table,
+    op.bulk_insert(bigscreen_metrics_configs_table,
         [{'name': 'gpu_average_temperature',
           'description': 'GPU平均温度',
           'query': 'avg(DCGM_FI_DEV_GPU_TEMP)',
