@@ -40,7 +40,9 @@ async def list_assets_flows(
         result = assert_service.list_assets_flows(asset_id, None)
         return result
     except Exception as e:
-        return None
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail="asset flow query error")
 
 @router.post("/assets/flows", summary="创建网络设备的流转数据", description="创建网络设备的流转数据")
 async def create_asset_flow(asset_flow:AssetFlowApiModel):
@@ -51,6 +53,8 @@ async def create_asset_flow(asset_flow:AssetFlowApiModel):
         # 操作日志
         system_service.create_system_log(OperateLogApiModel(operate_type="create", resource_type="flow", resource_id=result, resource_name=asset_flow.label, operate_flag=True))
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -65,6 +69,8 @@ async def delete_asset_flow_by_id(id:str):
         # 操作日志
         system_service.create_system_log(OperateLogApiModel(operate_type="update", resource_type="flow", resource_id=result, resource_name=id, operate_flag=True))
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -77,6 +83,8 @@ async def update_asset_flow_by_id(id:str, asset_flow:AssetFlowApiModel):
         # 更新成功
         result = assert_service.update_asset_flow_by_id(id, asset_flow)
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -106,6 +114,8 @@ async def create_assets_columns(asset_column:AssetExtendColumnApiModel):
         # 操作日志
         system_service.create_system_log(OperateLogApiModel(operate_type="create", resource_type="column", resource_id=result, resource_name=asset_column.column_name, operate_flag=True))
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         raise HTTPException(status_code=400, detail="asset column create error")
 
@@ -118,6 +128,8 @@ async def delete_asset_column_by_id(id:str):
         # 操作日志
         system_service.create_system_log(OperateLogApiModel(operate_type="delete", resource_type="column", resource_id=result, resource_name=id, operate_flag=True))
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -132,6 +144,8 @@ async def update_asset_column_by_id(id:str, asset_column:AssetExtendColumnApiMod
         # 操作日志
         system_service.create_system_log(OperateLogApiModel(operate_type="update", resource_type="column", resource_id=id, resource_name=id, operate_flag=True))
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -145,6 +159,8 @@ async def update_asset_columns(asset_columns:List[AssetExtendColumnApiModel]):
         result = assert_service.update_asset_columns(asset_columns)
         # 操作日志
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -176,6 +192,8 @@ async def create_asset_type(asset_type:AssetTypeApiModel):
         # 操作日志
         system_service.create_system_log(OperateLogApiModel(operate_type="create", resource_type="asset_type", resource_id=result, resource_name=asset_type.asset_type_name_zh, operate_flag=True))
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -206,6 +224,8 @@ async def update_asset_type_by_id(id:str, asset_type:AssetTypeApiModel):
         # 操作日志
         system_service.create_system_log(OperateLogApiModel(operate_type="update", resource_type="asset_type", resource_id=id, resource_name=asset_type.asset_type_name_zh, operate_flag=True))
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -392,6 +412,8 @@ async def delete_asset_by_id(asset_id:str):
         # 操作日志
         system_service.create_system_log(OperateLogApiModel(operate_type="delete", resource_type="asset", resource_id=asset_id, resource_name=asset_id, operate_flag=True))
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -440,6 +462,8 @@ async def update_asset_batch(asset_batch:AssetBatchUpdateApiModel):
         # 修改成功
         result = assert_service.update_asset_list(asset_batch)
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -453,6 +477,8 @@ async def update_assets_status(asset:List[AssetUpdateStatusApiModel]):
         # 更新成功
         result = assert_service.update_assets_status(asset)
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         raise HTTPException(status_code=400, detail="asset update status error")
 
@@ -610,6 +636,8 @@ async def list_manufactures(
         # 查询成功
         result = assert_service.list_manufactures(query_params, page, page_size, sort_keys, sort_dirs)
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         raise HTTPException(status_code=400, detail="manufacture list error")
 
@@ -692,6 +720,8 @@ async def list_assets_parts(
         # 查询成功
         result = assert_service.list_assets_parts_pages(query_params, page, page_size, sort_keys, sort_dirs)
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         raise HTTPException(status_code=400, detail="asset part not found")
 
@@ -705,6 +735,8 @@ async def create_assets_parts(asset_part:AssetPartApiModel):
         # 操作日志
         system_service.create_system_log(OperateLogApiModel(operate_type="create", resource_type="part", resource_id=result, resource_name=asset_part.name, operate_flag=True))
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         raise HTTPException(status_code=400, detail="asset part not found")
 
@@ -718,6 +750,8 @@ async def update_asset_part_by_id(id:str, asset_part:AssetPartApiModel):
         # 操作日志
         system_service.create_system_log(OperateLogApiModel(operate_type="update", resource_type="part", resource_id=id, resource_name=asset_part.name, operate_flag=True))
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         raise HTTPException(status_code=400, detail="asset part update error")
 
@@ -731,6 +765,8 @@ async def delete_asset_part_by_id(id:str):
         # 操作日志
         system_service.create_system_log(OperateLogApiModel(operate_type="delete", resource_type="part", resource_id=id, resource_name=id, operate_flag=True))
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         raise HTTPException(status_code=400, detail="asset part delete error")
 
@@ -743,6 +779,8 @@ async def bind_asset_part_by_id(id:str, asset_id:str):
         # 操作日志
         system_service.create_system_log(OperateLogApiModel(operate_type="bind", resource_type="part", resource_id=id, resource_name=id, operate_flag=True))
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         raise HTTPException(status_code=400, detail="asset part update error")
 
@@ -755,5 +793,7 @@ async def unbind_asset_part_by_id(id:str, asset_id:str):
         # 操作日志
         system_service.create_system_log(OperateLogApiModel(operate_type="unbind", resource_type="part", resource_id=id, resource_name=id, operate_flag=True))
         return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         raise HTTPException(status_code=400, detail="asset part update error")

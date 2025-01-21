@@ -2061,7 +2061,7 @@ class AssetsService:
         except Exception as e:
             import traceback
             traceback.print_exc()
-            return None
+            raise e
 
 
     # 创建网络设备的流转数据
@@ -2071,13 +2071,15 @@ class AssetsService:
             # 业务校验 对象非空，数据线填充
             # 判空
             if asset_flow_api_model is None or asset_flow_api_model.port is None:
-                raise Exception
+                raise Fail("asset flow is empty", error_message="网络流入流出端口是空")
             # 数据对象转换
             asset_flow_db = self.convert_asset_flow_info_db(asset_flow_api_model)
             # 数据入库
             AssetSQL.create_asset_flow(asset_flow_db)
             # 返回
             return asset_flow_db.id
+        except Fail as e:
+            raise e
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -2111,11 +2113,13 @@ class AssetsService:
     def delete_asset_flow_by_id(self, asset_flow_id):
         # 业务校验
         if asset_flow_id is None or len(asset_flow_id) <= 0:
-            raise Exception
+            raise Fail("asset flow id is empty", "id是空")
         # 删除
         try:
             # 删除对象
             AssetSQL.delete_asset_flow(asset_flow_id)
+        except Fail as e:
+            raise e
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -2127,13 +2131,13 @@ class AssetsService:
     def update_asset_flow_by_id(self, id, asset_flow):
         # 业务校验
         if asset_flow is None or id is None or len(id) <= 0:
-            raise Exception
+            raise Fail("asset flow id or data is empty", "id是空或者对象是空")
         try:
             # 网络设备的流转信息
             assert_flow_db = AssetSQL.get_asset_flow_by_id(id)
             # 判空
             if assert_flow_db is None:
-                raise Exception
+                raise Fail("asset flow not exists", "流入流出数据对象是空")
             # 填充需要修改的数据
             # 端口
             if asset_flow.port is not None and len(asset_flow.port) > 0:
@@ -2164,6 +2168,8 @@ class AssetsService:
                 assert_flow_db.description = asset_flow.description
             # 保存对象
             AssetSQL.update_asset_flow(assert_flow_db)
+        except Fail as e:
+            raise e
         except Exception as e:
             import traceback
             traceback.print_exc()
