@@ -455,7 +455,7 @@ class AssetsService:
         except Exception as e:
             import traceback
             traceback.print_exc()
-            raise Exception
+            raise e
 
 
     def update_assets_status(self, asset_list):
@@ -505,6 +505,7 @@ class AssetsService:
         except Exception as e:
             import traceback
             traceback.print_exc()
+            raise e
         # 成功返回资产id
         return None
 
@@ -520,6 +521,7 @@ class AssetsService:
         except Exception as e:
             import traceback
             traceback.print_exc()
+            raise e
         # 成功返回资产id
         return None
 
@@ -1170,19 +1172,19 @@ class AssetsService:
         try:
             # 判空
             if not asset_batch or not asset_batch.asset_ids:
-                raise Exception
+                raise Fail("batch asset model ids is empty", "批量更新对象的id是空")
             # id分割
             asset_ids = asset_batch.asset_ids.split(',')
             # 判空
             if not asset_ids:
-                raise Exception
+                raise Fail("batch asset model ids is empty", "批量更新对象的id是空")
             # 遍历
             for temp_asset_id in asset_ids:
                 # 基础信息
                 asset_basic_info_db = AssetSQL.get_asset_basic_info_by_id(temp_asset_id)
                 # 判空
                 if not asset_basic_info_db:
-                    raise Exception
+                    raise Fail("asset id not exists", "id不存在")
                 # 已分配状态直接过滤
                 if asset_basic_info_db.asset_status == '2':
                     continue
@@ -1230,6 +1232,8 @@ class AssetsService:
                     AssetSQL.update_manufacture_relation(manufacture_relation_db)
             # 成功返回id
             return asset_ids
+        except Fail as e:
+            raise e
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -1239,12 +1243,12 @@ class AssetsService:
     def update_asset(self, asset_id, asset):
         # 判空
         if not asset_id or not asset:
-            raise Exception
+            raise Fail("asset id is empty or asset model is empty", "id不存在或者更新对象是空")
         # 根据id数据
         asset_basic_info_db = AssetSQL.get_asset_basic_info_by_id(asset_id)
         # 基础数据不存在
         if asset_basic_info_db is None:
-            raise Exception
+            raise Fail("asset id not exists", "id不存在")
         # 1、资产基础信息数据
         asset_basic_info_db = self.reset_asset_basic_info_db(asset_basic_info_db, asset)
         # 重新设置类型
@@ -1619,7 +1623,7 @@ class AssetsService:
             # 业务校验 对象非空，数据线填充
             # 判空
             if asset_type_api_model is None or asset_type_api_model.asset_type_name is None:
-                raise Exception
+                raise Fail("type model is empty", error_message="类型对象的名称是空")
             # 数据对象转换
             asset_type_db = self.convert_asset_type_info_db(asset_type_api_model)
             # 父id校验
@@ -1630,7 +1634,7 @@ class AssetsService:
                 # 如果数据不存在
                 if not data:
                     LOG.error("parent not exist")
-                    raise Exception
+                    raise Fail("type model parent not exists", error_message="类型的父类对象不存在")
             if asset_type_db.asset_type_name:
                 # 查询名称重复的类型数据
                 data = AssetSQL.list_asset_type(None, None, asset_type_db.asset_type_name, None)
@@ -1639,7 +1643,7 @@ class AssetsService:
                     for temp_asset_type in data:
                         if asset_type_db.asset_type_name == temp_asset_type.asset_type_name:
                             LOG.error("asset type exist")
-                            raise Exception
+                            raise Fail("type model name already exists", error_message="类型的名称已存在")
                 # 获取数据
                 # parent_asset_type_db = data[0]
                 # 英文名称匹配校验
@@ -1650,6 +1654,8 @@ class AssetsService:
             AssetSQL.create_asset_type(asset_type_db)
             # 返回
             return asset_type_db.id
+        except Fail as e:
+            raise e
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -1754,7 +1760,7 @@ class AssetsService:
                         for temp_asset_type in data:
                             if asset_type.asset_type_name == temp_asset_type.asset_type_name:
                                 LOG.error("asset type exist")
-                                raise Exception
+                                raise Fail("type model name already exists", error_message="类型的名称已存在")
                 # 校验通过赋值
                 assert_type_db.asset_type_name = asset_type.asset_type_name
             # 描述
@@ -1762,6 +1768,8 @@ class AssetsService:
                 assert_type_db.description = asset_type.description
             # 保存对象
             AssetSQL.update_asset_type(assert_type_db)
+        except Fail as e:
+            raise e
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -1865,6 +1873,7 @@ class AssetsService:
         except Exception as e:
             import traceback
             traceback.print_exc()
+            raise e
         # 成功返回资产id
         return asset_part_id
 
@@ -1951,6 +1960,7 @@ class AssetsService:
         except Exception as e:
             import traceback
             traceback.print_exc()
+            raise e
         # 成功返回资产id
         return id
 
@@ -1966,6 +1976,7 @@ class AssetsService:
         except Exception as e:
             import traceback
             traceback.print_exc()
+            raise e
         # 成功返回资产id
         return asset_part_id
 
@@ -1993,6 +2004,7 @@ class AssetsService:
         except Exception as e:
             import traceback
             traceback.print_exc()
+            raise e
         # 成功返回资产id
         return id
 
@@ -2019,6 +2031,7 @@ class AssetsService:
         except Exception as e:
             import traceback
             traceback.print_exc()
+            raise e
         # 成功返回资产id
         return id
 
@@ -2308,7 +2321,7 @@ class AssetsService:
     def create_asset_column(self, asset_column):
         # 判空
         if asset_column is None:
-            raise Exception
+            raise Fail("extend column is empty", error_message="自定义列对象是空")
         # 定义id
         asset_column_id = None
         try:
@@ -2321,6 +2334,8 @@ class AssetsService:
                 asset_column_info_db.queue = current_max_queue + 1
             # 保存对象
             AssetSQL.create_asset_column(asset_column_info_db)
+        except Fail as e:
+            raise e
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -2354,11 +2369,13 @@ class AssetsService:
     def delete_asset_column_by_id(self, column_id):
         # 业务校验
         if column_id is None or len(column_id) <= 0:
-            raise Exception
+            raise Fail("extend column id is empty", error_message="自定义列对象id是空")
         # 删除
         try:
             # 删除对象
             AssetSQL.delete_asset_column_by_id(column_id)
+        except Fail as e:
+            raise e
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -2370,7 +2387,7 @@ class AssetsService:
     def update_asset_column_by_id(self, id, asset_column):
         # 判空
         if not id:
-            raise Exception
+            raise Fail("extend column id is empty", error_message="自定义列对象id是空")
         # 业务校验
         if asset_column is None:
             return None
@@ -2379,11 +2396,13 @@ class AssetsService:
             assert_column_db = AssetSQL.get_asset_column_by_id(id)
             # 判空
             if assert_column_db is None:
-                raise Exception
+                raise Fail("extend column is empty", error_message="自定义列对象是空")
             # 填充需要修改的数据
             assert_column_db = self.reset_asset_column_info_db(assert_column_db, asset_column)
             # 保存对象
             AssetSQL.update_asset_column(assert_column_db)
+        except Fail as e:
+            raise e
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -2395,7 +2414,7 @@ class AssetsService:
     def update_asset_columns(self, asset_columns):
         # 判空
         if not asset_columns:
-            raise Exception
+            raise Fail("extend column is empty", error_message="自定义列对象是空")
         ids = []
         try:
             # 遍历
@@ -2404,6 +2423,8 @@ class AssetsService:
                 if temp.id:
                     self.update_asset_column_by_id(temp.id, temp)
                     ids.append(temp.id)
+        except Fail as e:
+            raise e
         except Exception as e:
             import traceback
             traceback.print_exc()
