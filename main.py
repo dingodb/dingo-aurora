@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from api import api_router
 from jobs import bigscreen_metrics_syncer
@@ -19,9 +21,17 @@ async def root():
 
 app.include_router(api_router, prefix="/v1")
 
-@app.on_event("startup")
-async def app_start():
+# @app.on_event("startup")
+# async def app_start():
+#     bigscreen_metrics_syncer.start()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     bigscreen_metrics_syncer.start()
+    yield
+    # Add any shutdown logic here if needed
+
+app.router.lifespan_context = lifespan
 
 # 本地启动作测试使用
 if __name__ == '__main__':

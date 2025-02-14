@@ -9,7 +9,7 @@ CONF = cfg.CONF
 
 # 数据库连接地址
 DATABASE_URL = CONF.database.connection
-print(DATABASE_URL)
+# print(DATABASE_URL)
 
 # 创建连接池
 # engine = create_engine(
