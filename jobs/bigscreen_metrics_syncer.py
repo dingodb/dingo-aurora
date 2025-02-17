@@ -33,14 +33,19 @@ def fetch_bigscreen_metrics():
     metrics = BigScreensService.list_bigscreen_metrics_configs()
     memcached_client = Client((CONF.bigscreen.memcached_address))
     metrics_dict = {}
+    metrics_dict_with_prefix = {}
     print(f'client: {memcached_client}')
     for metric in metrics:
         metric_name = metric.name
-        metric_value = BigScreensService.get_bigscreen_metrics(metric_name)
-        metrics_dict[f'{CONF.bigscreen.memcached_key_prefix}{metric_name}'] = metric_value
+        metric_value = BigScreensService.get_bigscreen_metrics(metric_name, sync=True)
+        metrics_dict[metric_name] = metric_value
+        metrics_dict_with_prefix[f'{CONF.bigscreen.memcached_key_prefix}{metric_name}'] = metric_value
     try:
-        print(metrics_dict)
-        memcached_client.set_many(metrics_dict, expire=CONF.bigscreen.metrics_expiration_time)
+        # metrics 写入缓存
+        memcached_client.set_many(metrics_dict_with_prefix, expire=CONF.bigscreen.metrics_expiration_time)
+
+        # metrics 写入数据库
+        BigScreensService.batch_upgrade_metrics_data(metrics_dict)
     except Exception as e:
         print(f"缓存写入失败: {e}")
 

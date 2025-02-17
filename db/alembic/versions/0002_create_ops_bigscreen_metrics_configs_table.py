@@ -10,6 +10,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
+from datetime import datetime
 
 # revision identifiers, used by Alembic.
 revision: str = '0002'
@@ -248,5 +249,19 @@ def upgrade() -> None:
           'sub_class': None}]
     )
 
+    bigscreen_metrics_table = op.create_table(
+        "ops_bigscreen_metrics",
+        sa.Column("id", sa.String(length=128), nullable=False, comment='大屏指标对象id'),
+        sa.Column("name", sa.String(length=128), sa.ForeignKey('ops_bigscreen_metrics_configs.name'), nullable=False, comment='指标名称'),
+        sa.Column("data", sa.Float(), nullable=True, comment='指标数据'),
+        sa.Column("region", sa.String(length=128), nullable=True, comment='地区（智算中心）'),
+        sa.Column("last_modified", sa.DateTime(), nullable=True, comment='最近修改时间'),
+        sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('name'),
+        comment='大屏指标表'
+    )
+
 def downgrade() -> None:
+    op.drop_table('ops_bigscreen_metrics')
     op.drop_table('ops_bigscreen_metrics_configs')
+
