@@ -12,8 +12,8 @@ bigscreen_group = cfg.OptGroup(name='bigscreen', title='bigscreen')
 
 bigscreen_opts = [
     cfg.StrOpt('prometheus_query_url', default='http://172.20.53.200:80/api/v1/', help='prmetheus query url'),
-    cfg.IntOpt('metrics_fetch_interval', default=300, help='metrics fetch interval'),
-    cfg.IntOpt('metrics_expiration_time', default=600, help='metrics expiration time'),
+    cfg.IntOpt('metrics_fetch_interval', default=60, help='metrics fetch interval'),
+    cfg.IntOpt('metrics_expiration_time', default=60, help='metrics expiration time'),
     cfg.StrOpt('memcached_address', default='10.220.56.19:11211', help='memcached address'),
     cfg.StrOpt('memcached_key_prefix', default='bigscreen_metrics_', help='memcached bigscreen key prefix')
 ]
