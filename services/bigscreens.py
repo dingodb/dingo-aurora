@@ -18,7 +18,20 @@ class BigScreensService:
         return BigscreenSQL.get_bigscreen_metrics_configs()
 
     @classmethod
-    def get_bigscreen_metrics(self, name):
+    def get_bigscreen_metrics(self, name, sync=False):
+        # 通过 prometheus 同步数据
+        if sync:
+            bigscreen_metrics_config = BigscreenSQL.get_bigscreen_metrics_config_by_name(name)
+            if bigscreen_metrics_config:
+                query = bigscreen_metrics_config.query
+            else:
+                return None
+            # 通过get请求读取实时监控数据 指标项的查询语句 + / 需要转义
+            request_url = prometheus_query_url + "query?query=" + urllib.parse.quote(query)
+            response = requests.get(request_url)
+            return self.__handle_response(response)
+
+        # 通过 memcached 和 mysql 获取数据
         memcached_client = Client((CONF.bigscreen.memcached_address), timeout=1)
         try:
             memcached_metrics = memcached_client.get(f'{CONF.bigscreen.memcached_key_prefix}{name}')
@@ -29,15 +42,12 @@ class BigScreensService:
         except Exception as e:
             print("fetch data from database")
 
-        bigscreen_metrics_config = BigscreenSQL.get_bigscreen_metrics_config_by_name(name)
-        if bigscreen_metrics_config:
-            query = bigscreen_metrics_config.query
+        bigscreen_metrics = BigscreenSQL.get_bigscreen_metrics_by_name(name)
+        if bigscreen_metrics:
+            print("fetch data from db")
+            return bigscreen_metrics.data
         else:
             return None
-        # 通过get请求读取实时监控数据 指标项的查询语句 + / 需要转义
-        request_url = prometheus_query_url + "query?query=" + urllib.parse.quote(query)
-        response = requests.get(request_url)
-        return self.__handle_response(response)
 
     # 解析接口返回的数据
     @classmethod
@@ -74,3 +84,9 @@ class BigScreensService:
         print(f"bigscreen_prom_request_url: {request_url}")
         response = requests.get(request_url)
         return response.json()
+
+    @classmethod
+    def batch_upgrade_metrics_data(self, metrics_dict):
+        for name, data in metrics_dict.items():
+            BigscreenSQL.update_bigscreen_metrics_data_by_name(name, data)
+

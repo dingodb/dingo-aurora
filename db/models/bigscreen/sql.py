@@ -7,8 +7,9 @@ from sqlalchemy import create_engine
 from typing_extensions import assert_type
 
 from db.engines.mysql import get_session
-from db.models.bigscreen.models import BigscreenMetricsConfig
+from db.models.bigscreen.models import BigscreenMetricsConfig, BigscreenMetrics
 
+from datetime import datetime
 from enum import Enum
 
 #链接数据库，可以使用配置文件进行定义
@@ -39,21 +40,67 @@ class BigscreenSQL:
         session = get_session()
         with session.begin():
             return session.query(BigscreenMetricsConfig).filter(BigscreenMetricsConfig.id == bigscreen_metrics_config_id).first()
-        
+ 
     @classmethod
     def get_bigscreen_metrics_config_by_name(cls, bigscreen_metrics_config_name):
         session = get_session()
         with session.begin():
             return session.query(BigscreenMetricsConfig).filter(BigscreenMetricsConfig.name == bigscreen_metrics_config_name).first()
-        
+
     @classmethod
     def get_bigscreen_metrics_configs(cls):
         session = get_session()
         with session.begin():
             return session.query(BigscreenMetricsConfig).all()
-        
+
     @classmethod
     def get_bigscreen_metrics_config_by_sub_class(cls, bigscreen_metrics_config_sub_class):
         session = get_session()
         with session.begin():
             return session.query(BigscreenMetricsConfig).filter(BigscreenMetricsConfig.sub_class == bigscreen_metrics_config_sub_class)
+
+    @classmethod
+    def create_bigscreen_metrics(cls, bigscreen_metrics_info):
+        session = get_session()
+        with session.begin():
+            session.add(bigscreen_metrics_info)
+
+    @classmethod
+    def get_bigscreen_metrics_by_name(cls, bigscreen_metrics_name):
+        session = get_session()
+        with session.begin():
+            return session.query(BigscreenMetrics).filter(BigscreenMetrics.name == bigscreen_metrics_name).first()
+
+    @classmethod
+    def update_bigscreen_metrics(cls, bigscreen_metrics_info):
+        session = get_session()
+        with session.begin():
+            session.merge(bigscreen_metrics_info)
+
+    @classmethod
+    def update_bigscreen_metrics_data_by_name(cls, name, data):
+        session = get_session()
+        with session.begin():
+            metrics = cls.get_bigscreen_metrics_by_name(name)
+            metrics.data = data
+            metrics.last_modified = datetime.fromtimestamp(datetime.now().timestamp())
+            session.merge(metrics)
+
+    @classmethod
+    def delete_bigscreen_metrics(cls, bigscreen_metrics_id):
+        session = get_session()
+        with session.begin():
+            session.query(BigscreenMetrics).filter(BigscreenMetrics.id == bigscreen_metrics_id).delete()
+
+    @classmethod
+    def get_bigscreen_metrics_by_id(cls, bigscreen_metrics_id):
+        session = get_session()
+        with session.begin():
+            return session.query(BigscreenMetrics).filter(BigscreenMetrics.id == bigscreen_metrics_id).first()
+
+    @classmethod
+    def get_bigscreen_metrics(cls):
+        session = get_session()
+        with session.begin():
+            return session.query(BigscreenMetrics).all()
+

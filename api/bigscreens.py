@@ -34,3 +34,4 @@ async def query_bigscreen_metrics(promql: str):
 async def query_range_bigscreen_metrics(promql: str, start_time: str, end_time: str = None, step: str = None):
     metrics = BigScreensService.fetch_metrics_with_promql(promql, query_range=True, start_time=start_time, end_time=end_time, step=step)
     return metrics
+
