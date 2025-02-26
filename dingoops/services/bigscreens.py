@@ -20,7 +20,7 @@ class BigScreensService:
         return BigscreenSQL.get_bigscreen_metrics_configs()
 
     @classmethod
-    def get_bigscreen_metrics(self, name, sync=False):
+    def get_bigscreen_metrics(self, name, region, sync=False):
         # 通过 prometheus 同步数据
         if sync:
             bigscreen_metrics_config = BigscreenSQL.get_bigscreen_metrics_config_by_name(name)
@@ -42,9 +42,11 @@ class BigScreensService:
                 print("fetch data from cache")
                 return memcached_metrics.decode()
         except Exception as e:
-            print("fetch data from database")
+            print("fetch data from cache failed")
 
-        bigscreen_metrics = BigscreenSQL.get_bigscreen_metrics_by_name(name)
+        if region == None:
+            region = region_name
+        bigscreen_metrics = BigscreenSQL.get_bigscreen_metrics_by_name_and_region(name, region)
         if bigscreen_metrics:
             print("fetch data from db")
             return bigscreen_metrics.data
@@ -90,7 +92,7 @@ class BigScreensService:
     @classmethod
     def batch_upgrade_metrics_data(self, metrics_dict):
         for name, data in metrics_dict.items():
-            metrics = BigscreenSQL.get_bigscreen_metrics_by_name(name)
+            metrics = BigscreenSQL.get_bigscreen_metrics_by_name_and_region(name, region_name)
             if metrics:
                 metrics.data = data
                 metrics.last_modified = datetime.get_now_time()

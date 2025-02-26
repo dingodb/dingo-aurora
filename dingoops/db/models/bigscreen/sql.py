@@ -72,6 +72,15 @@ class BigscreenSQL:
             return session.query(BigscreenMetrics).filter(BigscreenMetrics.name == bigscreen_metrics_name).first()
 
     @classmethod
+    def get_bigscreen_metrics_by_name_and_region(cls, bigscreen_metrics_name, bigscreen_metrics_region):
+        session = get_session()
+        with session.begin():
+            return session.query(BigscreenMetrics).filter(
+                BigscreenMetrics.name == bigscreen_metrics_name,
+                BigscreenMetrics.region == bigscreen_metrics_region
+            ).first()
+
+    @classmethod
     def update_bigscreen_metrics(cls, bigscreen_metrics_info):
         session = get_session()
         with session.begin():
