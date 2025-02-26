@@ -7,8 +7,8 @@ router = APIRouter()
 
 @router.get("/bigscreen/metrics", summary="获取大屏指标数据")
 # TODO: 错误处理
-async def get_bigscreen_metrics(name: str):
-    return BigScreensService.get_bigscreen_metrics(name)
+async def get_bigscreen_metrics(name: str, region: str = None):
+    return BigScreensService.get_bigscreen_metrics(name, region)
 
 
 @router.get("/bigscreen/metrics_configs", summary="获取大屏指标配置信息")
