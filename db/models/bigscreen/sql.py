@@ -113,3 +113,8 @@ class BigscreenSQL:
         with session.begin():
             return session.query(BigscreenMetrics).all()
 
+    @classmethod
+    def get_bigscreen_by_region(cls, bigscreen_metrics_region):
+        session = get_session()
+        with session.begin():
+            return session.query(BigscreenMetrics).filter(BigscreenMetrics.region == bigscreen_metrics_region).first()

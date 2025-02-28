@@ -1,7 +1,9 @@
+import json
+
 from apscheduler.schedulers.blocking import BlockingScheduler
 from pymemcache.client.base import Client
 from apscheduler.schedulers.background import BackgroundScheduler
-from services.bigscreens import BigScreensService
+from services.bigscreens import BigScreensService, region_name
 from services.bigscreenshovel import BigScreenShovelService
 from jobs import CONF
 from datetime import datetime, timedelta
@@ -37,7 +39,7 @@ def fetch_bigscreen_metrics():
     print(f'client: {memcached_client}')
     for metric in metrics:
         metric_name = metric.name
-        metric_value = BigScreensService.get_bigscreen_metrics(metric_name, sync=True)
+        metric_value = BigScreensService.get_bigscreen_metrics(metric_name, None, sync=True)
         metrics_dict[metric_name] = metric_value
         metrics_dict_with_prefix[f'{CONF.bigscreen.memcached_key_prefix}{metric_name}'] = metric_value
     try:
@@ -46,6 +48,9 @@ def fetch_bigscreen_metrics():
 
         # metrics 写入数据库
         BigScreensService.batch_upgrade_metrics_data(metrics_dict)
+
+        # 发送mq消息，往中心region发送一份数据
+        BigScreenSyncService.send_mq_message(json.dumps({"region_name":region_name, "metrics_dict":metrics_dict}))
     except Exception as e:
         print(f"缓存写入失败: {e}")
 

@@ -107,3 +107,22 @@ class BigScreensService:
                 )
                 BigscreenSQL.create_bigscreen_metrics(metrics)
 
+
+    @classmethod
+    def batch_upgrade_metrics_data_by_region(self, metrics_dict, specify_region):
+        # 遍历
+        for name, data in metrics_dict.items():
+            metrics = BigscreenSQL.get_bigscreen_metrics_by_name_and_region(name, specify_region)
+            if metrics:
+                metrics.data = data
+                metrics.last_modified = datetime.get_now_time()
+                BigscreenSQL.update_bigscreen_metrics(metrics)
+            else:
+                metrics = BigscreenMetrics(
+                    id = uuid.uuid4().hex,
+                    name = name,
+                    data = data,
+                    region = specify_region,
+                    last_modified = datetime.get_now_time()
+                )
+                BigscreenSQL.create_bigscreen_metrics(metrics)

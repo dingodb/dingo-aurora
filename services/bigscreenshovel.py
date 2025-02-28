@@ -30,7 +30,7 @@ class BigScreenShovelService:
             print("current region is center region, no need to add shovel")
             return
         # 当前环境的mq管理地址RabbitMQ 管理 API 的 URL 和认证信息
-        shovel_url = "http://" + VIP + ":" + MQ_MANAGE_PORT + MQ_SHOVEL_ADD_URL + SHOVEL_NAME_PREFIX +  MY_IP
+        shovel_url = "http://" + MY_IP + ":" + MQ_MANAGE_PORT + MQ_SHOVEL_ADD_URL + SHOVEL_NAME_PREFIX +  MY_IP
         print("shovel_url: " + shovel_url)
         # 处理mq读取用户命和密码
         if TRANSPORT_URL is None:
@@ -94,6 +94,9 @@ class BigScreenShovelService:
             #     "reconnect-delay": 5
             # }
         }
+        # 创建前删除掉原来的shovel
+        delete_response = requests.delete(shovel_url, auth=auth)
+        print(f"Shovel Deleted,状态码：{delete_response.status_code}, 响应内容：{delete_response.text} ")
         # 发送 HTTP 请求创建 Shovel
         response = requests.put(shovel_url, auth=auth, json=shovel_config)
         # 检查响应状态
