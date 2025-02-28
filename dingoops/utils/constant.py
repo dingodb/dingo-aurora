@@ -48,6 +48,8 @@ asset_network_position_info_columns = {"cabinet_position":"机柜","u_position":
 asset_network_contract_info_columns = {"contract_number":"采购合同号"}
 # 资产-网络设备流信息列名对应表的列
 asset_network_flow_info_columns = {"asset_name":"设备名称","cabinet_position":"机柜","u_position":"U位","port":"端口","opposite_asset_name":"对端设备名称","opposite_cabinet_position":"对端机柜","opposite_u_position":"对端U位","opposite_port":"对端端口","cable_type":"线缆类型","cable_interface_type":"线缆接口类型","cable_length":"线缆长度","label":"标签","opposite_label":"对端标签","description":"备注"}
-
-
 BINDING_PROFILE = 'binding:profile'
+
+# websocket目前接受的数据类型
+websocket_data_type = {"big_screen"}
+
