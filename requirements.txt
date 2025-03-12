@@ -245,7 +245,5 @@ yappi==1.6.10
 yaql==3.0.0
 yarg==0.1.9
 zipp==3.20.2
-websockets==13.1
+websockets==15.0
 redis==5.2.1
-
-
