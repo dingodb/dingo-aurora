@@ -31,7 +31,7 @@ def upgrade() -> None:
         sa.Column("unit", sa.String(length=32), nullable=True, comment='指标单位'),
         sa.Column("extra", sa.Text(), nullable=True, comment='扩展信息'),
         sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('name'),
+        # sa.UniqueConstraint('name'),
         comment='大屏指标配置信息表'
     )
     # ### 初始化大屏指标配置信息 ###
