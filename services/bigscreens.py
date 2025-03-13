@@ -13,6 +13,9 @@ from utils import datetime
 
 prometheus_query_url = CONF.bigscreen.prometheus_query_url
 region_name = CONF.DEFAULT.region_name
+nightingale_base_url = CONF.bigscreen.nightingale_base_url
+nightingale_username = CONF.bigscreen.nightingale_username
+nightingale_password = CONF.bigscreen.nightingale_password
 
 class BigScreensService:
     @classmethod
@@ -21,6 +24,10 @@ class BigScreensService:
 
     @classmethod
     def get_bigscreen_metrics(self, name, region, sync=False):
+        # 通过 n9e 获取数据
+        if name in ['alert_count', 'gpu_fallen_count']:
+            return self.fetch_n9e_metrics(name)
+
         # 通过 prometheus 同步数据
         if sync:
             bigscreen_metrics_config = BigscreenSQL.get_bigscreen_metrics_config_by_name(name)
@@ -62,7 +69,6 @@ class BigScreensService:
                 if json_response['status'] == 'success':
                     json_data = json_response['data']
                     json_data_result = json_data['result']
-                    print(f"json_data_result：{json_data_result}")
                     if json_data_result == []:
                         return 0
                     return json_data_result[0]['value'][1]
@@ -126,3 +132,48 @@ class BigScreensService:
                     last_modified = datetime.get_now_time()
                 )
                 BigscreenSQL.create_bigscreen_metrics(metrics)
+
+    @classmethod
+    def fetch_n9e_metrics(self, name):
+        access_token = self.login_n9e()
+        if access_token:
+            headers = {
+                "Authorization": f"Bearer {access_token}"
+            }
+            if name == 'alert_count':
+                url = nightingale_base_url + "/api/n9e/alert-cur-events/list"
+                response = requests.get(url, headers=headers)
+
+                if response.status_code == 200:
+                    data = response.json()
+                    return data['dat']['total']
+                else:
+                    print(f"获取告警数失败: {response}")
+            if name == 'gpu_fallen_count':
+                url = nightingale_base_url + "/api/n9e/alert-cur-events/list"
+                params = {"query": "掉卡"}
+                response = requests.get(url, headers=headers, params=params)
+
+                if response.status_code == 200:
+                    data = response.json()
+                    return data['dat']['total']
+                else:
+                    print(f"获取掉卡数失败: {response}")
+
+    @classmethod
+    def login_n9e(self):
+        login_url = nightingale_base_url + "/api/n9e/auth/login"
+        login_payload = {
+            "username": nightingale_username,
+            "password": nightingale_password
+        }
+        login_response = requests.post(login_url, json=login_payload)
+
+        if login_response.status_code == 200:
+            login_data = login_response.json()
+            access_token = login_data["dat"]["access_token"]
+            return access_token
+        else:
+            print(f"夜莺登录失败: {login_response}")
+            return None
+

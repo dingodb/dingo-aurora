@@ -15,7 +15,10 @@ bigscreen_opts = [
     cfg.IntOpt('metrics_fetch_interval', default=60, help='metrics fetch interval'),
     cfg.IntOpt('metrics_expiration_time', default=60, help='metrics expiration time'),
     cfg.StrOpt('memcached_address', default='10.220.56.19:11211', help='memcached address'),
-    cfg.StrOpt('memcached_key_prefix', default='bigscreen_metrics_', help='memcached bigscreen key prefix')
+    cfg.StrOpt('memcached_key_prefix', default='bigscreen_metrics_', help='memcached bigscreen key prefix'),
+    cfg.StrOpt('nightingale_base_url', default='http://nightingale.zetyun.cn', help='nightingale base url'),
+    cfg.StrOpt('nightingale_username', default='root', help='nightingale username'),
+    cfg.StrOpt('nightingale_password', default='Zetyun2024', help='nightingale password')
 ]
 
 CONF.register_group(bigscreen_group)
