@@ -120,6 +120,12 @@ class AssetsService:
                 temp["asset_customer"] = temp_cutomer
                 # 配件信息
                 temp["asset_part"] = self.list_assets_parts(r.id)
+                # 配件信息转到列表外部
+                if temp["asset_part"]:
+                    for temp_asset_part in temp["asset_part"]:
+                        # 判断配件类型非空
+                        if temp_asset_part and temp_asset_part["part_type"]:
+                            temp["asset_part_" + temp_asset_part["part_type"]] = temp_asset_part["part_config"]
                 # 流量信息 列表上不需要
                 # temp["asset_flow"] = self.list_assets_flows(r.id)
                 # 加入列表
@@ -203,7 +209,7 @@ class AssetsService:
             asset_manufacture_info_db = None
             asset_manufacture_info_db_new = None
             if asset.asset_manufacturer:
-                asset_manufacture_info_db = self.check_manufacturer_exists(asset)
+                asset_manufacture_info_db = self.check_manufacturer_exists_by_name(asset.asset_manufacturer.name)
             # 数据库不存在当前厂商
             if not asset_manufacture_info_db:
                 asset_manufacture_info_db_new = self.convert_asset_manufacturer_info_db(asset)
@@ -243,6 +249,16 @@ class AssetsService:
                 return AssetSQL.get_manufacture_by_id(asset.asset_manufacturer.id)
             if asset.asset_manufacturer.name:
                 return AssetSQL.get_manufacture_by_name(asset.asset_manufacturer.name)
+        # 返回
+        return asset_manufacture_info_db
+
+
+    def check_manufacturer_exists_by_name(self, asset_manufacturer_name:str):
+        # 默认空
+        asset_manufacture_info_db = None
+        # 首先根据条件查询
+        if asset_manufacturer_name:
+            return AssetSQL.get_manufacture_by_name(asset_manufacturer_name)
         # 返回
         return asset_manufacture_info_db
 
@@ -525,6 +541,24 @@ class AssetsService:
         # 成功返回资产id
         return None
 
+    def delete_asset_by_asset_number(self, asset_number):
+        # 资产编号空
+        if not asset_number:
+            return None
+        # 删除
+        try:
+            # 查询资产编号的资产
+            asset_basic_info_db = AssetSQL.get_asset_basic_info_by_asset_number(asset_number)
+            # 存在
+            if asset_basic_info_db:
+                # 删除
+                AssetSQL.delete_asset(asset_basic_info_db.id)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+        # 成功返回资产id
+        return asset_number
 
 
     def import_asset(self, row):
@@ -581,6 +615,8 @@ class AssetsService:
                 # 判断excel的数据是非nan
                 if pd.notna(row.get(customer_column, None)):
                     asset.asset_customer.__setattr__(customer_key, row.get(customer_column, None))
+            # 检测当前资产编号是否已经存在，如果存在则删掉
+            self.delete_asset_by_asset_number(asset.asset_number)
             # 调用创建
             self.create_asset(asset)
             # 记录操作日志
@@ -599,6 +635,10 @@ class AssetsService:
             asset_number = None
             if pd.notna(row["资产编号"]):
                 asset_number = row["资产编号"]
+            # 资产编号空，不导入
+            if not asset_number:
+                print("资产编号不存在，配件不需要导入")
+                return None
             # 根据资产编号精准查询资产设备
             asset_id = None
             asset_name = ""
@@ -606,6 +646,9 @@ class AssetsService:
             if asset_basic_info_db:
                 asset_id = asset_basic_info_db.id
                 asset_name = asset_basic_info_db.name
+            else:
+                print(f"资产编号：{asset_number}的设备不存在，配件不需要导入")
+                return None
             # 从excel中加载配件信息数据
             for part_key, part_column in asset_part_info_columns.items():
                 # 每一列的数据都作为一个配件
@@ -670,6 +713,9 @@ class AssetsService:
                         row_value = int(row_value.timestamp() * 1000)
                     # 赋值
                     asset.asset_contract.__setattr__(contract_key, row_value)
+            # 检测当前资产编号是否已经存在，如果存在则删掉
+            self.delete_asset_by_asset_number(asset.asset_number)
+            # 创建
             self.create_asset(asset)
             # 记录操作日志
             system_service.create_system_log(OperateLogApiModel(operate_type="create", resource_type="asset", resource_id=asset.asset_id, resource_name=asset.asset_name, operate_flag=True))
@@ -856,11 +902,13 @@ class AssetsService:
                     use_to = extra_json["use_to"] if extra_json is not None and "use_to" in extra_json else None
                     operate_system = extra_json["operate_system"] if extra_json is not None and "operate_system" in extra_json else None
                     # 修改或添加新数据
-                    temp_asset_data = {'机柜': temp['asset_position']['cabinet_position'],'U位': temp['asset_position']['u_position'],
-                                       '设备名称': temp['asset_name'],'设备型号': temp['equipment_number'],'资产编号': temp['asset_number'],'序列号': temp['sn_number'],
+                    temp_asset_data = {'机房号': temp['asset_position']['frame_position'],'机柜': temp['asset_position']['cabinet_position'],'U位': temp['asset_position']['u_position'],
+                                       '设备名称': temp['asset_name'],'设备类型': temp['asset_type'].replace("SERVER_", "") if temp['asset_type'] else None,
+                                       '设备型号': temp['equipment_number'],'资产编号': temp['asset_number'],'序列号': temp['sn_number'],
                                        '部门': temp['asset_belong']['department_name'],'负责人': temp['asset_belong']['user_name'],'主机名': host_name,'IP': ip,
-                                       'IDRAC': idrac,'用途': use_to,'密码': None,'操作系统': operate_system,
-                                       '购买日期': temp['asset_contract']['purchase_date'],'厂商': temp['asset_manufacturer']['name'],'批次': temp['asset_contract']['batch_number'],'备注': temp['asset_description'],}
+                                       'IDRAC': idrac,'用途': use_to,'密码': None,'操作系统': operate_system,'采购合同编号': temp['asset_contract']['contract_number'],
+                                       # '购买日期': temp['asset_contract']['purchase_date'],
+                                       '厂商': temp['asset_manufacturer']['name'],'备注': temp['asset_description'],}
                     # 配件数据
                     if temp['asset_part']:
                         temp_part_data = {'资产编号': temp['asset_number'],}
@@ -942,13 +990,13 @@ class AssetsService:
                     except Exception as e:
                         LOG.error(e)
                     # 修改或添加新数据
-                    temp_asset_data = {'机柜': temp['asset_position']['cabinet_position'],'U位': temp['asset_position']['u_position'],
+                    temp_asset_data = {'机房号': temp['asset_position']['frame_position'],'机柜': temp['asset_position']['cabinet_position'],'U位': temp['asset_position']['u_position'],
                                        '设备厂商': temp['asset_manufacturer']['name'],'设备类型': temp['asset_type'].replace("NETWORK_", "") if temp['asset_type'] else None,
                                        '设备名称': temp['asset_name'],'设备型号': temp['equipment_number'],'资产编号': temp['asset_number'],
                                        '主机名': extra_json.get("host_name"),'管理地址': extra_json.get("manage_address"),'带外网关': extra_json.get("external_gateway"),
                                        'm-lag mac': extra_json.get("m_lagmac"),'网络设备角色': extra_json.get("network_equipment_role"),'序号': extra_json.get("serial_number"),
                                        'loopback': extra_json.get("loopback"),'vlanifv4': extra_json.get("vlanifv4"),'预留': None,'BGP_AS': extra_json.get("bgp_as"),'用途': extra_json.get("use_to"),
-                                       '采购合同号': temp['asset_contract']['contract_number']}
+                                       '采购合同编号': temp['asset_contract']['contract_number']}
                     # 加入excel导出数据列表
                     excel_asset_network_data.append(temp_asset_data)
                 # 判断总页数已经大于等于当前已经查询的页数，已经查询完成，退出循环
@@ -996,13 +1044,13 @@ class AssetsService:
                     except Exception as e:
                         LOG.error(e)
                     # 修改或添加新数据
-                    temp_asset_data = {'机柜': temp['asset_position']['cabinet_position'],'U位': temp['asset_position']['u_position'],
+                    temp_asset_data = {'机房号': temp['asset_position']['frame_position'],'机柜': temp['asset_position']['cabinet_position'],'U位': temp['asset_position']['u_position'],
                                        '设备厂商': temp['asset_manufacturer']['name'],'设备类型': temp['asset_type'].replace("NETWORK_", "") if temp['asset_type'] else None,
                                        '设备名称': temp['asset_name'],'设备型号': temp['equipment_number'],'资产编号': temp['asset_number'],
                                        '主机名': extra_json.get("host_name"),'管理地址': extra_json.get("manage_address"),'带外网关': extra_json.get("external_gateway"),
                                        'm-lag mac': extra_json.get("m_lagmac"),'网络设备角色': extra_json.get("network_equipment_role"),'序号': extra_json.get("serial_number"),
                                        'loopback': extra_json.get("loopback"),'vlanifv4': extra_json.get("vlanifv4"),'预留': None,'BGP_AS': extra_json.get("bgp_as"),'用途': extra_json.get("use_to"),
-                                       '采购合同号': temp['asset_contract']['contract_number']}
+                                       '采购合同编号': temp['asset_contract']['contract_number']}
                     # 加入excel导出数据列表
                     excel_asset_network_data.append(temp_asset_data)
                 # 判断总页数已经大于等于当前已经查询的页数，已经查询完成，退出循环
@@ -1089,18 +1137,24 @@ class AssetsService:
                 # df.loc[index,"设备名称"] = temp["asset_name"]
                 # 下一行
                 # index = index + 1
-                extra_json = json.loads(temp['extra'])
+                extra_json = {}
+                try:
+                    extra_json = json.loads(temp['extra'])
+                except Exception as e:
+                    LOG.error(e)
                 host_name = extra_json["host_name"] if "host_name" in extra_json else None
                 ip = extra_json["ip"] if "ip" in extra_json else None
                 idrac = extra_json["idrac"] if "idrac" in extra_json else None
                 use_to = extra_json["use_to"] if "use_to" in extra_json else None
                 operate_system = extra_json["operate_system"] if "operate_system" in extra_json else None
                 # 修改或添加新数据
-                temp_asset_data = {'机柜': temp['asset_position']['cabinet_position'],'U位': temp['asset_position']['u_position'],
-                                   '设备名称': temp['asset_name'],'设备型号': temp['equipment_number'],'资产编号': temp['asset_number'],'序列号': temp['sn_number'],
+                temp_asset_data = {'机房号': temp['asset_position']['frame_position'],'机柜': temp['asset_position']['cabinet_position'],'U位': temp['asset_position']['u_position'],
+                                   '设备名称': temp['asset_name'],'设备类型': temp['asset_type'].replace("SERVER_", "") if temp['asset_type'] else None,
+                                   '设备型号': temp['equipment_number'],'资产编号': temp['asset_number'],'序列号': temp['sn_number'],
                                    '部门': temp['asset_belong']['department_name'],'负责人': temp['asset_belong']['user_name'],'主机名': host_name,'IP': ip,
-                                   'IDRAC': idrac,'用途': use_to,'密码': None,'操作系统': operate_system,
-                                   '购买日期': temp['asset_contract']['purchase_date'],'厂商': temp['asset_manufacturer']['name'],'批次': temp['asset_contract']['batch_number'],'备注': temp['asset_description'],}
+                                   'IDRAC': idrac,'用途': use_to,'密码': None,'操作系统': operate_system,'采购合同编号': temp['asset_contract']['contract_number'],
+                                   # '购买日期': temp['asset_contract']['purchase_date'],
+                                   '厂商': temp['asset_manufacturer']['name'],'备注': temp['asset_description'],}
                 # 配件数据
                 if temp['asset_part']:
                     temp_part_data = {'资产编号': temp['asset_number'],}
@@ -1201,6 +1255,8 @@ class AssetsService:
                     temp_asset.asset_type = asset_batch.asset_type
                 if asset_batch.description:
                     temp_asset.asset_description = asset_batch.description
+                if asset_batch.equipment_number:
+                    temp_asset.equipment_number = asset_batch.equipment_number
                 # 更新
                 self.update_asset(temp_asset_id, temp_asset)
                 # 归属信息
@@ -1566,11 +1622,11 @@ class AssetsService:
                     if count > 0:
                         raise Fail("manufacturer already exists", error_message="厂商已存在")
                 manufacture_db.name = manufacture_update_info.name
-            # 描述
-            if manufacture_update_info.description is not None and len(manufacture_update_info.description) > 0:
+            # 描述 不是None说明需要更新
+            if manufacture_update_info.description is not None:
                 manufacture_db.description = manufacture_update_info.description
-            # 描述
-            if manufacture_update_info.extra:
+            # 联系人信息 不是None说明需要更新
+            if manufacture_update_info.extra is not None:
                 manufacture_db.extra = json.dumps(manufacture_update_info.extra)
             # 保存对象
             AssetSQL.update_manufacture(manufacture_db)

@@ -13,6 +13,8 @@ from db.models.asset.models import Asset, AssetBasicInfo, AssetPartsInfo, AssetM
 
 from enum import Enum
 
+from utils.constant import asset_part_type_dict
+
 #链接数据库，可以使用配置文件进行定义
 # engine = create_engine("mysql+pymysql://root:HworLIIDvmTRsPfQauNskuJF8PcoTuULfu3dEHFg@10.220.56.254:3306/dingoops?charset=utf8mb3", echo=True)
 # 资产排序字段字典
@@ -92,7 +94,7 @@ class AssetSQL:
                 outerjoin(AssetCustomersInfo, AssetCustomersInfo.asset_id == AssetBasicInfo.id)
             # 数据库查询参数
             if "asset_name" in query_params and query_params["asset_name"]:
-                query = query.filter(AssetBasicInfo.name.like('%' + query_params["asset_name"] + '%'))
+                query = query.filter(AssetBasicInfo.name.like('%' + str(query_params["asset_name"]) + '%'))
             if "asset_id" in query_params and query_params["asset_id"]:
                 query = query.filter(AssetBasicInfo.id == query_params["asset_id"])
             if "asset_ids" in query_params and query_params["asset_ids"]:
@@ -114,17 +116,55 @@ class AssetSQL:
             if "equipment_number" in query_params and query_params["equipment_number"]:
                 query = query.filter(AssetBasicInfo.equipment_number.like('%' + query_params["equipment_number"] + '%'))
             if "asset_number" in query_params and query_params["asset_number"]:
-                query = query.filter(AssetBasicInfo.asset_number.like('%' + query_params["asset_number"] + '%'))
+                query = query.filter(AssetBasicInfo.asset_number.like('%' + str(query_params["asset_number"]) + '%'))
             if "sn_number" in query_params and query_params["sn_number"]:
                 query = query.filter(AssetBasicInfo.sn_number.like('%' + query_params["sn_number"] + '%'))
             if "department_name" in query_params and query_params["department_name"]:
                 query = query.filter(AssetBelongsInfo.department_name.like('%' + query_params["department_name"] + '%'))
             if "user_name" in query_params and query_params["user_name"]:
                 query = query.filter(AssetBelongsInfo.user_name.like('%' + query_params["user_name"] + '%'))
+            # 主机名模糊查询，存储的json字段，需要解然后模糊查询
+            if "host_name" in query_params and query_params["host_name"]:
+                query = query.filter(func.json_unquote(func.json_extract(AssetBasicInfo.extra, "$.host_name")).like('%' + query_params["host_name"] + '%'))
+            # IP地址模糊查询，存储的json字段，需要解然后模糊查询
+            if "ip" in query_params and query_params["ip"]:
+                query = query.filter(func.json_unquote(func.json_extract(AssetBasicInfo.extra, "$.ip")).like('%' + query_params["ip"] + '%'))
+            # idrac模糊查询，存储的json字段，需要解然后模糊查询
+            if "idrac" in query_params and query_params["idrac"]:
+                query = query.filter(func.json_unquote(func.json_extract(AssetBasicInfo.extra, "$.idrac")).like('%' + query_params["idrac"] + '%'))
+            # 用途模糊查询，存储的json字段，需要解然后模糊查询
+            if "use_to" in query_params and query_params["use_to"]:
+                query = query.filter(func.json_unquote(func.json_extract(AssetBasicInfo.extra, "$.use_to")).like('%' + query_params["use_to"] + '%'))
+            # 操作系统模糊查询，存储的json字段，需要解然后模糊查询
+            if "operate_system" in query_params and query_params["operate_system"]:
+                query = query.filter(func.json_unquote(func.json_extract(AssetBasicInfo.extra, "$.operate_system")).like('%' + query_params["operate_system"] + '%'))
             if "manufacture_id" in query_params and query_params["manufacture_id"]:
                 query = query.filter(AssetManufacturesInfo.id == query_params["manufacture_id"])
             if "manufacture_name" in query_params and query_params["manufacture_name"]:
                 query = query.filter(AssetManufacturesInfo.name.like('%' + query_params["manufacture_name"] + '%'))
+            if "asset_part" in query_params and query_params["asset_part"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part"] + '%')).distinct()))
+            if "asset_part_cpu" in query_params and query_params["asset_part_cpu"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_type == 'cpu').filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part_cpu"] + '%')).distinct()))
+            if "asset_part_cpu_cores" in query_params and query_params["asset_part_cpu_cores"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_type == 'cpu_cores').filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part_cpu_cores"] + '%')).distinct()))
+            if "asset_part_data_disk" in query_params and query_params["asset_part_data_disk"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_type == 'data_disk').filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part_data_disk"] + '%')).distinct()))
+            if "asset_part_disk" in query_params and query_params["asset_part_disk"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_type == 'disk').filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part_disk"] + '%')).distinct()))
+            if "asset_part_gpu" in query_params and query_params["asset_part_gpu"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_type == 'gpu').filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part_gpu"] + '%')).distinct()))
+            if "asset_part_ib_card" in query_params and query_params["asset_part_ib_card"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_type == 'ib_card').filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part_ib_card"] + '%')).distinct()))
+            if "asset_part_memory" in query_params and query_params["asset_part_memory"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_type == 'memory').filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part_memory"] + '%')).distinct()))
+            if "asset_part_module" in query_params and query_params["asset_part_module"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_type == 'module').filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part_module"] + '%')).distinct()))
+            if "asset_part_nic" in query_params and query_params["asset_part_nic"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_type == 'nic').filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part_nic"] + '%')).distinct()))
+            # 描述模糊查询，存储的json字段，需要解然后模糊查询
+            if "asset_description" in query_params and query_params["asset_description"]:
+                query = query.filter(AssetBasicInfo.description.like('%' + query_params["asset_description"] + '%'))
             # 总数
             count = query.count()
             # 排序
@@ -538,7 +578,13 @@ class AssetSQL:
                 # 库存配件的开头默认PART_
                 part_type_start = "PART_" if part_catalog == "inventory" else ""
                 # 过滤
-                query = query.filter(AssetPartsInfo.part_type.like(part_type_start + '%' + query_params["part_type"] + '%'))
+                # 单独排除otherPartsInfo
+                if query_params["part_type"] == "otherPartsInfo":
+                    query = query.filter(~AssetPartsInfo.part_type.in_(asset_part_type_dict))
+                else:
+                    query = query.filter(AssetPartsInfo.part_type.like(part_type_start + '%' + query_params["part_type"] + '%'))
+            if "manufacturer_name" in query_params and query_params["manufacturer_name"]:
+                query = query.filter(AssetManufacturesInfo.name.like('%' + query_params["manufacturer_name"] + '%'))
             if "part_config" in query_params and query_params["part_config"]:
                 query = query.filter(AssetPartsInfo.part_config.like('%' + query_params["part_config"] + '%'))
             if "part_number" in query_params and query_params["part_number"]:

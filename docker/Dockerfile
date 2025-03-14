@@ -1,4 +1,4 @@
-FROM m.daocloud.io/docker.io/ubuntu:20.04
+FROM ubuntu:20.04
 
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
@@ -10,7 +10,7 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends apt-utils \
 
 COPY . /opt/dingoops
 
-RUN pip install -r /opt/dingoops/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install -r /opt/dingoops/requirements.txt
 
 RUN apt-get clean \
     && rm -rf ~/.cache/pip \
@@ -21,6 +21,6 @@ COPY ./etc/gunicorn.py /etc/dingoops/gunicorn.py
 COPY ./docker/start_service.sh /usr/local/bin/start_service.sh
 RUN chmod +x /usr/local/bin/start_service.sh
 WORKDIR /opt/dingoops
-EXPOSE 8889
+EXPOSE 8887
 
 CMD ["start_service.sh"]

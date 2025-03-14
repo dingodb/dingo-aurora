@@ -342,8 +342,23 @@ async def list_assets(
         department_name:str = Query(None, description="部门"),
         user_name:str = Query(None, description="负责人"),
         host_name:str = Query(None, description="主机名称"),
-        asset_manufacture_id:str = Query(None, description="厂商id"),
-        asset_manufacture_name:str = Query(None, description="厂商名称"),
+        ip:str = Query(None, description="IP地址"),
+        idrac:str = Query(None, description="IDRAC"),
+        use_to:str = Query(None, description="用途"),
+        operate_system:str = Query(None, description="操作系统"),
+        manufacturer_id:str = Query(None, description="厂商id"),
+        manufacturer_name:str = Query(None, description="厂商名称"),
+        asset_part:str = Query(None, description="配件信息"),
+        asset_part_cpu:str = Query(None, description="配件CPU信息"),
+        asset_part_cpu_cores:str = Query(None, description="配件逻辑核心数信息"),
+        asset_part_data_disk:str = Query(None, description="配件数据盘信息"),
+        asset_part_disk:str = Query(None, description="配件系统盘信息"),
+        asset_part_gpu:str = Query(None, description="配件GPU信息"),
+        asset_part_ib_card:str = Query(None, description="配件IB卡信息"),
+        asset_part_memory:str = Query(None, description="配件内存信息"),
+        asset_part_module:str = Query(None, description="配件模块信息"),
+        asset_part_nic:str = Query(None, description="配件网卡信息"),
+        asset_description:str = Query(None, description="资产描述"),
         page: int = Query(1, description="页码"),
         page_size: int = Query(10, description="页数量大小"),
         sort_keys:str = Query(None, description="排序字段"),
@@ -382,10 +397,40 @@ async def list_assets(
             query_params['user_name'] = user_name
         if host_name:
             query_params['host_name'] = host_name
-        if asset_manufacture_id:
-            query_params['manufacture_id'] = asset_manufacture_id
-        if asset_manufacture_name:
-            query_params['manufacture_name'] = asset_manufacture_name
+        if ip:
+            query_params['ip'] = ip
+        if idrac:
+            query_params['idrac'] = idrac
+        if use_to:
+            query_params['use_to'] = use_to
+        if operate_system:
+            query_params['operate_system'] = operate_system
+        if manufacturer_id:
+            query_params['manufacture_id'] = manufacturer_id
+        if manufacturer_name:
+            query_params['manufacture_name'] = manufacturer_name
+        if asset_part:
+            query_params['asset_part'] = asset_part
+        if asset_part_cpu:
+            query_params['asset_part_cpu'] = asset_part_cpu
+        if asset_part_cpu_cores:
+            query_params['asset_part_cpu_cores'] = asset_part_cpu_cores
+        if asset_part_data_disk:
+            query_params['asset_part_data_disk'] = asset_part_data_disk
+        if asset_part_disk:
+            query_params['asset_part_disk'] = asset_part_disk
+        if asset_part_gpu:
+            query_params['asset_part_gpu'] = asset_part_gpu
+        if asset_part_ib_card:
+            query_params['asset_part_ib_card'] = asset_part_ib_card
+        if asset_part_memory:
+            query_params['asset_part_memory'] = asset_part_memory
+        if asset_part_module:
+            query_params['asset_part_module'] = asset_part_module
+        if asset_part_nic:
+            query_params['asset_part_nic'] = asset_part_nic
+        if asset_description:
+            query_params['asset_description'] = asset_description
         # 查询成功
         result = assert_service.list_assets(query_params, page, page_size, sort_keys, sort_dirs)
         return result
@@ -541,7 +586,7 @@ async def upload_asset_xlsx(asset_type: str, file: UploadFile = File(...)):
             if server_error_index:
                 raise Fail("import server data error", error_message=f"导入服务器失败, sheet[asset]页错误行号:{server_error_index}")
             # 2、资产设备sheet
-            df = pandas.read_excel(buffer, sheet_name=ASSET_TEMPLATE_PART_SHEET)
+            df = pandas.read_excel(buffer, sheet_name=ASSET_TEMPLATE_PART_SHEET, dtype={'资产编号': str},)
             # 遍历
             # 定义错误行号
             server_part_error_index = []
@@ -682,6 +727,7 @@ async def list_assets_parts(
         asset_id: str = Query(None, description="资产id"),
         asset_name: str = Query(None, description="资产名称"),
         part_type: str = Query(None, description="配件类型"),
+        manufacturer_name: str = Query(None, description="厂商名称"),
         part_config: str = Query(None, description="配件内容"),
         part_number: str = Query(None, description="配件型号"),
         surplus: str = Query(None, description="剩余数量"),
@@ -705,6 +751,8 @@ async def list_assets_parts(
             query_params["asset_name"] = asset_name
         if part_type:
             query_params["part_type"] = part_type
+        if manufacturer_name:
+            query_params["manufacturer_name"] = manufacturer_name
         if part_config:
             query_params["part_config"] = part_config
         if part_number:

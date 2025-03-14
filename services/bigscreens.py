@@ -16,6 +16,7 @@ region_name = CONF.DEFAULT.region_name
 nightingale_base_url = CONF.bigscreen.nightingale_base_url
 nightingale_username = CONF.bigscreen.nightingale_username
 nightingale_password = CONF.bigscreen.nightingale_password
+sequence_list = CONF.bigscreen.sequence_list  # 序列值指标
 
 class BigScreensService:
     @classmethod
@@ -37,8 +38,12 @@ class BigScreensService:
                 return None
             # 通过get请求读取实时监控数据 指标项的查询语句 + / 需要转义
             request_url = prometheus_query_url + "query?query=" + urllib.parse.quote(query)
+            if name in sequence_list:
+                sequence = True
+            else:
+                sequence = False
             response = requests.get(request_url)
-            return self.__handle_response(response)
+            return self.__handle_response(response,sequence)
 
         # 通过 memcached 和 mysql 获取数据
         memcached_client = Client((CONF.bigscreen.memcached_address), timeout=1)
@@ -47,6 +52,8 @@ class BigScreensService:
             print(f"memcached_metrics: {name} -> {memcached_metrics.decode()}")
             if memcached_metrics:
                 print("fetch data from cache")
+                if name in sequence:
+                    return list(memcached_metrics.decode())
                 return memcached_metrics.decode()
         except Exception as e:
             print("fetch data from cache failed")
@@ -56,13 +63,13 @@ class BigScreensService:
         bigscreen_metrics = BigscreenSQL.get_bigscreen_metrics_by_name_and_region(name, region)
         if bigscreen_metrics:
             print("fetch data from db")
-            return bigscreen_metrics.data
+            return json.loads(bigscreen_metrics.data)
         else:
             return None
 
     # 解析接口返回的数据
     @classmethod
-    def __handle_response(self, response):
+    def __handle_response(self, response,sequence=False):
         try:
             json_response = response.json()
             if json_response:
@@ -71,7 +78,10 @@ class BigScreensService:
                     json_data_result = json_data['result']
                     if json_data_result == []:
                         return 0
-                    return json_data_result[0]['value'][1]
+                    if not sequence:
+                        return json_data_result[0]['value'][1]
+                    else:
+                        return  [{**result, **result.get('metric', {})} if isinstance(result.get('metric', {}), dict) else result  for result in json_data_result]
         except Exception as e:
             raise e
 
@@ -102,6 +112,8 @@ class BigScreensService:
             if metrics:
                 metrics.data = data
                 metrics.last_modified = datetime.get_now_time()
+                if isinstance(data, list):
+                    metrics.data = json.dumps(data)
                 BigscreenSQL.update_bigscreen_metrics(metrics)
             else:
                 metrics = BigscreenMetrics(
@@ -111,6 +123,8 @@ class BigScreensService:
                     region = region_name,
                     last_modified = datetime.get_now_time()
                 )
+                if isinstance(data, list):
+                    metrics.data = json.dumps(data)
                 BigscreenSQL.create_bigscreen_metrics(metrics)
 
 

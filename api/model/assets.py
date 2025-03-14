@@ -146,6 +146,7 @@ class AssetBatchUpdateApiModel(BaseModel):
     asset_ids: str = Field(None, description="资产数据的id的拼装字符串")
     asset_type_id: Optional[str] = Field(None, description="资产设备的类型id")
     asset_type: Optional[str] = Field(None, description="资产类型")
+    equipment_number: Optional[str] = Field(None, description="资产设备型号")
     manufacturer_id: Optional[str] = Field(None, description="厂商id")
     department_id: Optional[str] = Field(None, description="资产归属的部门id")
     department_name: Optional[str] = Field(None, description="资产归属的部门名称")
