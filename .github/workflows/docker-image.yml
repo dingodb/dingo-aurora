@@ -35,7 +35,7 @@ jobs:
           context: .
           file: ./docker/Dockerfile
           # Note: tags has to be all lower-case
-          tags: dongshanyi/dingoops:latest
+          tags: dingodatabase/dingoops:latest
           # build on feature branches, push only on develop branch
           push: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' }}
 
