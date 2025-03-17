@@ -31,7 +31,7 @@ def upgrade() -> None:
         sa.Column("unit", sa.String(length=32), nullable=True, comment='指标单位'),
         sa.Column("extra", sa.Text(), nullable=True, comment='扩展信息'),
         sa.PrimaryKeyConstraint('id'),
-        # sa.UniqueConstraint('name'),
+        sa.UniqueConstraint('name'),
         comment='大屏指标配置信息表'
     )
     # ### 初始化大屏指标配置信息 ###
@@ -257,7 +257,7 @@ def upgrade() -> None:
         sa.Column("region", sa.String(length=128), nullable=True, comment='地区（智算中心）'),
         sa.Column("last_modified", sa.DateTime(), nullable=True, comment='最近修改时间'),
         sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('name'),
+        # sa.UniqueConstraint('name'),
         comment='大屏指标表'
     )
 
