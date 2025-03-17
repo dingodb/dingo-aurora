@@ -857,7 +857,8 @@ class AssetsService:
                     operate_system = extra_json["operate_system"] if extra_json is not None and "operate_system" in extra_json else None
                     # 修改或添加新数据
                     temp_asset_data = {'机柜': temp['asset_position']['cabinet_position'],'U位': temp['asset_position']['u_position'],
-                                       '设备名称': temp['asset_name'],'设备型号': temp['equipment_number'],'资产编号': temp['asset_number'],'序列号': temp['sn_number'],
+                                       '设备名称': temp['asset_name'],'设备类型': temp['asset_type'].replace("SERVER_", "") if temp['asset_type'] else None,
+                                       '设备型号': temp['equipment_number'],'资产编号': temp['asset_number'],'序列号': temp['sn_number'],
                                        '部门': temp['asset_belong']['department_name'],'负责人': temp['asset_belong']['user_name'],'主机名': host_name,'IP': ip,
                                        'IDRAC': idrac,'用途': use_to,'密码': None,'操作系统': operate_system,
                                        '购买日期': temp['asset_contract']['purchase_date'],'厂商': temp['asset_manufacturer']['name'],'批次': temp['asset_contract']['batch_number'],'备注': temp['asset_description'],}
@@ -1097,7 +1098,8 @@ class AssetsService:
                 operate_system = extra_json["operate_system"] if "operate_system" in extra_json else None
                 # 修改或添加新数据
                 temp_asset_data = {'机柜': temp['asset_position']['cabinet_position'],'U位': temp['asset_position']['u_position'],
-                                   '设备名称': temp['asset_name'],'设备型号': temp['equipment_number'],'资产编号': temp['asset_number'],'序列号': temp['sn_number'],
+                                   '设备名称': temp['asset_name'],'设备类型': temp['asset_type'].replace("SERVER_", "") if temp['asset_type'] else None,
+                                   '设备型号': temp['equipment_number'],'资产编号': temp['asset_number'],'序列号': temp['sn_number'],
                                    '部门': temp['asset_belong']['department_name'],'负责人': temp['asset_belong']['user_name'],'主机名': host_name,'IP': ip,
                                    'IDRAC': idrac,'用途': use_to,'密码': None,'操作系统': operate_system,
                                    '购买日期': temp['asset_contract']['purchase_date'],'厂商': temp['asset_manufacturer']['name'],'批次': temp['asset_contract']['batch_number'],'备注': temp['asset_description'],}

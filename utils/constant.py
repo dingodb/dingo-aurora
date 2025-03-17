@@ -37,7 +37,7 @@ asset_belong_info_columns = {"department_name":"部门","user_name":"负责人"}
 # 资产设备租户信息列名对应表的列
 asset_customer_info_columns = {"customer_name":"客户信息","rental_duration":"出租时长"}
 # 资产设备配件信息列名对应表的列
-asset_part_info_columns = {"cpu":"CPU","cpu_cores":"逻辑核心数量","memory":"内存","disk":"硬盘","raid":"RAID","nic":"网卡","gpu":"GPU","ib_card":"IB卡"}
+asset_part_info_columns = {"cpu":"CPU","cpu_cores":"逻辑核心数量","memory":"内存","disk":"系统盘","data_disk":"数据盘","nic":"网卡","gpu":"GPU","ib_card":"IB卡","module":"模块","part_update":"配件变更"}
 # 资产-网络设备基础信息列名对应表的列
 asset_network_basic_info_columns = {"asset_name":"设备名称","asset_type":"设备类型","equipment_number":"设备型号","asset_number":"资产编号"}
 asset_network_basic_info_extra_columns = {"host_name":"主机名","manage_address":"管理地址","external_gateway":"带外网关","m_lagmac":"m-lag mac","network_equipment_role":"网络设备角色","serial_number":"序号","loopback":"loopback","vlanifv4":"vlanifv4","bgp_as":"BGP_AS","use_to":"用途"}
