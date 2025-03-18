@@ -52,6 +52,8 @@ class BigScreensService:
             print(f"memcached_metrics: {name} -> {memcached_metrics.decode()}")
             if memcached_metrics:
                 print("fetch data from cache")
+                if name in sequence:
+                    return list(memcached_metrics.decode())
                 return memcached_metrics.decode()
         except Exception as e:
             print("fetch data from cache failed")
@@ -61,7 +63,7 @@ class BigScreensService:
         bigscreen_metrics = BigscreenSQL.get_bigscreen_metrics_by_name_and_region(name, region)
         if bigscreen_metrics:
             print("fetch data from db")
-            return bigscreen_metrics.data
+            return json.loads(bigscreen_metrics.data)
         else:
             return None
 
@@ -110,6 +112,8 @@ class BigScreensService:
             if metrics:
                 metrics.data = data
                 metrics.last_modified = datetime.get_now_time()
+                if isinstance(data, list):
+                    metrics.data = json.dumps(data)
                 BigscreenSQL.update_bigscreen_metrics(metrics)
             else:
                 metrics = BigscreenMetrics(
@@ -119,6 +123,8 @@ class BigScreensService:
                     region = region_name,
                     last_modified = datetime.get_now_time()
                 )
+                if isinstance(data, list):
+                    metrics.data = json.dumps(data)
                 BigscreenSQL.create_bigscreen_metrics(metrics)
 
 

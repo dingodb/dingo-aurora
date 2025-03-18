@@ -24,8 +24,10 @@ class BigscreenMetrics(Base):
     __tablename__ = "ops_bigscreen_metrics"
 
     id = Column(String(length=128), primary_key=True, nullable=False, index=True, unique=False)
-    name = Column(String(length=128), ForeignKey("ops_bigscreen_metrics_configs.name"), nullable=False)
-    data = Column(Float, nullable=True)
+
+    name = Column(String, ForeignKey("ops_bigscreen_metrics_configs.name"), nullable=False)
+    data = Column(Text, nullable=True)
+
     region = Column(String(length=128), nullable=True)
     last_modified = Column(DateTime, nullable=True)
 
