@@ -125,6 +125,8 @@ class AssetSQL:
                 query = query.filter(AssetManufacturesInfo.id == query_params["manufacture_id"])
             if "manufacture_name" in query_params and query_params["manufacture_name"]:
                 query = query.filter(AssetManufacturesInfo.name.like('%' + query_params["manufacture_name"] + '%'))
+            if "asset_part" in query_params and query_params["asset_part"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part"] + '%')).distinct()))
             # 总数
             count = query.count()
             # 排序
