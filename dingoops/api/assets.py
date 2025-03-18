@@ -344,6 +344,7 @@ async def list_assets(
         host_name:str = Query(None, description="主机名称"),
         asset_manufacture_id:str = Query(None, description="厂商id"),
         asset_manufacture_name:str = Query(None, description="厂商名称"),
+        asset_part:str = Query(None, description="配件信息"),
         page: int = Query(1, description="页码"),
         page_size: int = Query(10, description="页数量大小"),
         sort_keys:str = Query(None, description="排序字段"),
@@ -386,6 +387,8 @@ async def list_assets(
             query_params['manufacture_id'] = asset_manufacture_id
         if asset_manufacture_name:
             query_params['manufacture_name'] = asset_manufacture_name
+        if asset_part:
+            query_params['asset_part'] = asset_part
         # 查询成功
         result = assert_service.list_assets(query_params, page, page_size, sort_keys, sort_dirs)
         return result
