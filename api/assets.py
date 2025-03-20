@@ -346,8 +346,8 @@ async def list_assets(
         idrac:str = Query(None, description="IDRAC"),
         use_to:str = Query(None, description="用途"),
         operate_system:str = Query(None, description="操作系统"),
-        asset_manufacturer_id:str = Query(None, description="厂商id"),
-        asset_manufacturer_name:str = Query(None, description="厂商名称"),
+        manufacturer_id:str = Query(None, description="厂商id"),
+        manufacturer_name:str = Query(None, description="厂商名称"),
         asset_part:str = Query(None, description="配件信息"),
         asset_description:str = Query(None, description="资产描述"),
         page: int = Query(1, description="页码"),
@@ -396,10 +396,10 @@ async def list_assets(
             query_params['use_to'] = use_to
         if operate_system:
             query_params['operate_system'] = operate_system
-        if asset_manufacturer_id:
-            query_params['manufacture_id'] = asset_manufacturer_id
-        if asset_manufacturer_name:
-            query_params['manufacture_name'] = asset_manufacturer_name
+        if manufacturer_id:
+            query_params['manufacture_id'] = manufacturer_id
+        if manufacturer_name:
+            query_params['manufacture_name'] = manufacturer_name
         if asset_part:
             query_params['asset_part'] = asset_part
         if asset_description:
