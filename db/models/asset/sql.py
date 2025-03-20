@@ -559,6 +559,8 @@ class AssetSQL:
                 part_type_start = "PART_" if part_catalog == "inventory" else ""
                 # 过滤
                 query = query.filter(AssetPartsInfo.part_type.like(part_type_start + '%' + query_params["part_type"] + '%'))
+            if "manufacturer_name" in query_params and query_params["manufacturer_name"]:
+                query = query.filter(AssetManufacturesInfo.name.like('%' + query_params["manufacturer_name"] + '%'))
             if "part_config" in query_params and query_params["part_config"]:
                 query = query.filter(AssetPartsInfo.part_config.like('%' + query_params["part_config"] + '%'))
             if "part_number" in query_params and query_params["part_number"]:

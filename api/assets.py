@@ -700,6 +700,7 @@ async def list_assets_parts(
         asset_id: str = Query(None, description="资产id"),
         asset_name: str = Query(None, description="资产名称"),
         part_type: str = Query(None, description="配件类型"),
+        manufacturer_name: str = Query(None, description="厂商名称"),
         part_config: str = Query(None, description="配件内容"),
         part_number: str = Query(None, description="配件型号"),
         surplus: str = Query(None, description="剩余数量"),
@@ -723,6 +724,8 @@ async def list_assets_parts(
             query_params["asset_name"] = asset_name
         if part_type:
             query_params["part_type"] = part_type
+        if manufacturer_name:
+            query_params["manufacturer_name"] = manufacturer_name
         if part_config:
             query_params["part_config"] = part_config
         if part_number:
