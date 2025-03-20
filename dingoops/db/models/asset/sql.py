@@ -92,7 +92,7 @@ class AssetSQL:
                 outerjoin(AssetCustomersInfo, AssetCustomersInfo.asset_id == AssetBasicInfo.id)
             # 数据库查询参数
             if "asset_name" in query_params and query_params["asset_name"]:
-                query = query.filter(AssetBasicInfo.name.like('%' + query_params["asset_name"] + '%'))
+                query = query.filter(AssetBasicInfo.name.like('%' + str(query_params["asset_name"]) + '%'))
             if "asset_id" in query_params and query_params["asset_id"]:
                 query = query.filter(AssetBasicInfo.id == query_params["asset_id"])
             if "asset_ids" in query_params and query_params["asset_ids"]:
@@ -114,19 +114,37 @@ class AssetSQL:
             if "equipment_number" in query_params and query_params["equipment_number"]:
                 query = query.filter(AssetBasicInfo.equipment_number.like('%' + query_params["equipment_number"] + '%'))
             if "asset_number" in query_params and query_params["asset_number"]:
-                query = query.filter(AssetBasicInfo.asset_number.like('%' + query_params["asset_number"] + '%'))
+                query = query.filter(AssetBasicInfo.asset_number.like('%' + str(query_params["asset_number"]) + '%'))
             if "sn_number" in query_params and query_params["sn_number"]:
                 query = query.filter(AssetBasicInfo.sn_number.like('%' + query_params["sn_number"] + '%'))
             if "department_name" in query_params and query_params["department_name"]:
                 query = query.filter(AssetBelongsInfo.department_name.like('%' + query_params["department_name"] + '%'))
             if "user_name" in query_params and query_params["user_name"]:
                 query = query.filter(AssetBelongsInfo.user_name.like('%' + query_params["user_name"] + '%'))
+            # 主机名模糊查询，存储的json字段，需要解然后模糊查询
+            if "host_name" in query_params and query_params["host_name"]:
+                query = query.filter(func.json_unquote(func.json_extract(AssetBasicInfo.extra, "$.host_name")).like('%' + query_params["host_name"] + '%'))
+            # IP地址模糊查询，存储的json字段，需要解然后模糊查询
+            if "ip" in query_params and query_params["ip"]:
+                query = query.filter(func.json_unquote(func.json_extract(AssetBasicInfo.extra, "$.ip")).like('%' + query_params["ip"] + '%'))
+            # idrac模糊查询，存储的json字段，需要解然后模糊查询
+            if "idrac" in query_params and query_params["idrac"]:
+                query = query.filter(func.json_unquote(func.json_extract(AssetBasicInfo.extra, "$.idrac")).like('%' + query_params["idrac"] + '%'))
+            # 用途模糊查询，存储的json字段，需要解然后模糊查询
+            if "use_to" in query_params and query_params["use_to"]:
+                query = query.filter(func.json_unquote(func.json_extract(AssetBasicInfo.extra, "$.use_to")).like('%' + query_params["use_to"] + '%'))
+            # 操作系统模糊查询，存储的json字段，需要解然后模糊查询
+            if "operate_system" in query_params and query_params["operate_system"]:
+                query = query.filter(func.json_unquote(func.json_extract(AssetBasicInfo.extra, "$.operate_system")).like('%' + query_params["operate_system"] + '%'))
             if "manufacture_id" in query_params and query_params["manufacture_id"]:
                 query = query.filter(AssetManufacturesInfo.id == query_params["manufacture_id"])
             if "manufacture_name" in query_params and query_params["manufacture_name"]:
                 query = query.filter(AssetManufacturesInfo.name.like('%' + query_params["manufacture_name"] + '%'))
             if "asset_part" in query_params and query_params["asset_part"]:
                 query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part"] + '%')).distinct()))
+            # 描述模糊查询，存储的json字段，需要解然后模糊查询
+            if "asset_description" in query_params and query_params["asset_description"]:
+                query = query.filter(AssetBasicInfo.description.like('%' + query_params["asset_description"] + '%'))
             # 总数
             count = query.count()
             # 排序

@@ -342,9 +342,14 @@ async def list_assets(
         department_name:str = Query(None, description="部门"),
         user_name:str = Query(None, description="负责人"),
         host_name:str = Query(None, description="主机名称"),
-        asset_manufacture_id:str = Query(None, description="厂商id"),
-        asset_manufacture_name:str = Query(None, description="厂商名称"),
+        ip:str = Query(None, description="IP地址"),
+        idrac:str = Query(None, description="IDRAC"),
+        use_to:str = Query(None, description="用途"),
+        operate_system:str = Query(None, description="操作系统"),
+        asset_manufacturer_id:str = Query(None, description="厂商id"),
+        asset_manufacturer_name:str = Query(None, description="厂商名称"),
         asset_part:str = Query(None, description="配件信息"),
+        asset_description:str = Query(None, description="资产描述"),
         page: int = Query(1, description="页码"),
         page_size: int = Query(10, description="页数量大小"),
         sort_keys:str = Query(None, description="排序字段"),
@@ -383,12 +388,22 @@ async def list_assets(
             query_params['user_name'] = user_name
         if host_name:
             query_params['host_name'] = host_name
-        if asset_manufacture_id:
-            query_params['manufacture_id'] = asset_manufacture_id
-        if asset_manufacture_name:
-            query_params['manufacture_name'] = asset_manufacture_name
+        if ip:
+            query_params['ip'] = ip
+        if idrac:
+            query_params['idrac'] = idrac
+        if use_to:
+            query_params['use_to'] = use_to
+        if operate_system:
+            query_params['operate_system'] = operate_system
+        if asset_manufacturer_id:
+            query_params['manufacture_id'] = asset_manufacturer_id
+        if asset_manufacturer_name:
+            query_params['manufacture_name'] = asset_manufacturer_name
         if asset_part:
             query_params['asset_part'] = asset_part
+        if asset_description:
+            query_params['asset_description'] = asset_description
         # 查询成功
         result = assert_service.list_assets(query_params, page, page_size, sort_keys, sort_dirs)
         return result

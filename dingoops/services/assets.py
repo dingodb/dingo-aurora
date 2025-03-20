@@ -1568,11 +1568,11 @@ class AssetsService:
                     if count > 0:
                         raise Fail("manufacturer already exists", error_message="厂商已存在")
                 manufacture_db.name = manufacture_update_info.name
-            # 描述
-            if manufacture_update_info.description is not None and len(manufacture_update_info.description) > 0:
+            # 描述 不是None说明需要更新
+            if manufacture_update_info.description is not None:
                 manufacture_db.description = manufacture_update_info.description
-            # 描述
-            if manufacture_update_info.extra:
+            # 联系人信息 不是None说明需要更新
+            if manufacture_update_info.extra is not None:
                 manufacture_db.extra = json.dumps(manufacture_update_info.extra)
             # 保存对象
             AssetSQL.update_manufacture(manufacture_db)
