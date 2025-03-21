@@ -1203,6 +1203,8 @@ class AssetsService:
                     temp_asset.asset_type = asset_batch.asset_type
                 if asset_batch.description:
                     temp_asset.asset_description = asset_batch.description
+                if asset_batch.equipment_number:
+                    temp_asset.equipment_number = asset_batch.equipment_number
                 # 更新
                 self.update_asset(temp_asset_id, temp_asset)
                 # 归属信息
