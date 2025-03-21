@@ -559,7 +559,7 @@ async def upload_asset_xlsx(asset_type: str, file: UploadFile = File(...)):
             if server_error_index:
                 raise Fail("import server data error", error_message=f"导入服务器失败, sheet[asset]页错误行号:{server_error_index}")
             # 2、资产设备sheet
-            df = pandas.read_excel(buffer, sheet_name=ASSET_TEMPLATE_PART_SHEET)
+            df = pandas.read_excel(buffer, sheet_name=ASSET_TEMPLATE_PART_SHEET, dtype={'资产编号': str},)
             # 遍历
             # 定义错误行号
             server_part_error_index = []
