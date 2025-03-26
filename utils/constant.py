@@ -29,9 +29,9 @@ asset_basic_info_extra_columns = {"host_name":"主机名","ip":"IP","idrac":"IDR
 # 资产设备厂商信息列名对应表的列
 asset_manufacture_info_columns = {"name":"厂商"}
 # 资产设备位置信息列名对应表的列
-asset_position_info_columns = {"cabinet_position":"机柜","u_position":"U位"}
+asset_position_info_columns = {"frame_position":"机房号","cabinet_position":"机柜","u_position":"U位"}
 # 资产设备合同信息列名对应表的列
-asset_contract_info_columns = {"contract_number":"合同号","purchase_date":"购买日期","batch_number":"批次"}
+asset_contract_info_columns = {"contract_number":"采购合同编号","purchase_date":"购买日期","batch_number":"批次"}
 # 资产设备归属信息列名对应表的列
 asset_belong_info_columns = {"department_name":"部门","user_name":"负责人"}
 # 资产设备租户信息列名对应表的列
@@ -44,9 +44,9 @@ asset_network_basic_info_extra_columns = {"host_name":"主机名","manage_addres
 # 资产-网络设备厂商信息列名对应表的列
 asset_network_manufacture_info_columns = {"name":"设备厂商"}
 # 资产-网络设备位置信息列名对应表的列
-asset_network_position_info_columns = {"cabinet_position":"机柜","u_position":"U位"}
+asset_network_position_info_columns = {"frame_position":"机房号","cabinet_position":"机柜","u_position":"U位"}
 # 资产-网络设备合同信息列名对应表的列
-asset_network_contract_info_columns = {"contract_number":"采购合同号"}
+asset_network_contract_info_columns = {"contract_number":"采购合同编号"}
 # 资产-网络设备流信息列名对应表的列
 asset_network_flow_info_columns = {"asset_name":"设备名称","cabinet_position":"机柜","u_position":"U位","port":"端口","opposite_asset_name":"对端设备名称","opposite_cabinet_position":"对端机柜","opposite_u_position":"对端U位","opposite_port":"对端端口","cable_type":"线缆类型","cable_interface_type":"线缆接口类型","cable_length":"线缆长度","label":"标签","opposite_label":"对端标签","description":"备注"}
 # websocket目前接受的数据类型

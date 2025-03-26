@@ -349,6 +349,15 @@ async def list_assets(
         manufacturer_id:str = Query(None, description="厂商id"),
         manufacturer_name:str = Query(None, description="厂商名称"),
         asset_part:str = Query(None, description="配件信息"),
+        asset_part_cpu:str = Query(None, description="配件CPU信息"),
+        asset_part_cpu_cores:str = Query(None, description="配件逻辑核心数信息"),
+        asset_part_data_disk:str = Query(None, description="配件数据盘信息"),
+        asset_part_disk:str = Query(None, description="配件系统盘信息"),
+        asset_part_gpu:str = Query(None, description="配件GPU信息"),
+        asset_part_ib_card:str = Query(None, description="配件IB卡信息"),
+        asset_part_memory:str = Query(None, description="配件内存信息"),
+        asset_part_module:str = Query(None, description="配件模块信息"),
+        asset_part_nic:str = Query(None, description="配件网卡信息"),
         asset_description:str = Query(None, description="资产描述"),
         page: int = Query(1, description="页码"),
         page_size: int = Query(10, description="页数量大小"),
@@ -402,6 +411,24 @@ async def list_assets(
             query_params['manufacture_name'] = manufacturer_name
         if asset_part:
             query_params['asset_part'] = asset_part
+        if asset_part_cpu:
+            query_params['asset_part_cpu'] = asset_part_cpu
+        if asset_part_cpu_cores:
+            query_params['asset_part_cpu_cores'] = asset_part_cpu_cores
+        if asset_part_data_disk:
+            query_params['asset_part_data_disk'] = asset_part_data_disk
+        if asset_part_disk:
+            query_params['asset_part_disk'] = asset_part_disk
+        if asset_part_gpu:
+            query_params['asset_part_gpu'] = asset_part_gpu
+        if asset_part_ib_card:
+            query_params['asset_part_ib_card'] = asset_part_ib_card
+        if asset_part_memory:
+            query_params['asset_part_memory'] = asset_part_memory
+        if asset_part_module:
+            query_params['asset_part_module'] = asset_part_module
+        if asset_part_nic:
+            query_params['asset_part_nic'] = asset_part_nic
         if asset_description:
             query_params['asset_description'] = asset_description
         # 查询成功
