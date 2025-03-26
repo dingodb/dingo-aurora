@@ -142,6 +142,24 @@ class AssetSQL:
                 query = query.filter(AssetManufacturesInfo.name.like('%' + query_params["manufacture_name"] + '%'))
             if "asset_part" in query_params and query_params["asset_part"]:
                 query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part"] + '%')).distinct()))
+            if "asset_part_cpu" in query_params and query_params["asset_part_cpu"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part_cpu"] + '%')).distinct()))
+            if "asset_part_cpu_cores" in query_params and query_params["asset_part_cpu_cores"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part_cpu_cores"] + '%')).distinct()))
+            if "asset_part_data_disk" in query_params and query_params["asset_part_data_disk"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part_data_disk"] + '%')).distinct()))
+            if "asset_part_disk" in query_params and query_params["asset_part_disk"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part_disk"] + '%')).distinct()))
+            if "asset_part_gpu" in query_params and query_params["asset_part_gpu"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part_gpu"] + '%')).distinct()))
+            if "asset_part_ib_card" in query_params and query_params["asset_part_ib_card"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part_ib_card"] + '%')).distinct()))
+            if "asset_part_memory" in query_params and query_params["asset_part_memory"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part_memory"] + '%')).distinct()))
+            if "asset_part_module" in query_params and query_params["asset_part_module"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part_module"] + '%')).distinct()))
+            if "asset_part_nic" in query_params and query_params["asset_part_nic"]:
+                query = query.filter(AssetBasicInfo.id.in_(session.query(AssetPartsInfo.asset_id).filter(AssetPartsInfo.part_config.like('%' + query_params["asset_part_nic"] + '%')).distinct()))
             # 描述模糊查询，存储的json字段，需要解然后模糊查询
             if "asset_description" in query_params and query_params["asset_description"]:
                 query = query.filter(AssetBasicInfo.description.like('%' + query_params["asset_description"] + '%'))
