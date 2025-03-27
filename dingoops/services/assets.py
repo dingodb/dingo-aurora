@@ -898,7 +898,7 @@ class AssetsService:
                                        '部门': temp['asset_belong']['department_name'],'负责人': temp['asset_belong']['user_name'],'主机名': host_name,'IP': ip,
                                        'IDRAC': idrac,'用途': use_to,'密码': None,'操作系统': operate_system,'采购合同编号': temp['asset_contract']['contract_number'],
                                        # '购买日期': temp['asset_contract']['purchase_date'],
-                                       '厂商': temp['asset_manufacturer']['name'],'批次': temp['asset_contract']['batch_number'],'备注': temp['asset_description'],}
+                                       '厂商': temp['asset_manufacturer']['name'],'备注': temp['asset_description'],}
                     # 配件数据
                     if temp['asset_part']:
                         temp_part_data = {'资产编号': temp['asset_number'],}
@@ -1140,7 +1140,7 @@ class AssetsService:
                                    '部门': temp['asset_belong']['department_name'],'负责人': temp['asset_belong']['user_name'],'主机名': host_name,'IP': ip,
                                    'IDRAC': idrac,'用途': use_to,'密码': None,'操作系统': operate_system,'采购合同编号': temp['asset_contract']['contract_number'],
                                    # '购买日期': temp['asset_contract']['purchase_date'],
-                                   '厂商': temp['asset_manufacturer']['name'],'批次': temp['asset_contract']['batch_number'],'备注': temp['asset_description'],}
+                                   '厂商': temp['asset_manufacturer']['name'],'备注': temp['asset_description'],}
                 # 配件数据
                 if temp['asset_part']:
                     temp_part_data = {'资产编号': temp['asset_number'],}
