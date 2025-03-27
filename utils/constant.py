@@ -54,3 +54,6 @@ websocket_data_type = {"big_screen"}
 # websocket的频道以及与数据类型的对应关系
 websocket_channels = ["dingoOps:big_screen_websocket_channel"]
 websocket_type_channels = {"big_screen":"dingoOps:big_screen_websocket_channel"}
+
+# 设备基础配件类型
+asset_part_type_dict = ["cpu","cpu_cores","data_disk","disk","gpu","ib_card","memory","module","nic","part_update"]

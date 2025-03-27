@@ -13,6 +13,8 @@ from db.models.asset.models import Asset, AssetBasicInfo, AssetPartsInfo, AssetM
 
 from enum import Enum
 
+from utils.constant import asset_part_type_dict
+
 #链接数据库，可以使用配置文件进行定义
 # engine = create_engine("mysql+pymysql://root:HworLIIDvmTRsPfQauNskuJF8PcoTuULfu3dEHFg@10.220.56.254:3306/dingoops?charset=utf8mb3", echo=True)
 # 资产排序字段字典
@@ -576,7 +578,11 @@ class AssetSQL:
                 # 库存配件的开头默认PART_
                 part_type_start = "PART_" if part_catalog == "inventory" else ""
                 # 过滤
-                query = query.filter(AssetPartsInfo.part_type.like(part_type_start + '%' + query_params["part_type"] + '%'))
+                # 单独排除otherPartsInfo
+                if query_params["part_type"] == "otherPartsInfo":
+                    query = query.filter(~AssetPartsInfo.part_type.in_(asset_part_type_dict))
+                else:
+                    query = query.filter(AssetPartsInfo.part_type.like(part_type_start + '%' + query_params["part_type"] + '%'))
             if "manufacturer_name" in query_params and query_params["manufacturer_name"]:
                 query = query.filter(AssetManufacturesInfo.name.like('%' + query_params["manufacturer_name"] + '%'))
             if "part_config" in query_params and query_params["part_config"]:
