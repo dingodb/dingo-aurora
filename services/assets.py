@@ -1127,7 +1127,11 @@ class AssetsService:
                 # df.loc[index,"设备名称"] = temp["asset_name"]
                 # 下一行
                 # index = index + 1
-                extra_json = json.loads(temp['extra'])
+                extra_json = {}
+                try:
+                    extra_json = json.loads(temp['extra'])
+                except Exception as e:
+                    LOG.error(e)
                 host_name = extra_json["host_name"] if "host_name" in extra_json else None
                 ip = extra_json["ip"] if "ip" in extra_json else None
                 idrac = extra_json["idrac"] if "idrac" in extra_json else None
