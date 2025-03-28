@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 import time
 
 from dingoops.services.syn_bigscreens import BigScreenSyncService
+from dingoops.services.websocket_service import websocket_service
+
 
 scheduler = BackgroundScheduler()
 blocking_scheduler = BlockingScheduler()
@@ -51,6 +53,8 @@ def fetch_bigscreen_metrics():
 
         # 发送mq消息，往中心region发送一份数据
         BigScreenSyncService.send_mq_message(json.dumps({"region_name":region_name, "metrics_dict":metrics_dict}))
+        # 发送websocket更新消息
+        websocket_service.send_websocket_message('big_screen', json.dumps({"refresh_flag": True}))
     except Exception as e:
         print(f"缓存写入失败: {e}")
 
