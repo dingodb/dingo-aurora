@@ -36,11 +36,11 @@ async def websocket_endpoint(websocket: WebSocket, websocket_type: str):
         raise HTTPException(status_code=400, detail="websocket连接失败")
 
 # websocket的测试接口，向大屏订阅发送个测试消息
-@router.post("/websocket/test", summary="测试操作类websocket的消息", description="测试操作websocket的消息")
-async def send_websocket_message():
+@router.post("/websocket/test/{websocket_type}", summary="测试操作类websocket的消息", description="测试操作websocket的消息")
+async def send_websocket_message(websocket_type: str):
     try:
         # 发送测试消息
-        websocket_service.send_test_message()
+        websocket_service.send_test_message(websocket_type)
     except Exception as e:
         import traceback
         traceback.print_exc()

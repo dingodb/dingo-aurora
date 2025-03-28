@@ -50,9 +50,10 @@ class WebSocketService:
         await websocket_connection_manager.broadcast_websocket(websocket_type, websocket, message['data'])
 
     # 发送redis的频道消息 适合操作类触发的websocket消息
-    def send_test_message(self):
+    def send_test_message(self, websocket_type:str):
         try:
-            redis_channel_service.publish_channel_message(websocket_type_channels["big_screen"], json.dumps({"refresh_flag": True}))
+            redis_channel_service.publish_channel_message(websocket_type_channels[websocket_type], json.dumps({"refresh_flag": True}))
+            print("send redis channel message success")
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -141,6 +142,15 @@ class WebSocketService:
             WebSocketService.big_screen_last_time = big_screen_metric.last_modified
         # 返回
         return message
+
+    # 根据类型发送redis的频道消息 适合操作类触发的websocket消息
+    def send_websocket_message(self, websocket_type:str, message):
+        try:
+            redis_channel_service.publish_channel_message(websocket_type_channels[websocket_type], message)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise Fail("send redis channel message fail", error_message="发送redis频道消息失败")
 
 # 声明websocket的service
 websocket_service = WebSocketService()
