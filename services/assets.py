@@ -209,7 +209,7 @@ class AssetsService:
             asset_manufacture_info_db = None
             asset_manufacture_info_db_new = None
             if asset.asset_manufacturer:
-                asset_manufacture_info_db = self.check_manufacturer_exists(asset)
+                asset_manufacture_info_db = self.check_manufacturer_exists_by_name(asset.asset_manufacturer.name)
             # 数据库不存在当前厂商
             if not asset_manufacture_info_db:
                 asset_manufacture_info_db_new = self.convert_asset_manufacturer_info_db(asset)
@@ -249,6 +249,16 @@ class AssetsService:
                 return AssetSQL.get_manufacture_by_id(asset.asset_manufacturer.id)
             if asset.asset_manufacturer.name:
                 return AssetSQL.get_manufacture_by_name(asset.asset_manufacturer.name)
+        # 返回
+        return asset_manufacture_info_db
+
+
+    def check_manufacturer_exists_by_name(self, asset_manufacturer_name:str):
+        # 默认空
+        asset_manufacture_info_db = None
+        # 首先根据条件查询
+        if asset_manufacturer_name:
+            return AssetSQL.get_manufacture_by_name(asset_manufacturer_name)
         # 返回
         return asset_manufacture_info_db
 
