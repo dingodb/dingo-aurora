@@ -20,6 +20,7 @@ depends_on: None
 def upgrade() -> None:
 
     # ### 服务器配件行转列 视图 ###
+    op.execute("DROP VIEW IF EXISTS ops_assets_parts_info_server_view")
     ops_assets_parts_info_server_view = op.execute("""
         CREATE VIEW ops_assets_parts_info_server_view AS
         select oapi.asset_id, 
