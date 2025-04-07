@@ -1770,7 +1770,7 @@ class AssetsService:
         try:
             # 判断当前分类是否被资产使用
             asset_count = AssetSQL.get_asset_count_number_by_asset_type_id(asset_type_id)
-            part_count = AssetSQL.get_asset_count_number_by_asset_type_id(asset_type_id)
+            part_count = AssetSQL.get_part_count_number_by_asset_type_id(asset_type_id)
             if asset_count > 0 or part_count > 0:
                 raise Fail("type used", error_message="分类使用中")
             # 先删除下级然后再删除上级
