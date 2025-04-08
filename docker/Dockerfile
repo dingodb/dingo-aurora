@@ -21,6 +21,6 @@ COPY ./etc/gunicorn.py /etc/dingoops/gunicorn.py
 COPY ./docker/start_service.sh /usr/local/bin/start_service.sh
 RUN chmod +x /usr/local/bin/start_service.sh
 WORKDIR /opt/dingoops
-EXPOSE 8889
+EXPOSE 8887
 
 CMD ["start_service.sh"]
