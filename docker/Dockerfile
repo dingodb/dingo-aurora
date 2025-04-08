@@ -27,7 +27,9 @@ COPY ./etc/dingoops.conf /etc/dingoops/dingoops.conf
 COPY ./etc/supervisord.conf /etc/dingoops/supervisord.conf
 COPY ./docker/start_service.sh /usr/local/bin/start_service.sh
 RUN chmod +x /usr/local/bin/start_service.sh
+
 WORKDIR /opt/dingo-aurora
+
 EXPOSE 8887
 
 CMD ["start_service.sh"]
