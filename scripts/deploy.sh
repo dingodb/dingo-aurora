@@ -1,7 +1,7 @@
 #!/bin/bash
 
 harbor_url=${1:-"docker.io/dongshany"}
-node_port=${2:-"8889"}
+node_port=${2:-"8887"}
 
 image_version=${4:-"latest"}
 module_name=${5:-"dingoops"}
