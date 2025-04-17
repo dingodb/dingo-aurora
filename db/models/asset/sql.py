@@ -633,6 +633,12 @@ class AssetSQL:
             session.add(asset_part_info)
 
     @classmethod
+    def create_asset_part_relation_info(cls, asset_part_relation_info):
+        session = get_session()
+        with session.begin():
+            session.add_all(asset_part_relation_info)
+
+    @classmethod
     def update_asset_part(cls, asset_part_info):
         # Session = sessionmaker(bind=engine, expire_on_commit=False)
         # session = Session()

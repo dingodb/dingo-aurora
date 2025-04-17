@@ -23,10 +23,15 @@ class AssetPartApiModel(BaseModel):
     part_type: Optional[str] = Field(None, description="配件的类型")
     part_type_id: Optional[str] = Field(None, description="配件的类型id")
     part_brand: Optional[str] = Field(None, description="配件的品牌")
+    part_model: Optional[str] = Field(None, description="配件的型号")
     part_config: Optional[str] = Field(None, description="配件的配置")
-    part_number: Optional[str] = Field(None, description="配件的编号")
+    part_number: Optional[str] = Field(None, description="配件的资产编号")
     personal_used_flag: Optional[bool] = Field(False, description="配件是否可自用")
     surplus: Optional[str] = Field(None, description="配件的剩余情况")
+    purchase_contract_number: Optional[str] = Field(None, description="采购合同编号")
+    position: Optional[str] = Field(None, description="位置")
+    part_sn: Optional[List[str]] = Field(None, description="配件的序列号SN")
+    fixed_flag: Optional[bool] = Field(False, description="配件是否固定资产")
     description: Optional[str] = Field(None, description="配件的备注描述")
 
 
