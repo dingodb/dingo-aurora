@@ -58,14 +58,26 @@ class AssetPartsInfo(Base):
     part_type_id = Column(String(length=128), nullable=True)
     part_type = Column(String(length=128), nullable=True)
     part_brand = Column(String(length=128), nullable=True)
+    part_model = Column(String(length=128), nullable=True)
     part_config = Column(String(length=128), nullable=True)
     part_number = Column(String(length=128), nullable=True)
     personal_used_flag = Column(Boolean, nullable=True, default=False)
     surplus = Column(String(length=128), nullable=True)
+    purchase_contract_number = Column(String(length=128), nullable=True)
+    position = Column(String(length=128), nullable=True)
+    fixed_flag = Column(Boolean, nullable=True, default=False)
     name = Column(String(length=128), nullable=True)
     create_date = Column(DateTime, nullable=True)
     description = Column(String(length=255), nullable=True)
     extra = Column(Text)
+
+# 资产设备的配件关联SN信息表
+class AssetPartRelationInfo(Base):
+    __tablename__ = "ops_assets_parts_relations_info"
+
+    id = Column(String(length=128), primary_key= True, nullable=False, index=True, unique=False)
+    asset_part_id = Column(String(length=128), nullable=False)
+    part_sn = Column(String(length=128), nullable=False)
 
 
 # 资产设备的厂商信息对象
