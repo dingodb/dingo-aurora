@@ -18,6 +18,7 @@ class NetworkConfigObject(BaseModel):
     floating_ip: Optional[bool] = Field(None, description="是否启用浮动ip")
     service_cidr: Optional[str] = Field(None, description="服务网段")
     router_id: Optional[str] = Field(None, description="虚拟路由id")
+    kube_proxy_mode: Optional[str] = Field(None, description="kube proxy模式")
     
 class NodeConfigObject(BaseModel):
     count: Optional[int] = Field(None, description="项目id")
@@ -49,6 +50,7 @@ class ClusterObject(DingoopsObject):
     type: Optional[str] = Field(None, description="集群类型")
     version: Optional[str] = Field(None, description="k8s版本")
     loadbalancer_enabled: Optional[bool] = Field(None, description="是否启用负载均衡器")
+    kube_lb_address: Optional[str] = Field(None, description="负载均衡器的浮动ip")
     security_group: Optional[str] = Field(None, description="安全组名称")
     kube_config: Optional[str] = Field(None, description="cni插件")
     

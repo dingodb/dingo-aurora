@@ -130,39 +130,8 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
         print(f"Terraform error: {e}")
         return False
 
-# def wait_for_ansible_result(task_id: str, timeout: int = 3600, interval: int = 5) -> Optional[Dict[str, Any]]:
 
-#     start_time = time.time()
-#     logging.info(f"等待Ansible任务 {task_id} 完成...")
-    
-#     while True:
-#         # 检查是否超时
-#         if time.time() - start_time > timeout:
-#             logging.error(f"等待Ansible任务 {task_id} 结果超时")
-#             return None
-        
-#         try:
-#             # 获取任务结果
-#             result = ansible_client.get_playbook_result(task_id)
-            
-#             # 检查任务是否完成且成功
-#             if result and result.get('status') == 'SUCCESS':
-#                 logging.info(f"Ansible任务 {task_id} 执行成功")
-#                 return result
-#             elif result and result.get('status') in ['FAILED', 'ERROR']:
-#                 logging.error(f"Ansible任务 {task_id} 执行失败: {result}")
-#                 return None
-                
-#             # 任务仍在运行，继续等待
-#             logging.debug(f"Ansible任务 {task_id} 仍在执行中，继续等待...")
-            
-#         except Exception as e:
-#             logging.warning(f"获取Ansible任务 {task_id} 结果时出错: {str(e)}，将继续尝试")
-        
-#         # 等待一段时间再次检查
-#         time.sleep(interval)
-
-def deploy_kubernetes(cluster:ClusterObject):
+def deploy_kubernetes(cluster:ClusterObject,lb_ip):
     """使用Ansible部署K8s集群"""
     try:
         # #替换
@@ -171,6 +140,8 @@ def deploy_kubernetes(cluster:ClusterObject):
             'kube_version': cluster.version,
             'kube_network_plugin': cluster.network_config.cni,
             'service_cidr': cluster.network_config.service_cidr,
+            "kube_vip_address": lb_ip,
+            "kube_proxy_mode": cluster.network_config.kube_proxy_mode,
         }
         # 修正模板文件路径
         template_file = "k8s-cluster.yml.j2"
@@ -345,6 +316,8 @@ def create_cluster(self, cluster_tf_dict,cluster_dict):
         # 从_meta.hostvars中获取master节点的IP
         master_node_name = cluster_tfvars.cluster_name+"-k8s-master1"
         master_ip = hosts_data["_meta"]["hostvars"][master_node_name]["access_ip_v4"]
+        
+        lb_ip = hosts_data["_meta"]["hostvars"][master_node_name]["lb_ip"]
         cmd = f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no {cluster_tfvars.ssh_user}@{master_ip}'
         result = subprocess.run(cmd, shell=True, capture_output=True)
         if result.returncode != 0:
@@ -359,7 +332,7 @@ def create_cluster(self, cluster_tf_dict,cluster_dict):
         task_info = Taskinfo(task_id=task_id, cluster_id=cluster_tf_dict["id"], state="progress", start_time=datetime.fromtimestamp(datetime.now().timestamp()), msg="k8s_deploy")
         update_task_state(task_info)
         cluster.id = cluster_tf_dict["id"]
-        ansible_result = deploy_kubernetes(cluster)
+        ansible_result = deploy_kubernetes(cluster,lb_ip)
         #阻塞线程，直到ansible_client.get_playbook_result()返回结果
         
         if not ansible_result:

@@ -123,6 +123,13 @@ def iterips(resources):
         if resource_type == 'openstack_networking_floatingip_associate_v2':
             yield openstack_floating_ips(resource)
 
+def iterlbips(resources):
+    '''yield ip tuples of (port_id, ip)'''
+    for module_name, key, resource in resources:
+        resource_type, name = key.split('.', 1)
+        if resource_type == 'openstack_networking_floatingip_associate_v2' and 'public_ip' == name:
+            raw_attrs = resource['primary']['attributes']
+            return raw_attrs['floating_ip']
 
 def parses(prefix):
     def inner(func):
@@ -358,7 +365,7 @@ def openstack_host(resource, module_name):
     return name, attrs, groups
 
 
-def iter_host_ips(hosts, ips):
+def iter_host_ips(hosts, ips,ip_lb):
     '''Update hosts that have an entry in the floating IP list'''
     for host in hosts:
         port_id = host[1]['port_id']
@@ -371,6 +378,7 @@ def iter_host_ips(hosts, ips):
                 'access_ip': ip,
                 'public_ipv4': ip,
                 'ansible_host': ip,
+                'lb_ip': ip_lb,
             })
 
         if 'use_access_ip' in host[1]['metadata'] and host[1]['metadata']['use_access_ip'] == "0" and 'access_ip' in host[1]:
@@ -454,9 +462,10 @@ def main():
 
     # Perform a second pass on the file to pick up floating_ip entries to update the ip address of referenced hosts
     ips = dict(iterips(iterresources(tfstates(args.root))))
-
+    lb_ip = dict(iterlbips(iterresources(tfstates(args.root))))
+    
     if ips:
-        hosts = iter_host_ips(hosts, ips)
+        hosts = iter_host_ips(hosts, ips,lb_ip)
 
     if args.list:
         output = query_list(hosts)
