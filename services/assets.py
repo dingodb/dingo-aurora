@@ -16,7 +16,7 @@ from api.model.assets import AssetCreateApiModel, AssetFlowApiModel
 from api.model.system import OperateLogApiModel
 from db.models.asset.models import AssetBasicInfo, AssetManufacturesInfo, AssetPartsInfo, AssetPositionsInfo, \
     AssetContractsInfo, AssetCustomersInfo, AssetBelongsInfo, AssetType, AssetFlowsInfo, AssetManufactureRelationInfo, \
-    AssetExtendsColumnsInfo
+    AssetExtendsColumnsInfo, AssetPartRelationInfo
 from db.models.asset.sql import AssetSQL
 from math import ceil
 from oslo_log import log
@@ -1926,6 +1926,9 @@ class AssetsService:
             asset_part_id = asset_part_info_db.id
             # 保存对象
             AssetSQL.create_asset_part(asset_part_info_db)
+            # 保存资产配件关联信息
+            asset_part_relation_info_db = self.convert_asset_part_relation_info_db_4api(asset_part, asset_part_id)
+            AssetSQL.create_asset_part_relation_info(asset_part_relation_info_db)
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -1949,10 +1952,14 @@ class AssetsService:
             part_type_id=asset_part.part_type_id,
             part_type=asset_part.part_type,
             part_brand=asset_part.part_brand,
+            part_model=asset_part.part_model,
             part_config=asset_part.part_config,
             part_number=asset_part.part_number,
             personal_used_flag=asset_part.personal_used_flag,
             surplus=asset_part.surplus,
+            purchase_contract_number=asset_part.purchase_contract_number,
+            position=asset_part.position,
+            fixed_flag=asset_part.fixed_flag,
             description=asset_part.description,
         )
         # 重新设置part_type
@@ -1962,6 +1969,26 @@ class AssetsService:
                 asset_part_info_db.part_type = asset_type.asset_type_name
         # 返回数据
         return asset_part_info_db
+
+        # 创建配件对象数据转换 1个数据对象
+
+    def convert_asset_part_relation_info_db_4api(self, asset_part, asset_part_id: str):
+        # 判空
+        if asset_part is None or len(asset_part.part_sn) == 0:
+            return None
+        # 数据处理
+        ret = []
+        # 数据转化为db对象
+        for sn in asset_part.part_sn:
+            asset_part_relation_info_db = AssetPartRelationInfo(
+                id=uuid.uuid4().hex,
+                asset_part_id=asset_part_id,
+                part_sn=sn,
+            )
+            ret.append(asset_part_relation_info_db)
+        # 返回数据
+        return ret
+
 
     # 根据id修改配件
     def update_asset_part_by_id(self, id, asset_part):
