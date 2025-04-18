@@ -729,10 +729,16 @@ async def list_assets_parts(
         part_type: str = Query(None, description="配件类型"),
         manufacturer_name: str = Query(None, description="厂商名称"),
         part_config: str = Query(None, description="配件内容"),
-        part_number: str = Query(None, description="配件型号"),
+        part_number: str = Query(None, description="配件编号"),
+        part_brand: str = Query(None, description="配件品牌"),
+        part_model: str = Query(None, description="配件型号"),
         surplus: str = Query(None, description="剩余数量"),
+        purchase_contract_number: str = Query(None, description="采购合同编号"),
         description: str = Query(None, description="描述信息"),
         personal_used_flag: bool = Query(None, description="是否剩余"),
+        position: str = Query(None, description="位置"),
+        part_sn: str = Query(None, description="配件序列号sn"),
+        fixed_flag: bool = Query(None, description="是否固定资产"),
         name: str = Query(None, description="配件名称"),
         page: int = Query(1, description="页码"),
         page_size: int = Query(10, description="页数量大小"),
@@ -757,8 +763,20 @@ async def list_assets_parts(
             query_params["part_config"] = part_config
         if part_number:
             query_params["part_number"] = part_number
+        if part_brand:
+            query_params["part_brand"] = part_brand
+        if part_model:
+            query_params["part_model"] = part_model
         if surplus:
             query_params["surplus"] = surplus
+        if purchase_contract_number:
+            query_params["purchase_contract_number"] = purchase_contract_number
+        if position:
+            query_params["position"] = position
+        if part_sn:
+            query_params["part_sn"] = part_sn
+        if fixed_flag is not None:
+            query_params["fixed_flag"] = fixed_flag
         if description:
             query_params["description"] = description
         if personal_used_flag is not None:

@@ -1891,10 +1891,20 @@ class AssetsService:
                 else:
                     temp["part_type"] = r.part_type_name
                 temp["part_brand"] = r.part_brand
+                temp["part_model"] = r.part_model
                 temp["part_config"] = r.part_config
                 temp["part_number"] = r.part_number
                 temp["personal_used_flag"] = r.personal_used_flag
                 temp["surplus"] = r.surplus
+                temp["purchase_contract_number"] = r.purchase_contract_number
+                temp["position"] = r.position
+                temp["fixed_flag"] = r.fixed_flag
+                sn_list_data = AssetSQL.get_asset_part_relation_sn_by_id(r.id)
+                sn_list = []
+                if sn_list_data is not None:
+                    for sn in sn_list_data:
+                        sn_list.append(sn.part_sn)
+                temp['part_sn'] = sn_list
                 temp["description"] = r.description
                 # 加入列表
                 ret.append(temp)
@@ -1928,7 +1938,8 @@ class AssetsService:
             AssetSQL.create_asset_part(asset_part_info_db)
             # 保存资产配件关联信息
             asset_part_relation_info_db = self.convert_asset_part_relation_info_db_4api(asset_part, asset_part_id)
-            AssetSQL.create_asset_part_relation_info(asset_part_relation_info_db)
+            if asset_part_relation_info_db is not None:
+                AssetSQL.create_asset_part_relation_info(asset_part_relation_info_db)
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -1977,6 +1988,7 @@ class AssetsService:
         if asset_part is None or len(asset_part.part_sn) == 0:
             return None
         # 数据处理
+        asset_part.part_sn = list(set(asset_part.part_sn))
         ret = []
         # 数据转化为db对象
         for sn in asset_part.part_sn:
@@ -2023,6 +2035,9 @@ class AssetsService:
             # 品牌
             if asset_part.part_brand is not None and len(asset_part.part_brand) > 0:
                 asset_part_db.part_brand = asset_part.part_brand
+            # 型号
+            if asset_part.part_model is not None and len(asset_part.part_model) > 0:
+                asset_part_db.part_model = asset_part.part_model
             # 配置
             if asset_part.part_config is not None and len(asset_part.part_config) > 0:
                 asset_part_db.part_config = asset_part.part_config
@@ -2032,6 +2047,15 @@ class AssetsService:
             # 是否可自用
             if asset_part.personal_used_flag is not None:
                 asset_part_db.personal_used_flag = asset_part.personal_used_flag
+            # 是否固定资产
+            if asset_part.fixed_flag is not None:
+                asset_part_db.fixed_flag = asset_part.fixed_flag
+            # 采购合同编号
+            if asset_part.purchase_contract_number is not None:
+                asset_part_db.purchase_contract_number = asset_part.purchase_contract_number
+            # 位置
+            if asset_part.position is not None:
+                asset_part_db.position = asset_part.position
             # 剩余情况
             if asset_part.surplus is not None and len(asset_part.surplus) > 0:
                 asset_part_db.surplus = asset_part.surplus
@@ -2040,6 +2064,15 @@ class AssetsService:
                 asset_part_db.description = asset_part.description
             # 保存对象
             AssetSQL.update_asset_part(asset_part_db)
+
+            # 修改配件SN
+            if asset_part.part_sn is not None:
+                # 先删除之前老数据
+                AssetSQL.delete_asset_part_relation_by_part_id(id)
+                # 保存资产配件关联信息
+                asset_part_relation_info_db = self.convert_asset_part_relation_info_db_4api(asset_part, id)
+                if asset_part_relation_info_db is not None:
+                    AssetSQL.create_asset_part_relation_info(asset_part_relation_info_db)
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -2056,6 +2089,7 @@ class AssetsService:
         try:
             # 删除对象
             AssetSQL.delete_asset_part(asset_part_id)
+            AssetSQL.delete_asset_part_relation_by_part_id(asset_part_id)
         except Exception as e:
             import traceback
             traceback.print_exc()
