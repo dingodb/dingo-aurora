@@ -24,7 +24,7 @@ def upgrade() -> None:
     # 为ops_assets_parts_info表：增加采购合同编号：purchase_contract_number字段
     op.add_column('ops_assets_parts_info', sa.Column('purchase_contract_number', sa.String(length=128), nullable=True))
     # 为ops_assets_parts_info表：增加位置：position字段
-    op.add_column('ops_assets_parts_info', sa.Column('position', sa.String(length=128), nullable=True))
+    op.add_column('ops_assets_parts_info', sa.Column('position', sa.String(length=65535), nullable=True))
     # 为ops_assets_parts_info表：增加是否固定资产：fixed_flag字段
     op.add_column('ops_assets_parts_info', sa.Column('fixed_flag', sa.Boolean(), nullable=True, default=0))
 

@@ -9,7 +9,7 @@ from typing_extensions import assert_type
 from dingoops.db.engines.mysql import get_session
 from dingoops.db.models.asset.models import Asset, AssetBasicInfo, AssetPartsInfo, AssetManufacturesInfo, AssetPositionsInfo, \
     AssetContractsInfo, AssetBelongsInfo, AssetCustomersInfo, AssetType, AssetFlowsInfo, AssetManufactureRelationInfo, \
-    AssetExtendsColumnsInfo
+    AssetExtendsColumnsInfo, AssetPartRelationInfo
 
 from enum import Enum
 
@@ -558,7 +558,8 @@ class AssetSQL:
             # 外连接
             query = query.outerjoin(AssetBasicInfo, AssetBasicInfo.id == AssetPartsInfo.asset_id). \
                 outerjoin(AssetManufacturesInfo, AssetManufacturesInfo.id == AssetPartsInfo.manufacturer_id). \
-                outerjoin(AssetType, AssetType.id == AssetPartsInfo.part_type_id)
+                outerjoin(AssetType, AssetType.id == AssetPartsInfo.part_type_id). \
+                outerjoin(AssetPartRelationInfo, AssetPartRelationInfo.asset_part_id == AssetPartsInfo.id)
             # 配件类型
             part_catalog = None
             # 数据库查询参数
@@ -589,12 +590,24 @@ class AssetSQL:
                 query = query.filter(AssetPartsInfo.part_config.like('%' + query_params["part_config"] + '%'))
             if "part_number" in query_params and query_params["part_number"]:
                 query = query.filter(AssetPartsInfo.part_number.like('%' + query_params["part_number"] + '%'))
+            if "part_brand" in query_params and query_params["part_brand"]:
+                query = query.filter(AssetPartsInfo.part_brand.like('%' + query_params["part_brand"] + '%'))
+            if "part_model" in query_params and query_params["part_model"]:
+                query = query.filter(AssetPartsInfo.part_model.like('%' + query_params["part_model"] + '%'))
+            if "purchase_contract_number" in query_params and query_params["purchase_contract_number"]:
+                query = query.filter(AssetPartsInfo.purchase_contract_number.like('%' + query_params["purchase_contract_number"] + '%'))
+            if "position" in query_params and query_params["position"]:
+                query = query.filter(AssetPartsInfo.position.like('%' + query_params["position"] + '%'))
             if "surplus" in query_params and query_params["surplus"]:
                 query = query.filter(AssetPartsInfo.surplus.like('%' + query_params["surplus"] + '%'))
             if "description" in query_params and query_params["description"]:
                 query = query.filter(AssetPartsInfo.description.like('%' + query_params["description"] + '%'))
             if "personal_used_flag" in query_params:
                 query = query.filter(AssetPartsInfo.personal_used_flag == query_params["personal_used_flag"])
+            if "fixed_flag" in query_params:
+                query = query.filter(AssetPartsInfo.fixed_flag == query_params["fixed_flag"])
+            if "part_sn" in query_params:
+                query = query.filter(AssetPartRelationInfo.part_sn.like('%' + query_params["part_sn"] + '%'))
             # 总数
             count = query.count()
             # 排序
@@ -656,6 +669,13 @@ class AssetSQL:
             session.query(AssetPartsInfo).filter(AssetPartsInfo.id == asset_part_id).delete()
 
     @classmethod
+    def delete_asset_part_relation_by_part_id(cls, asset_part_id):
+        session = get_session()
+        with session.begin():
+            # 删除资产的厂商信息
+            session.query(AssetPartRelationInfo).filter(AssetPartRelationInfo.asset_part_id == asset_part_id).delete()
+
+    @classmethod
     def delete_asset_part_by_asset_id(cls, asset_id):
         session = get_session()
         with session.begin():
@@ -670,6 +690,11 @@ class AssetSQL:
         with session.begin():
             return session.query(AssetPartsInfo).filter(AssetPartsInfo.id == asset_part_id).first()
 
+    @classmethod
+    def get_asset_part_relation_sn_by_id(cls, asset_part_id):
+        session = get_session()
+        with session.begin():
+            return session.query(AssetPartRelationInfo).filter(AssetPartRelationInfo.asset_part_id == asset_part_id)
 
     # 资产流量查询列表
     @classmethod
