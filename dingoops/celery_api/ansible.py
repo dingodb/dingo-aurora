@@ -1,12 +1,36 @@
 import time
 import ansible_runner
+from dingoops.db.models.cluster.models import Cluster,Taskinfo
+from ansible.plugins.callback import CallbackBase
+
+class CustomCallback(CallbackBase):
+    def __init__(self):
+        super(CustomCallback, self).__init__()
+        self.task_results = []
+
+    def v2_runner_on_ok(self, result):
+        task_name = result._task.get_name()
+        self.task_results.append({"task": task_name, "status": "ok", "result": result._result})
+
+    def v2_runner_on_failed(self, result, ignore_errors=False):
+        task_name = result._task.get_name()
+        self.task_results.append({"task": task_name, "status": "failed", "result": result._result})
+
+    def v2_runner_on_skipped(self, result):
+        task_name = result._task.get_name()
+        self.task_results.append({"task": task_name, "status": "skipped", "result": result._result})
+
+    def v2_runner_on_unreachable(self, result):
+        task_name = result._task.get_name()
+        self.task_results.append({"task": task_name, "status": "unreachable", "result": result._result})
+
+
 
 def run_playbook(playbook_name, inventory, data_dir):
     # 设置环境变量
     envvars = {
         "ANSIBLE_FORKS": 1,
     }
-
     # 运行 Ansible playbook 异步
     thread,runner = ansible_runner.run_async(
         private_data_dir=data_dir,
@@ -16,18 +40,5 @@ def run_playbook(playbook_name, inventory, data_dir):
         envvars=envvars
     )
 
-    # 处理并打印事件日志
-    while runner.status not in ['canceled', 'successful', 'timeout', 'failed']:
-        time.sleep(0.01)
-        continue
-
-    print("out: {}".format(runner.stdout.read()))
-    print("err: {}".format(runner.stderr.read()))
-    print(runner.stdout)
-    # 等待线程完成
-    thread.join()
-
-    # 检查最终状态
-    if runner.rc != 0:
-        raise Exception(f"Playbook execution failed: {runner.rc}")
+    
     return thread,runner

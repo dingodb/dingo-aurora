@@ -84,3 +84,18 @@ async def get_cluster(cluster_id:str):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail="get cluster error")
+    
+@router.delete("/cluster/progress", summary="创建k8s集群进度", description="创建k8s集群进度")
+async def get_cluster(cluster_id:str,):
+    try:
+        # 集群信息存入数据库
+        result = cluster_service.get_cluster(cluster_id)
+        # 操作日志
+        #SystemService.create_system_log(OperateLogApiModel(operate_type="create", resource_type="flow", resource_id=result, resource_name=cluster_object.name, operate_flag=True))
+        return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail="get cluster error")

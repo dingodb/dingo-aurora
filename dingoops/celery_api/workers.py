@@ -8,7 +8,7 @@ import time
 from typing import Any, Dict, Optional
 from celery import Celery
 from dingoops.api.model.cluster import ClusterObject
-from dingoops.celery_api.ansible import run_playbook
+from dingoops.celery_api.ansible import run_playbook,CustomCallback
 from dingoops.celery_api.util import update_task_state
 from dingoops.db.models.cluster.models import Cluster,Taskinfo
 from pydantic import BaseModel, Field
@@ -19,7 +19,6 @@ from dingoops.celery_api.celery_app import celery_app
 from dingoops.celery_api import CONF
 from dingoops.db.engines.mysql import get_engine 
 from dingoops.db.models.cluster.sql import ClusterSQL, TaskSQL
-from ansible.executor.playbook_executor import PlaybookExecutor
 # 用于导入资产文件
 from ansible.inventory.manager import InventoryManager
 from celery import current_task   
@@ -30,6 +29,10 @@ BASE_DIR = os.getcwd()
 TERRAFORM_DIR = os.path.join(BASE_DIR, "dingoops", "templates", "terraform")
 ANSIBLE_DIR = os.path.join(BASE_DIR, "templates", "ansible-deploy")
 WORK_DIR = CONF.DEFAULT.cluster_work_dir
+
+etcd_task_name = "Check etcd cluster status"
+control_plane_task_name = "Check control plane status"
+work_node_task_name = "Check k8s nodes status"
 
 
 class NodeGroup(BaseModel):
@@ -131,8 +134,11 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
         return False
 
 
-def deploy_kubernetes(cluster:ClusterObject,lb_ip):
+def deploy_kubernetes(cluster:ClusterObject,lb_ip:str, task_info:Taskinfo):
     """使用Ansible部署K8s集群"""
+    control_plane_task = Taskinfo(task_id=task_info.task_id, cluster_id=cluster.id, state="progress", start_time=datetime.fromtimestamp(datetime.now().timestamp()),msg="controlplane_deploy")
+    worker_task = Taskinfo(task_id=task_info.task_id, cluster_id=cluster.id, state="progress", start_time=datetime.fromtimestamp(datetime.now().timestamp()),msg="k8sworker_deploy")
+
     try:
         # #替换
         # # 定义上下文字典，包含所有要替换的变量值
@@ -177,13 +183,75 @@ def deploy_kubernetes(cluster:ClusterObject,lb_ip):
         os.chdir(ansible_dir)
         host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "hosts")
         playbook_file  = os.path.join(WORK_DIR, "ansible-deploy", "cluster.yml")
-        run_playbook(playbook_file, host_file, ansible_dir)
         
+        thread,runner = run_playbook(playbook_file, host_file, ansible_dir)
+        # 处理并打印事件日志
+        while runner.status not in ['canceled', 'successful', 'timeout', 'failed']:
+            # 处理事件日志
+            for event in runner.events:
+                # 检查事件是否包含 task 信息
+                if 'event_data' in event and 'task' in event['event_data']:
+                    task_name = event['event_data'].get('task')
+                    host =  event['event_data'].get('host')
+                    task_status = event['event'].split('_')[-1]  # 例如 runner_on_ok -> ok
+                     # 处理 etcd 任务的特殊逻辑
+                    print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
+                    task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                    task_info.state = "success"
+                    update_task_state(task_info)
+                    if task_name == etcd_task_name and host != None:                  
+                        # 写入下一个任务
+                        TaskSQL.insert(control_plane_task)
+                    if task_name == control_plane_task_name and host != None: 
+                        # 写入下一个任务
+                        TaskSQL.insert(worker_task)
+                        update_ansible_status(task_info, event, task_name, host, task_status) 
+                    if task_name == work_node_task_name and host != None and task_status != "failed":
+                        TaskSQL.insert(worker_task)
+                        
+                    #将结果输出到文件中
+                    with open("ansible_debug.log", "a") as log_file:
+                        log_file.write(f"Task: {task_name}, Status: {task_status}, host:  {host}\n")
+            time.sleep(0.01)
+            continue
+        print("out: {}".format(runner.stdout.read()))
+        print("err: {}".format(runner.stderr.read()))
+        print(runner.stdout)
+        # 等待线程完成
+        thread.join()
+        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+        task_info.state = "success"
+        task_info.detail = event['event_data'].get('res').get('msg')
+        update_task_state(task_info)
+        # 检查最终状态
+        if runner.rc != 0:
+            # 更新数据库的状态为failed
+            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "failed"
+            task_info.detail = event['event_data'].get('res').get('msg')
+            update_task_state(task_info)
+            raise Exception(f"Playbook execution failed: {runner.rc}")
+    
     except subprocess.CalledProcessError as e:
         print(f"Ansible error: {e}")
         return False
+
+def update_ansible_status(task_info, event, task_name, host, task_status):
+    if task_name == work_node_task_name and host != None:
+                        # 处理 etcd 任务的特殊逻辑
+        print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
+        if task_status != "failed":
+                            # 处理 etcd 任务失败的逻辑
+            print(f"etcd 任务失败: {task_name} 在主机 {host} 上")
+                            # 处理任务成功的逻辑
+            print(f"任务失败: {task_name} 在主机 {host} 上")
+                            # 更新数据库的状态为failed
+            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "success"
+            task_info.detail = event['event_data'].get('res').get('msg')
+            update_task_state(task_info)
     
-def get_cluster_kubeconfig(cluster):
+def get_cluster_kubeconfig(cluster, lb_ip):
     """获取集群的kubeconfig配置"""
     try:
         # 切换到terraform工作目录
@@ -216,7 +284,7 @@ def get_cluster_kubeconfig(cluster):
         # 替换server地址为外部IP
         kubeconfig = kubeconfig.replace(
             "server: https://127.0.0.1:6443",
-            f"server: https://{master_ip}:6443"
+            f"server: https://{lb_ip}:6443"
         )
         get_engine()
         # 保存kubeconfig到数据库
@@ -332,7 +400,7 @@ def create_cluster(self, cluster_tf_dict,cluster_dict):
         task_info = Taskinfo(task_id=task_id, cluster_id=cluster_tf_dict["id"], state="progress", start_time=datetime.fromtimestamp(datetime.now().timestamp()), msg="k8s_deploy")
         update_task_state(task_info)
         cluster.id = cluster_tf_dict["id"]
-        ansible_result = deploy_kubernetes(cluster,lb_ip)
+        ansible_result = deploy_kubernetes(cluster,lb_ip, task_info)
         #阻塞线程，直到ansible_client.get_playbook_result()返回结果
         
         if not ansible_result:

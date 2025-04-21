@@ -122,7 +122,8 @@ class TestCreateCluster(unittest.TestCase):
         "bus_subnet_id": "",
         "admin_network_id": "a0ee8641-fcb0-486e-9251-db9a4cf81225",
         "bus_network_id": "",
-        "service_cidr": "10.233.0.0/18"
+        "service_cidr": "10.233.0.0/18",
+        "kube_proxy_mode":"ipvs"
     },
     "node_config": [
         {
