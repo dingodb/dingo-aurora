@@ -559,7 +559,7 @@ class AssetSQL:
             query = query.outerjoin(AssetBasicInfo, AssetBasicInfo.id == AssetPartsInfo.asset_id). \
                 outerjoin(AssetManufacturesInfo, AssetManufacturesInfo.id == AssetPartsInfo.manufacturer_id). \
                 outerjoin(AssetType, AssetType.id == AssetPartsInfo.part_type_id). \
-                outerjoin(AssetPartRelationInfo, AssetPartRelationInfo.asset_part_id == AssetPartsInfo.id)
+                outerjoin(AssetPartRelationInfo, AssetPartRelationInfo.asset_part_id == AssetPartsInfo.id).group_by(AssetPartsInfo.id)
             # 配件类型
             part_catalog = None
             # 数据库查询参数
@@ -694,7 +694,7 @@ class AssetSQL:
     def get_asset_part_relation_sn_by_id(cls, asset_part_id):
         session = get_session()
         with session.begin():
-            return session.query(AssetPartRelationInfo).filter(AssetPartRelationInfo.asset_part_id == asset_part_id)
+            return session.query(AssetPartRelationInfo).filter(AssetPartRelationInfo.asset_part_id == asset_part_id).order_by(AssetPartRelationInfo.id.desc())
 
     # 资产流量查询列表
     @classmethod

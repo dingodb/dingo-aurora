@@ -64,7 +64,7 @@ class AssetPartsInfo(Base):
     personal_used_flag = Column(Boolean, nullable=True, default=False)
     surplus = Column(String(length=128), nullable=True)
     purchase_contract_number = Column(String(length=128), nullable=True)
-    position = Column(String(length=128), nullable=True)
+    position = Column(Text)
     fixed_flag = Column(Boolean, nullable=True, default=False)
     name = Column(String(length=128), nullable=True)
     create_date = Column(DateTime, nullable=True)

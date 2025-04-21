@@ -3,14 +3,13 @@ import json
 import os
 import shutil
 import uuid
-from io import BytesIO
+from collections import OrderedDict
 
 import pandas as pd
 from datetime import datetime
 
 from openpyxl.reader.excel import load_workbook
 from openpyxl.styles import Border, Side
-from typing_extensions import assert_type
 
 from api.model.assets import AssetCreateApiModel, AssetFlowApiModel
 from api.model.system import OperateLogApiModel
@@ -1899,6 +1898,7 @@ class AssetsService:
                 temp["purchase_contract_number"] = r.purchase_contract_number
                 temp["position"] = r.position
                 temp["fixed_flag"] = r.fixed_flag
+                # SN
                 sn_list_data = AssetSQL.get_asset_part_relation_sn_by_id(r.id)
                 sn_list = []
                 if sn_list_data is not None:
@@ -1988,16 +1988,17 @@ class AssetsService:
         if asset_part is None or len(asset_part.part_sn) == 0:
             return None
         # 数据处理
-        asset_part.part_sn = list(set(asset_part.part_sn))
+        asset_part.part_sn = list(OrderedDict.fromkeys(asset_part.part_sn))
         ret = []
         # 数据转化为db对象
         for sn in asset_part.part_sn:
-            asset_part_relation_info_db = AssetPartRelationInfo(
-                id=uuid.uuid4().hex,
-                asset_part_id=asset_part_id,
-                part_sn=sn,
-            )
-            ret.append(asset_part_relation_info_db)
+            if sn is not None and len(sn) > 0:
+                asset_part_relation_info_db = AssetPartRelationInfo(
+                    id=uuid.uuid4().hex,
+                    asset_part_id=asset_part_id,
+                    part_sn=sn,
+                )
+                ret.append(asset_part_relation_info_db)
         # 返回数据
         return ret
 
@@ -2033,11 +2034,15 @@ class AssetsService:
                 else:
                     asset_part_db.part_type = None
             # 品牌
-            if asset_part.part_brand is not None and len(asset_part.part_brand) > 0:
+            if asset_part.part_brand is not None:
                 asset_part_db.part_brand = asset_part.part_brand
+            else:
+                asset_part_db.part_brand = ""
             # 型号
-            if asset_part.part_model is not None and len(asset_part.part_model) > 0:
+            if asset_part.part_model is not None:
                 asset_part_db.part_model = asset_part.part_model
+            else:
+                asset_part_db.part_model = ""
             # 配置
             if asset_part.part_config is not None and len(asset_part.part_config) > 0:
                 asset_part_db.part_config = asset_part.part_config
@@ -2050,18 +2055,24 @@ class AssetsService:
             # 是否固定资产
             if asset_part.fixed_flag is not None:
                 asset_part_db.fixed_flag = asset_part.fixed_flag
-            # 采购合同编号
+            # 采购合同号
             if asset_part.purchase_contract_number is not None:
                 asset_part_db.purchase_contract_number = asset_part.purchase_contract_number
-            # 位置
+            else:
+                asset_part_db.purchase_contract_number = ""
+                # 位置
             if asset_part.position is not None:
                 asset_part_db.position = asset_part.position
+            else:
+                asset_part_db.position = ""
             # 剩余情况
             if asset_part.surplus is not None and len(asset_part.surplus) > 0:
                 asset_part_db.surplus = asset_part.surplus
             # 描述
-            if asset_part.description is not None and len(asset_part.description) > 0:
+            if asset_part.description is not None:
                 asset_part_db.description = asset_part.description
+            else:
+                asset_part_db.description = ""
             # 保存对象
             AssetSQL.update_asset_part(asset_part_db)
 
