@@ -11,13 +11,14 @@ from dingoops.api.model.cluster import ClusterObject
 from dingoops.celery_api.ansible import run_playbook
 from dingoops.celery_api.util import update_task_state
 from dingoops.db.models.cluster.models import Cluster,Taskinfo
+from dingoops.db.models.node.models import NodeInfo
 from pydantic import BaseModel, Field
 from fastapi import Path
 from pathlib import Path as PathLib
 from requests import Session
 from dingoops.celery_api.celery_app import celery_app
 from dingoops.celery_api import CONF
-from dingoops.db.engines.mysql import get_engine 
+from dingoops.db.engines.mysql import get_engine, get_session
 from dingoops.db.models.cluster.sql import ClusterSQL, TaskSQL
 from ansible.executor.playbook_executor import PlaybookExecutor
 # 用于导入资产文件
@@ -275,7 +276,7 @@ def get_cluster_kubeconfig(cluster):
         return None
     
 @celery_app.task(bind=True)
-def create_cluster(self, cluster_tf_dict,cluster_dict):
+def create_cluster(cluster_tf_dict, cluster_dict, node_list, scale=False):
     try:
         #task_id = self.request.id.__str__()
         task_id = "da"
@@ -373,7 +374,10 @@ def create_cluster(self, cluster_tf_dict,cluster_dict):
         task_info = Taskinfo(task_id=task_id, cluster_id=cluster_tf_dict["id"], state="progress", start_time=datetime.fromtimestamp(datetime.now().timestamp()), msg="k8s_deploy")
         update_task_state(task_info)
         cluster.id = cluster_tf_dict["id"]
-        ansible_result = deploy_kubernetes(cluster)
+        if scale:
+            ansible_result = scale_kubernetes(cluster)
+        else:
+            ansible_result = deploy_kubernetes(cluster)
         #阻塞线程，直到ansible_client.get_playbook_result()返回结果
         
         if not ansible_result:
@@ -391,7 +395,16 @@ def create_cluster(self, cluster_tf_dict,cluster_dict):
             db_cluster.status = 'running'
             db_cluster.kube_config = kube_config
             session.commit()
-        # 更新数据库的状态为failed
+
+        # 更新集群node的状态为running
+        session = get_session()
+        with session.begin():
+            for node in node_list:
+                db_node = session.get(NodeInfo, node.id)
+                db_node.status = "running"
+                session.commit()
+
+        # 更新数据库的状态为success
         task_info.end_time = time.time()
         task_info.state = "success"
         task_info.detail = ""
@@ -403,24 +416,6 @@ def create_cluster(self, cluster_tf_dict,cluster_dict):
         db_cluster.status = 'failed'
         db_cluster.error_message = str(e.__str__())
         ClusterSQL.update_cluster(cluster_dict["id"])
-        raise
-
-@celery_app.task(bind=True)
-def scale_k8s_node(cluster_id, node_name):
-    
-    try:
-        # Add your cluster creation logic here
-        pass
-        
-    except Exception as e:
-        # 发生错误时更新集群状态为"失败"
-        with Session(get_engine()) as session:
-            cluster = session.get(Cluster, cluster.id)
-            cluster.status = 'failed'
-            cluster.error_message = str(e)
-            session.commit()
-        
-        # 重新抛出异常供 Celery 处理
         raise
 
 

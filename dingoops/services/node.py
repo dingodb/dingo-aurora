@@ -22,6 +22,7 @@ from dingoops.api.model.cluster import ClusterTFVarsObject, NodeGroup, ClusterOb
 from dingoops.db.models.cluster.models import Cluster as ClusterDB
 from dingoops.db.models.node.models import NodeInfo as NodeDB
 from dingoops.utils import neutron
+from dingoops.services.cluster import ClusterService
 
 from dingoops.services.custom_exception import Fail
 from dingoops.services.system import SystemService
@@ -29,6 +30,7 @@ from dingoops.services.system import SystemService
 
 
 LOG = log.getLogger(__name__)
+BASE_DIR = os.getcwd()
 
 # 定义边框样式
 thin_border = Border(
@@ -87,58 +89,79 @@ class NodeService:
             traceback.print_exc()
             raise e
 
+    def convert_clusterinfo_todb(self, cluster:ClusterObject):
+        cluster_info_db = ClusterDB()
+        cluster_info_db.id = cluster.id
+        cluster_info_db.status = "scaling"
+        cluster_info_db.update_time = datetime.now()
+        for node_conf in cluster.node_config:
+            if node_conf.role == "worker":
+                cluster_info_db.worker_count += node_conf.count
+        return cluster_info_db
+
+    def generate_k8s_nodes(self, cluster, k8s_nodes):
+        node_count = k8s_nodes.count()
+        for idx, node in enumerate(cluster.node_config):
+            if node.get("role") == "worker":
+                for i in range(node.count):
+                    k8s_nodes[f"node-{node_count + i +1}"] = NodeGroup(
+                        az=self.get_az_value(node.type),
+                        flavor=node.flavor_id,
+                        floating_ip=False,
+                        etcd=False
+                    )
+
     def create_node(self, cluster: ClusterObject):
         # 在这里执行创建集群的那个流程，先创建vm虚拟机，然后添加到本k8s集群里面
         # 数据校验 todo
         try:
-            cluster_info_db = self.convert_clusterinfo_todb(cluster)
-            # 校验是否存在同名数据库
+            scale = True
+            # 从集群数据库里获取这个集群的集群信息，然后拼接出一个扩容的信息，或者从output.tfvars.json信息里获取
+            cluster_service = ClusterService()
+            clust_dbinfo = cluster_service.get_cluster(cluster.id)
 
-            # 保存对象到数据库
-            res = ClusterSQL.create_cluster(cluster_info_db)
-            # 保存节点信息到数据库
-            # cluster_id = AssetSQL.create_cluster(cluster_info_db)
-            # 调用celery_app项目下的work.py中的create_cluster方法
-            # 查询openstack相关接口，返回需要的信息
-            neutron_api = neutron.API()  # 创建API类的实例
-            external_net = neutron_api.list_external_networks()
+            output_file = os.path.join(BASE_DIR, "dingoops", "ansible-deploy", "inventory", str(cluster.id),
+                                       "terraform", "output.tfvars.json")
+            with open(output_file) as f:
+                content = json.loads(f.read())
+
+            cluster_info_db = self.convert_clusterinfo_todb(cluster)
+            ClusterSQL.update_cluster(cluster_info_db)
             # 组装cluster信息为ClusterTFVarsObject格式
-            k8s_masters = {}
-            k8s_nodes = {}
-            self.generate_k8s_nodes(cluster, k8s_masters, k8s_nodes)
+            k8s_masters = content["k8s_masters"]
+            k8s_nodes = content["k8s_nodes"]
+            self.generate_k8s_nodes(cluster, k8s_nodes)
             # 保存node信息到数据库
-            node_list = self.convert_nodeinfo_todb(cluster)
-            res = NodeSQL.create_nodes(node_list)
+            node_list = self.convert_nodeinfo_todb(cluster_info_db, cluster)
+            NodeSQL.create_nodes(node_list)
             # 创建terraform变量
             tfvars = ClusterTFVarsObject(
                 id=cluster_info_db.id,
-                cluster_name=cluster.name,
-                image=cluster.node_config[0].image,
+                cluster_name=clust_dbinfo.cluster_name,
+                image=clust_dbinfo.image,
                 k8s_masters=k8s_masters,
                 k8s_nodes=k8s_nodes,
-                admin_subnet_id=cluster.network_config.admin_subnet_id,
-                bus_subnet_id=cluster.network_config.admin_subnet_id,
-                admin_network_id=cluster.network_config.admin_subnet_id,
-                bus_network_id=cluster.network_config.bus_network_id,
+                admin_subnet_id=clust_dbinfo.admin_subnet_id,
+                bus_subnet_id=clust_dbinfo.admin_subnet_id,
+                admin_network_id=clust_dbinfo.admin_network_id,
+                bus_network_id=clust_dbinfo.bus_network_id,
                 floatingip_pool="physnet2",
-                subnet_cidr=cluster.network_config.pod_cidr,
-                external_net=external_net[0]['id'],
+                subnet_cidr=clust_dbinfo.subnet_cidr,
+                external_net=clust_dbinfo.external_net,
                 use_existing_network=True,
                 group_vars_path="group_vars",
-                password=cluster.node_config[0].password
+                password=clust_dbinfo.password
             )
             # 调用celery_app项目下的work.py中的create_cluster方法
-            result = celery_app.send_task("dingoops.celery_api.workers.scale_k8s_node",
-                                          args=[tfvars.dict(), cluster.dict()])
-            logging.info(result.get())
+            result = celery_app.send_task("dingoops.celery_api.workers.create_cluster",
+                                          args=[tfvars.dict(), cluster.dict(), node_list, scale])
+            return result
         except Fail as e:
             raise e
         except Exception as e:
             import traceback
             traceback.print_exc()
             raise e
-        # 成功返回资产id
-        return cluster_id
 
     def delete_node(self, node_id):
         if not node_id:
@@ -175,7 +198,7 @@ class NodeService:
             traceback.print_exc()
             raise e
 
-    def convert_nodeinfo_todb(self, cluster:ClusterObject):
+    def convert_nodeinfo_todb(self, cluster_info_db: ClusterDB, cluster:ClusterObject):
         nodeinfo_list = []
 
         if not cluster or not hasattr(cluster, 'node_config') or not cluster.node_config:
@@ -184,20 +207,21 @@ class NodeService:
         # 遍历 node_config 并转换为 Nodeinfo 对象
         for node_conf in cluster.node_config:
             node_db = NodeDB()
+            node_db.id = str(uuid.uuid4())
             node_db.node_type = node_conf.type
             node_db.cluster_id = cluster.id
-            node_db.cluster_name = cluster.name
-            node_db.region_name = cluster.region_name
+            node_db.cluster_name = cluster_info_db.cluster_name
+            node_db.region_name = cluster_info_db.region_name
             node_db.role = node_conf.role
             node_db.user = node_conf.user
             node_db.password = node_conf.password
             node_db.private_key = node_conf.private_key
             node_db.openstack_id = node_conf.openstack_id
+            node_db.status = "creating"
 
             # 节点的ip地址，创建虚拟机的时候不知道，只能等到后面从集群中获取ip地址，node的名字如何匹配，节点的状态是not ready还是ready？
             node_db.admin_address = ""
             node_db.name = ""
-            node_db.status = ""
             node_db.bus_address = ""
 
             nodeinfo_list.append(node_db)

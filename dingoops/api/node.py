@@ -56,12 +56,15 @@ async def get_node(node_id:str):
         raise HTTPException(status_code=400, detail="get cluster error")
 
 @router.post("/node/", summary="创建节点", description="创建节点")
-async def create_node(node_id:str):
+async def create_node(cluster: ClusterObject):
     try:
+        # 先检查下是否有正在处于扩容的状态，如果是就直接返回
+        result = node_service.get_node(cluster)
+        if result.status == "scaling":
+            raise HTTPException(status_code=400, detail="the cluster is scaling, please wait")
+
         # 创建节点（扩容节点）
-        result = node_service.create_node(node_id)
-        # 操作日志
-        #SystemService.create_system_log(OperateLogApiModel(operate_type="create", resource_type="flow", resource_id=result, resource_name=cluster_object.name, operate_flag=True))
+        result = node_service.create_node(cluster)
         return result
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
