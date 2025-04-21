@@ -211,6 +211,20 @@ def deploy_kubernetes(cluster:ClusterObject):
     except subprocess.CalledProcessError as e:
         print(f"Ansible error: {e}")
         return False
+
+
+def scale_kubernetes(cluster: ClusterObject):
+    """使用Ansible扩容K8s集群"""
+    try:
+        ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
+        os.chdir(ansible_dir)
+        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "hosts")
+        playbook_file = os.path.join(WORK_DIR, "ansible-deploy", "scale.yml")
+        run_playbook(playbook_file, host_file, ansible_dir)
+
+    except subprocess.CalledProcessError as e:
+        print(f"Ansible error: {e}")
+        return False
     
 def get_cluster_kubeconfig(cluster):
     """获取集群的kubeconfig配置"""
@@ -392,7 +406,7 @@ def create_cluster(self, cluster_tf_dict,cluster_dict):
         raise
 
 @celery_app.task(bind=True)
-def create_node(cluster_id, node_name):
+def scale_k8s_node(cluster_id, node_name):
     
     try:
         # Add your cluster creation logic here

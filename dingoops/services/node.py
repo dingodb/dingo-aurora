@@ -40,44 +40,19 @@ thin_border = Border(
 
 system_service = SystemService()
 
-class ClusterService:
+class NodeService:
 
     def get_az_value(self, node_type):
         """根据节点类型返回az值"""
         return "nova" if node_type == "vm" else ""
 
-    def generate_k8s_nodes(self, cluster, k8s_masters, k8s_nodes):
-        for idx, node in enumerate(cluster.node_config):
-            if node.get("role") == "master":
-                for i in range(node.count):
-                    if i == 0:
-                        float_ip_bool = True
-                    else:
-                        float_ip_bool = False
-                    if i < 3:
-                        etcd_bool = True
-                    else:
-                        etcd_bool = False
-                    k8s_masters[f"master-{int(i) + 1}"] = NodeGroup(
-                        az=self.get_az_value(node.type),
-                        flavor=node.flavor_id,
-                        floating_ip=float_ip_bool,
-                        etcd=etcd_bool
-                    )
-            if node.get("role") == "worker":
-                for i in range(node.count):
-                    k8s_nodes[f"node-{int(i) + 1}"] = NodeGroup(
-                        az=self.get_az_value(node.type),
-                        flavor=node.flavor_id,
-                        floating_ip=False,
-                        etcd=False
-                    )
     # 查询资产列表
-    def list_clusters(self, query_params, page, page_size, sort_keys, sort_dirs):
+    @classmethod
+    def list_nodes(cls, query_params, page, page_size, sort_keys, sort_dirs):
         # 业务逻辑
         try:
             # 按照条件从数据库中查询数据
-            count, data = ClusterSQL.list_cluster(query_params, page, page_size, sort_keys, sort_dirs)
+            count, data = NodeSQL.list_nodes(query_params, page, page_size, sort_keys, sort_dirs)
             # 返回数据
             res = {}
             # 页数相关信息
@@ -92,17 +67,16 @@ class ClusterService:
             import traceback
             traceback.print_exc()
             return None
-        
-    
-    def get_cluster(self, cluster_id):
-        if not cluster_id:
+
+    def get_node(self, node_id):
+        if not node_id:
             return None
         # 详情
         try:
             # 根据id查询
             query_params = {}
-            query_params["id"] = cluster_id
-            res = self.list_clusters(query_params, 1, 10, None, None)
+            query_params["id"] = node_id
+            res = self.list_nodes(query_params, 1, 10, None, None)
             # 空
             if not res or not res.get("data"):
                 return None
@@ -113,31 +87,31 @@ class ClusterService:
             traceback.print_exc()
             raise e
 
-
-    def create_cluster(self, cluster: ClusterObject):
+    def create_node(self, cluster: ClusterObject):
+        # 在这里执行创建集群的那个流程，先创建vm虚拟机，然后添加到本k8s集群里面
         # 数据校验 todo
         try:
             cluster_info_db = self.convert_clusterinfo_todb(cluster)
             # 校验是否存在同名数据库
-            
+
             # 保存对象到数据库
             res = ClusterSQL.create_cluster(cluster_info_db)
             # 保存节点信息到数据库
             # cluster_id = AssetSQL.create_cluster(cluster_info_db)
             # 调用celery_app项目下的work.py中的create_cluster方法
-            #查询openstack相关接口，返回需要的信息
+            # 查询openstack相关接口，返回需要的信息
             neutron_api = neutron.API()  # 创建API类的实例
             external_net = neutron_api.list_external_networks()
-            #组装cluster信息为ClusterTFVarsObject格式
+            # 组装cluster信息为ClusterTFVarsObject格式
             k8s_masters = {}
             k8s_nodes = {}
             self.generate_k8s_nodes(cluster, k8s_masters, k8s_nodes)
-             # 保存node信息到数据库
+            # 保存node信息到数据库
             node_list = self.convert_nodeinfo_todb(cluster)
             res = NodeSQL.create_nodes(node_list)
             # 创建terraform变量
             tfvars = ClusterTFVarsObject(
-                id = cluster_info_db.id,
+                id=cluster_info_db.id,
                 cluster_name=cluster.name,
                 image=cluster.node_config[0].image,
                 k8s_masters=k8s_masters,
@@ -152,9 +126,10 @@ class ClusterService:
                 use_existing_network=True,
                 group_vars_path="group_vars",
                 password=cluster.node_config[0].password
-                )
-                #调用celery_app项目下的work.py中的create_cluster方法
-            result = celery_app.send_task("dingoops.celery_api.workers.create_cluster", args=[tfvars.dict(),cluster.dict()])
+            )
+            # 调用celery_app项目下的work.py中的create_cluster方法
+            result = celery_app.send_task("dingoops.celery_api.workers.scale_k8s_node",
+                                          args=[tfvars.dict(), cluster.dict()])
             logging.info(result.get())
         except Fail as e:
             raise e
@@ -164,78 +139,41 @@ class ClusterService:
             raise e
         # 成功返回资产id
         return cluster_id
-    
 
-    def delete_cluster(self, cluster_id):
-        if not cluster_id:
+    def delete_node(self, node_id):
+        if not node_id:
             return None
         # 详情
         try:
             # 更新集群状态为删除中
-            
+
             # 根据id查询
             query_params = {}
-            query_params["id"] = cluster_id
-            res = self.list_clusters(query_params, 1, 10, None, None)
+            query_params["id"] = node_id
+            res = self.list_nodes(query_params, 1, 10, None, None)
             # 空
             if not res or not res.get("data"):
                 return None
             # 返回第一条数据
-            cluster = res.get("data")[0]
-            cluster.status = "deleting"
+            node = res.get("data")[0]
+            node.status = "deleting"
             # 保存对象到数据库
-            res = ClusterSQL.update_cluster(cluster)
+            res = ClusterSQL.update_cluster(node)
             # 调用celery_app项目下的work.py中的delete_cluster方法
-            result = celery_app.send_task("dingoops.celery_api.workers.delete_cluster", args=[cluster_id])
+            result = celery_app.send_task("dingoops.celery_api.workers.delete_cluster", args=[node_id])
             if result.get():
                 # 删除成功，更新数据库状态
-                cluster.status = "deleted"
-                res = ClusterSQL.update_cluster(cluster)
+                node.status = "deleted"
+                res = ClusterSQL.update_cluster(node)
             else:
                 # 删除失败，更新数据库状态
-                cluster.status = "delete_failed"
-                res = ClusterSQL.update_cluster(cluster)
+                node.status = "delete_failed"
+                res = ClusterSQL.update_cluster(node)
             return res.get("data")[0]
         except Exception as e:
             import traceback
             traceback.print_exc()
             raise e
-    
-    def convert_clusterinfo_todb(self, cluster:ClusterObject):
-        cluster_info_db = ClusterDB()
-        cluster_info_db.master_count = 0
-        cluster_info_db.worker_count = 0
-        cluster_info_db.id = str(uuid.uuid4())
-        cluster_info_db.name = cluster.name
-        cluster_info_db.project_id = cluster.project_id
-        cluster_info_db.user_id = cluster.user_id
-        cluster_info_db.labels = json.dumps(cluster.labels)
-        cluster_info_db.status = "creating"
-        cluster_info_db.region_name = cluster.region_name
-        cluster_info_db.admin_network_id = cluster.network_config.admin_network_id
-        cluster_info_db.admin_subnet_id = cluster.network_config.admin_subnet_id
-        cluster_info_db.bus_network_id = cluster.network_config.bus_network_id
-        cluster_info_db.bus_subnet_id = cluster.network_config.bus_subnet_id
-        cluster_info_db.runtime = cluster.runtime
-        cluster_info_db.type = "k8s"
-        cluster_info_db.service_cidr = cluster.network_config.service_cidr
-        cluster_info_db.bus_address = ""
-        cluster_info_db.api_address = ""
-        cluster_info_db.cni = cluster.network_config.cni
-        cluster_info_db.version = cluster.version
-        cluster_info_db.worker_count = 0
-        cluster_info_db.version = cluster.version
-        cluster_info_db.kube_config = ""
-        cluster_info_db.create_time = datetime.now()
-        cluster_info_db.update_time = datetime.now()
-        cluster_info_db.description = cluster.description
-        cluster_info_db.extra = cluster.extra
-        for node_conf in cluster.node_config:
-            if node_conf.role == "master":
-                cluster_info_db.master_count += node_conf.count
-            if node_conf.role == "worker":
-                cluster_info_db.worker_count += node_conf.count
-        return cluster_info_db
 
     def convert_nodeinfo_todb(self, cluster:ClusterObject):
         nodeinfo_list = []
@@ -249,17 +187,17 @@ class ClusterService:
             node_db.node_type = node_conf.type
             node_db.cluster_id = cluster.id
             node_db.cluster_name = cluster.name
-            node_db.region = cluster.region_name
+            node_db.region_name = cluster.region_name
             node_db.role = node_conf.role
             node_db.user = node_conf.user
             node_db.password = node_conf.password
             node_db.private_key = node_conf.private_key
             node_db.openstack_id = node_conf.openstack_id
-            node_db.status = "creating"
 
             # 节点的ip地址，创建虚拟机的时候不知道，只能等到后面从集群中获取ip地址，node的名字如何匹配，节点的状态是not ready还是ready？
             node_db.admin_address = ""
             node_db.name = ""
+            node_db.status = ""
             node_db.bus_address = ""
 
             nodeinfo_list.append(node_db)

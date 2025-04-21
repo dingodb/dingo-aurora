@@ -9,7 +9,6 @@ class NetworkConfigObject(BaseModel):
     network_id: Optional[str] = Field(None, description="网络id")
     cni: Optional[str] = Field(None, description="集群标签")
     pod_cidr: Optional[str] = Field(None, description="集群状态原因")
-    network_id: Optional[str] = Field(None, description="网络id")
     admin_subnet_id: Optional[str] = Field(None, description="管理网id")
     bus_subnet_id: Optional[str] = Field(None, description="业务子网id")
     admin_network_id: Optional[str] = Field(None, description="管理网络id")
