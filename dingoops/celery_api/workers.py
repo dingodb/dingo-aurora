@@ -276,7 +276,7 @@ def get_cluster_kubeconfig(cluster):
         return None
     
 @celery_app.task(bind=True)
-def create_cluster(cluster_tf_dict, cluster_dict, node_list, scale=False):
+def create_cluster(self, cluster_tf_dict, cluster_dict, node_list, scale=False):
     try:
         #task_id = self.request.id.__str__()
         task_id = "da"
