@@ -15,7 +15,7 @@ from api.model.assets import AssetCreateApiModel, AssetFlowApiModel
 from api.model.system import OperateLogApiModel
 from db.models.asset.models import AssetBasicInfo, AssetManufacturesInfo, AssetPartsInfo, AssetPositionsInfo, \
     AssetContractsInfo, AssetCustomersInfo, AssetBelongsInfo, AssetType, AssetFlowsInfo, AssetManufactureRelationInfo, \
-    AssetExtendsColumnsInfo, AssetPartRelationInfo
+    AssetExtendsColumnsInfo
 from db.models.asset.sql import AssetSQL
 from math import ceil
 from oslo_log import log
@@ -1899,11 +1899,9 @@ class AssetsService:
                 temp["position"] = r.position
                 temp["fixed_flag"] = r.fixed_flag
                 # SN
-                sn_list_data = AssetSQL.get_asset_part_relation_sn_by_id(r.id)
                 sn_list = []
-                if sn_list_data is not None:
-                    for sn in sn_list_data:
-                        sn_list.append(sn.part_sn)
+                if r is not None and r.part_sn is not None and len(r.part_sn) > 0:
+                    sn_list = r.part_sn.split(",")
                 temp['part_sn'] = sn_list
                 temp["description"] = r.description
                 # 加入列表
@@ -1936,10 +1934,6 @@ class AssetsService:
             asset_part_id = asset_part_info_db.id
             # 保存对象
             AssetSQL.create_asset_part(asset_part_info_db)
-            # 保存资产配件关联信息
-            asset_part_relation_info_db = self.convert_asset_part_relation_info_db_4api(asset_part, asset_part_id)
-            if asset_part_relation_info_db is not None:
-                AssetSQL.create_asset_part_relation_info(asset_part_relation_info_db)
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -1972,6 +1966,7 @@ class AssetsService:
             position=asset_part.position,
             fixed_flag=asset_part.fixed_flag,
             description=asset_part.description,
+            part_sn=self.convert_asset_part_sn_str(asset_part),
         )
         # 重新设置part_type
         if asset_part_info_db.part_type_id:
@@ -1981,27 +1976,18 @@ class AssetsService:
         # 返回数据
         return asset_part_info_db
 
-        # 创建配件对象数据转换 1个数据对象
-
-    def convert_asset_part_relation_info_db_4api(self, asset_part, asset_part_id: str):
+    # 创建配件SN list为字符串
+    def convert_asset_part_sn_str(self, asset_part):
         # 判空
-        if asset_part is None or len(asset_part.part_sn) == 0:
-            return None
+        if asset_part is None or asset_part.part_sn is None or len(asset_part.part_sn) == 0:
+            return ""
         # 数据处理
         asset_part.part_sn = list(OrderedDict.fromkeys(asset_part.part_sn))
-        ret = []
-        # 数据转化为db对象
-        for sn in asset_part.part_sn:
-            if sn is not None and len(sn) > 0:
-                asset_part_relation_info_db = AssetPartRelationInfo(
-                    id=uuid.uuid4().hex,
-                    asset_part_id=asset_part_id,
-                    part_sn=sn,
-                )
-                ret.append(asset_part_relation_info_db)
         # 返回数据
-        return ret
-
+        return ",".join(
+            str(item) for item in asset_part.part_sn
+            if str(item).strip()  # 排除空字符串、纯空格和None
+        )
 
     # 根据id修改配件
     def update_asset_part_by_id(self, id, asset_part):
@@ -2073,17 +2059,10 @@ class AssetsService:
                 asset_part_db.description = asset_part.description
             else:
                 asset_part_db.description = ""
+            # SN
+            asset_part_db.part_sn = self.convert_asset_part_sn_str(asset_part)
             # 保存对象
             AssetSQL.update_asset_part(asset_part_db)
-
-            # 修改配件SN
-            if asset_part.part_sn is not None:
-                # 先删除之前老数据
-                AssetSQL.delete_asset_part_relation_by_part_id(id)
-                # 保存资产配件关联信息
-                asset_part_relation_info_db = self.convert_asset_part_relation_info_db_4api(asset_part, id)
-                if asset_part_relation_info_db is not None:
-                    AssetSQL.create_asset_part_relation_info(asset_part_relation_info_db)
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -2100,7 +2079,6 @@ class AssetsService:
         try:
             # 删除对象
             AssetSQL.delete_asset_part(asset_part_id)
-            AssetSQL.delete_asset_part_relation_by_part_id(asset_part_id)
         except Exception as e:
             import traceback
             traceback.print_exc()

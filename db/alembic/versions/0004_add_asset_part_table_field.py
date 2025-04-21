@@ -27,16 +27,8 @@ def upgrade() -> None:
     op.add_column('ops_assets_parts_info', sa.Column('position', sa.Text(), nullable=True))
     # 为ops_assets_parts_info表：增加是否固定资产：fixed_flag字段
     op.add_column('ops_assets_parts_info', sa.Column('fixed_flag', sa.Boolean(), nullable=True, default=0))
-
-    # 增加资产配件关联信息表
-    op.create_table(
-        "ops_assets_parts_relations_info",
-        sa.Column("id", sa.String(length=128), nullable=False, comment='资产配件关联信息id'),
-        sa.Column("asset_part_id", sa.String(length=128), nullable=False, comment='资产配件id'),
-        sa.Column("part_sn", sa.String(length=128), nullable=False, comment='资产配件序列号SN'),
-        sa.PrimaryKeyConstraint('id'),
-        comment='资产配件关联信息表'
-    )
+    # 为ops_assets_parts_info表：增加位置：part_sn字段
+    op.add_column('ops_assets_parts_info', sa.Column('part_sn', sa.Text(), nullable=True))
 
 
 def downgrade() -> None:
@@ -48,7 +40,6 @@ def downgrade() -> None:
     op.drop_column('ops_assets_parts_info', 'position')
     # 移除是否固定资产：fixed_flag字段
     op.drop_column('ops_assets_parts_info', 'fixed_flag')
-
-    # 移除表：ops_assets_parts_relations_info
-    op.drop_table('ops_assets_parts_relations_info')
+    # 移除位置：position字段
+    op.drop_column('ops_assets_parts_info', 'part_sn')
 

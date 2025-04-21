@@ -9,7 +9,7 @@ from typing_extensions import assert_type
 from db.engines.mysql import get_session
 from db.models.asset.models import Asset, AssetBasicInfo, AssetPartsInfo, AssetManufacturesInfo, AssetPositionsInfo, \
     AssetContractsInfo, AssetBelongsInfo, AssetCustomersInfo, AssetType, AssetFlowsInfo, AssetManufactureRelationInfo, \
-    AssetExtendsColumnsInfo, AssetPartRelationInfo
+    AssetExtendsColumnsInfo
 
 from enum import Enum
 
@@ -558,8 +558,7 @@ class AssetSQL:
             # 外连接
             query = query.outerjoin(AssetBasicInfo, AssetBasicInfo.id == AssetPartsInfo.asset_id). \
                 outerjoin(AssetManufacturesInfo, AssetManufacturesInfo.id == AssetPartsInfo.manufacturer_id). \
-                outerjoin(AssetType, AssetType.id == AssetPartsInfo.part_type_id). \
-                outerjoin(AssetPartRelationInfo, AssetPartRelationInfo.asset_part_id == AssetPartsInfo.id).group_by(AssetPartsInfo.id)
+                outerjoin(AssetType, AssetType.id == AssetPartsInfo.part_type_id)
             # 配件类型
             part_catalog = None
             # 数据库查询参数
@@ -607,7 +606,7 @@ class AssetSQL:
             if "fixed_flag" in query_params:
                 query = query.filter(AssetPartsInfo.fixed_flag == query_params["fixed_flag"])
             if "part_sn" in query_params:
-                query = query.filter(AssetPartRelationInfo.part_sn.like('%' + query_params["part_sn"] + '%'))
+                query = query.filter(AssetPartsInfo.part_sn.like('%' + query_params["part_sn"] + '%'))
             # 总数
             count = query.count()
             # 排序
@@ -668,12 +667,12 @@ class AssetSQL:
             # 删除资产的厂商信息
             session.query(AssetPartsInfo).filter(AssetPartsInfo.id == asset_part_id).delete()
 
-    @classmethod
-    def delete_asset_part_relation_by_part_id(cls, asset_part_id):
-        session = get_session()
-        with session.begin():
-            # 删除资产的厂商信息
-            session.query(AssetPartRelationInfo).filter(AssetPartRelationInfo.asset_part_id == asset_part_id).delete()
+    # @classmethod
+    # def delete_asset_part_relation_by_part_id(cls, asset_part_id):
+    #     session = get_session()
+    #     with session.begin():
+    #         # 删除资产的厂商信息
+    #         session.query(AssetPartRelationInfo).filter(AssetPartRelationInfo.asset_part_id == asset_part_id).delete()
 
     @classmethod
     def delete_asset_part_by_asset_id(cls, asset_id):
@@ -690,11 +689,11 @@ class AssetSQL:
         with session.begin():
             return session.query(AssetPartsInfo).filter(AssetPartsInfo.id == asset_part_id).first()
 
-    @classmethod
-    def get_asset_part_relation_sn_by_id(cls, asset_part_id):
-        session = get_session()
-        with session.begin():
-            return session.query(AssetPartRelationInfo).filter(AssetPartRelationInfo.asset_part_id == asset_part_id).order_by(AssetPartRelationInfo.id.desc())
+    # @classmethod
+    # def get_asset_part_relation_sn_by_id(cls, asset_part_id):
+    #     session = get_session()
+    #     with session.begin():
+    #         return session.query(AssetPartRelationInfo).filter(AssetPartRelationInfo.asset_part_id == asset_part_id).order_by(AssetPartRelationInfo.id.desc())
 
     # 资产流量查询列表
     @classmethod
