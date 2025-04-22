@@ -9,7 +9,7 @@ from db.models.asset_resoure_relation.models import AssetResourceRelationInfo
 class AssetReSourceRelationSQL:
 
     @classmethod
-    def list_asset_basic_info(cls, query_params, page=1, page_size=10, field=None, dir="ascend"):
+    def list_asset_resource_relation_info(cls, query_params, page=1, page_size=10, sort_keys=None, sort_dirs="ascend"):
         # 获取session
         session = get_session()
         with session.begin():
