@@ -1,5 +1,5 @@
 from fastapi import HTTPException, Query
-from dingoops.api.model.cluster import ClusterObject
+from dingoops.api.model.cluster import ClusterObject, NodeRemoveObject
 
 from starlette import status
 from dingoops.api.model.system import OperateLogApiModel
@@ -59,7 +59,8 @@ async def get_node(node_id:str):
 async def create_node(cluster: ClusterObject):
     try:
         # 先检查下是否有正在处于扩容的状态，如果是就直接返回
-        result = node_service.get_node(cluster)
+        cluster_service = ClusterService()
+        result = cluster_service.get_cluster(cluster.id)
         if result.status == "scaling":
             raise HTTPException(status_code=400, detail="the cluster is scaling, please wait")
 
@@ -73,13 +74,11 @@ async def create_node(cluster: ClusterObject):
         traceback.print_exc()
         raise HTTPException(status_code=400, detail="get cluster error")
 
-@router.delete("/node/", summary="删除某个节点", description="删除某个节点")
-async def delete_node(node_id:str):
+@router.delete("/node", summary="删除某个节点", description="删除某个节点")
+async def delete_node(node_list_info: NodeRemoveObject):
     try:
-        # 删除某个节点
-        result = node_service.delete_node(node_id)
-        # 操作日志
-        #SystemService.create_system_log(OperateLogApiModel(operate_type="create", resource_type="flow", resource_id=result, resource_name=cluster_object.name, operate_flag=True))
+        # 缩容某些节点
+        result = node_service.delete_node(node_list_info)
         return result
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)

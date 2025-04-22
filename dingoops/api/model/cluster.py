@@ -116,3 +116,9 @@ class ClusterTFVarsObject(BaseModel):
     number_of_k8s_nodes: Optional[int] = Field(None, description="K8s worker节点数量")
     number_of_k8s_nodes_no_floating_ip: Optional[int] = Field(None, description="无浮动IP的K8s worker节点数量")
     k8s_master_loadbalancer_enabled: Optional[bool] = Field(None, description="是否启用负载均衡器")
+
+class NodeRemoveObject(DingoopsObject):
+    cluter_id: Optional[str] = Field(None, description="集群id")
+    node_list: Optional[List[NodeObject]] = Field(None, description="缩容节点列表")
+
+

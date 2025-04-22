@@ -163,36 +163,20 @@ class NodeService:
             traceback.print_exc()
             raise e
 
-    def delete_node(self, node_id):
-        if not node_id:
+    def delete_node(self, node_list_info):
+        if not node_list_info:
             return None
         # 详情
         try:
-            # 更新集群状态为删除中
-
-            # 根据id查询
-            query_params = {}
-            query_params["id"] = node_id
-            res = self.list_nodes(query_params, 1, 10, None, None)
-            # 空
-            if not res or not res.get("data"):
-                return None
-            # 返回第一条数据
-            node = res.get("data")[0]
-            node.status = "deleting"
-            # 保存对象到数据库
-            res = ClusterSQL.update_cluster(node)
-            # 调用celery_app项目下的work.py中的delete_cluster方法
-            result = celery_app.send_task("dingoops.celery_api.workers.delete_cluster", args=[node_id])
-            if result.get():
-                # 删除成功，更新数据库状态
-                node.status = "deleted"
-                res = ClusterSQL.update_cluster(node)
-            else:
-                # 删除失败，更新数据库状态
-                node.status = "delete_failed"
-                res = ClusterSQL.update_cluster(node)
-            return res.get("data")[0]
+            cluster_id = node_list_info.cluter_id
+            node_list = node_list_info.node_list
+            extravars = {}
+            for node in node_list:
+                extravars[node.name] = node.admin_address
+            # 调用celery_app项目下的work.py中的create_cluster方法
+            result = celery_app.send_task("dingoops.celery_api.workers.delete_node",
+                                          args=[cluster_id, extravars])
+            return result
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -211,17 +195,17 @@ class NodeService:
             node_db.node_type = node_conf.type
             node_db.cluster_id = cluster.id
             node_db.cluster_name = cluster_info_db.cluster_name
-            node_db.region_name = cluster_info_db.region_name
+            node_db.region = cluster_info_db.region_name
             node_db.role = node_conf.role
             node_db.user = node_conf.user
             node_db.password = node_conf.password
             node_db.private_key = node_conf.private_key
             node_db.openstack_id = node_conf.openstack_id
             node_db.status = "creating"
+            node_db.name = ""
 
             # 节点的ip地址，创建虚拟机的时候不知道，只能等到后面从集群中获取ip地址，node的名字如何匹配，节点的状态是not ready还是ready？
             node_db.admin_address = ""
-            node_db.name = ""
             node_db.bus_address = ""
 
             nodeinfo_list.append(node_db)

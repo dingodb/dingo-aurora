@@ -440,8 +440,22 @@ def delete_cluster(self, cluster_id):
     pass
     
 @celery_app.task(bind=True)
-def delete_node(self, cluster_tf_dict,cluster_dict):
-    pass
+def delete_node(self, cluster_id, extravars):
+    try:
+        # 1、在这里先找到cluster的文件夹，找到对应的目录，先通过发来的node_list组合成extravars的变量，再执行remove-node.yaml
+        ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
+        os.chdir(ansible_dir)
+        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), "hosts")
+        playbook_file = os.path.join(WORK_DIR, "ansible-deploy", "remove-node.yml")
+        run_playbook(playbook_file, host_file, ansible_dir, extravars)
+
+        # 2、执行完删除k8s这些节点之后，再执行terraform销毁这些节点（这里是单独修改output.json文件还是需要通过之前生成的output.json文件生成）
+
+        # 3、然后需要更新node节点的数据库的信息和集群的数据库信息
+
+    except subprocess.CalledProcessError as e:
+        print(f"Ansible error: {e}")
+        return False
 
 @celery_app.task(bind=True)
 def install_component(cluster_id, node_name):
