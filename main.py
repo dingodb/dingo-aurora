@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from api import api_router
-from jobs import bigscreen_metrics_syncer
+from jobs import bigscreen_metrics_syncer, asset_resource_relation_syncer
 
 PROJECT_NAME = "dingoops"
 
@@ -28,6 +28,7 @@ app.include_router(api_router, prefix="/v1")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     bigscreen_metrics_syncer.start()
+    asset_resource_relation_syncer.start()
     yield
     # Add any shutdown logic here if needed
 
