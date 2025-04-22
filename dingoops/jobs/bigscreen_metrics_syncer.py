@@ -20,7 +20,7 @@ run_time_10s = datetime.now() + timedelta(seconds=10)  # 任务将在10秒后执
 run_time_30s = datetime.now() + timedelta(seconds=30)  # 任务将在30秒后执行
 
 def start():
-    scheduler.add_job(fetch_bigscreen_metrics, 'interval', seconds=CONF.bigscreen.metrics_fetch_interval)
+    scheduler.add_job(fetch_bigscreen_metrics, 'interval', seconds=CONF.bigscreen.metrics_fetch_interval, next_run_time=datetime.now())
     scheduler.add_job(auto_add_shovel, 'date', run_date=run_time_10s)
     scheduler.add_job(auto_connect_queue, 'date', run_date=run_time_30s)
     scheduler.start()
