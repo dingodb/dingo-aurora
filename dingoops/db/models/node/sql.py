@@ -65,9 +65,35 @@ class NodeSQL:
                 session.add(node)
 
     @classmethod
-    def update_node(cls, cluster):
+    def update_node(cls, node):
         # Session = sessionmaker(bind=engine, expire_on_commit=False)
         # session = Session()
         session = get_session()
         with session.begin():
-            session.merge(cluster)
+            session.merge(node)
+
+    @classmethod
+    def update_node_list(cls, node_list):
+        # Session = sessionmaker(bind=engine, expire_on_commit=False)
+        # session = Session()
+        session = get_session()
+        with session.begin():
+            for node in node_list:
+                session.merge(node)
+
+    @classmethod
+    def delete_node_list(cls, node_list):
+        # Session = sessionmaker(bind=engine, expire_on_commit=False)
+        # session = Session()
+        session = get_session()
+        with session.begin():
+            for node in node_list:
+                session.delete(node)
+
+    @classmethod
+    def delete_node(cls, node):
+        # Session = sessionmaker(bind=engine, expire_on_commit=False)
+        # session = Session()
+        session = get_session()
+        with session.begin():
+            session.delete(node)

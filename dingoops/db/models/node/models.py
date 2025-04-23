@@ -25,6 +25,8 @@ class NodeInfo(Base):
     node_type = Column(String(length=128), default=0, nullable= False)
     region = Column(String(length=128), default=0, nullable= False)
     status = Column(String(length=128), default=0, nullable= False)
+    flavor_id = Column(String(length=128), default=0, nullable= True)
+    security_group = Column(String(length=128), default=0, nullable= True)
     private_key = Column(Text, nullable=True)
     auth_tytpe = Column(String(length=128), default=0, nullable= True)
     user = Column(String(length=128), default=0, nullable= False)

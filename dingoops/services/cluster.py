@@ -133,7 +133,7 @@ class ClusterService:
             k8s_nodes = {}
             self.generate_k8s_nodes(cluster, k8s_masters, k8s_nodes)
              # 保存node信息到数据库
-            node_list = self.convert_nodeinfo_todb(cluster)
+            node_list = self.convert_nodeinfo_todb(cluster, k8s_masters, k8s_nodes)
             res = NodeSQL.create_nodes(node_list)
             # 创建terraform变量
             tfvars = ClusterTFVarsObject(
@@ -238,31 +238,83 @@ class ClusterService:
                 cluster_info_db.worker_count += node_conf.count
         return cluster_info_db
 
-    def convert_nodeinfo_todb(self, cluster:ClusterObject):
+    def convert_nodeinfo_todb(self, cluster:ClusterObject, k8s_masters, k8s_nodes):
         nodeinfo_list = []
 
         if not cluster or not hasattr(cluster, 'node_config') or not cluster.node_config:
             return nodeinfo_list
 
+        master_type, worker_type = "vm", "vm"
+        master_usr, worker_usr, master_password, worker_password = "", "", "", ""
+        master_private_key, worker_private_key, master_image, worker_image = "", "", "", ""
+        master_flavor_id, worker_flavor_id, master_openstack_id, worker_openstack_id = "", "", "", ""
+        master_auth_type, worker_auth_type, master_security_group, worker_security_group = "", "", "", ""
+        for config in cluster.node_config:
+            if config.role == "master":
+                master_type = config.type
+                master_usr = config.user
+                master_password = config.password
+                master_image = config.image
+                master_private_key = config.private_key
+                master_auth_type = config.auth_type
+                master_openstack_id = config.openstack_id
+                master_security_group = config.security_group
+                master_flavor_id = config.flavor_id
+            if config.role == "worker":
+                worker_type = config.type
+                worker_usr = config.user
+                worker_password = config.password
+                worker_image = config.image
+                worker_private_key = config.private_key
+                worker_auth_type = config.auth_type
+                worker_openstack_id = config.openstack_id
+                worker_security_group = config.security_group
+                worker_flavor_id = config.flavor_id
+
         # 遍历 node_config 并转换为 Nodeinfo 对象
-        for node_conf in cluster.node_config:
+        for master_node in k8s_masters:
             node_db = NodeDB()
             node_db.id = str(uuid.uuid4())
-            node_db.node_type = node_conf.type
+            node_db.node_type = master_type
             node_db.cluster_id = cluster.id
             node_db.cluster_name = cluster.name
             node_db.region = cluster.region_name
-            node_db.role = node_conf.role
-            node_db.user = node_conf.user
-            node_db.password = node_conf.password
-            node_db.private_key = node_conf.private_key
-            node_db.openstack_id = node_conf.openstack_id
+            node_db.role = "master"
+            node_db.user = master_usr
+            node_db.password = master_password
+            node_db.image = master_image
+            node_db.private_key = master_private_key
+            node_db.openstack_id = master_openstack_id
+            node_db.auth_type = master_auth_type
+            node_db.security_group = master_security_group
+            node_db.flavor_id = master_flavor_id
             node_db.status = "creating"
-
-            # 节点的ip地址，创建虚拟机的时候不知道，只能等到后面从集群中获取ip地址，node的名字如何匹配，节点的状态是not ready还是ready？
             node_db.admin_address = ""
-            node_db.name = ""
+            node_db.name = cluster.name + "-k8s-" + master_node
             node_db.bus_address = ""
+            node_db.create_time = datetime.now()
+            nodeinfo_list.append(node_db)
 
+        for worker_node in k8s_nodes:
+            node_db = NodeDB()
+            node_db.id = str(uuid.uuid4())
+            node_db.node_type = worker_type
+            node_db.cluster_id = cluster.id
+            node_db.cluster_name = cluster.name
+            node_db.region = cluster.region_name
+            node_db.role = "worker"
+            node_db.user = worker_usr
+            node_db.password = worker_password
+            node_db.image = worker_image
+            node_db.private_key = worker_private_key
+            node_db.openstack_id = worker_openstack_id
+            node_db.auth_type = worker_auth_type
+            node_db.security_group = worker_security_group
+            node_db.flavor_id = worker_flavor_id
+            node_db.status = "creating"
+            node_db.admin_address = ""
+            node_db.name = cluster.name + "-k8s-" + worker_node
+            node_db.bus_address = ""
+            node_db.create_time = datetime.now()
             nodeinfo_list.append(node_db)
         return nodeinfo_list

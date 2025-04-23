@@ -77,6 +77,12 @@ async def create_node(cluster: ClusterObject):
 @router.delete("/node", summary="删除某个节点", description="删除某个节点")
 async def delete_node(node_list_info: NodeRemoveObject):
     try:
+        # 先检查下是否有正在处于缩容的状态，如果是就直接返回
+        cluster_service = ClusterService()
+        result = cluster_service.get_cluster(node_list_info.cluter_id)
+        if result.status == "removing":
+            raise HTTPException(status_code=400, detail="the cluster is scaling, please wait")
+
         # 缩容某些节点
         result = node_service.delete_node(node_list_info)
         return result

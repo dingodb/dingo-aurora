@@ -1,3 +1,4 @@
+import copy
 from asyncio import sleep
 from datetime import datetime
 import json
@@ -20,6 +21,7 @@ from dingoops.celery_api.celery_app import celery_app
 from dingoops.celery_api import CONF
 from dingoops.db.engines.mysql import get_engine, get_session
 from dingoops.db.models.cluster.sql import ClusterSQL, TaskSQL
+from dingoops.db.models.node.sql import NodeSQL
 from ansible.executor.playbook_executor import PlaybookExecutor
 # 用于导入资产文件
 from ansible.inventory.manager import InventoryManager
@@ -401,8 +403,12 @@ def create_cluster(self, cluster_tf_dict, cluster_dict, node_list, scale=False):
         with session.begin():
             for node in node_list:
                 db_node = session.get(NodeInfo, node.id)
-                db_node.status = "running"
-                session.commit()
+                for k,v in hosts_data["_meta"]["hostvars"].items():
+                    # 需要添加节点的ip地址等信息
+                    if  db_node.name == k:
+                        db_node.status = "running"
+                        db_node.admin_address = v.get("ip")
+                        db_node.floating_ip = v.get("public_ipv4")
 
         # 更新数据库的状态为success
         task_info.end_time = time.time()
@@ -440,7 +446,7 @@ def delete_cluster(self, cluster_id):
     pass
     
 @celery_app.task(bind=True)
-def delete_node(self, cluster_id, extravars):
+def delete_node(self, cluster_id, node_list, extravars):
     try:
         # 1、在这里先找到cluster的文件夹，找到对应的目录，先通过发来的node_list组合成extravars的变量，再执行remove-node.yaml
         ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
@@ -450,8 +456,38 @@ def delete_node(self, cluster_id, extravars):
         run_playbook(playbook_file, host_file, ansible_dir, extravars)
 
         # 2、执行完删除k8s这些节点之后，再执行terraform销毁这些节点（这里是单独修改output.json文件还是需要通过之前生成的output.json文件生成）
+        output_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id),
+                                   "terraform", "output.tfvars.json")
+        with open(output_file) as f:
+            content = json.loads(f.read())
+            content_new = copy.deepcopy(content)
+            for node in content["k8s_nodes"]:
+                if node in extravars.keys():
+                    del content_new["k8s_nodes"][node]
+        with open(output_file, "w") as f:
+            json.dump(content_new, f, indent=4)
+
+        # 执行terraform apply
+        cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id))
+        os.environ['CURRENT_CLUSTER_DIR'] = cluster_dir
+        terraform_dir = os.path.join(cluster_dir, "terraform")
+        os.chdir(terraform_dir)
+        # os.environ['OS_CLOUD']=cluster.region_name
+        os.environ['OS_CLOUD'] = "dingzhi"
+        res = subprocess.run([
+            "terraform",
+            "apply",
+            "-auto-approve",
+            "-var-file=output.tfvars.json"
+        ], capture_output=True, text=True)
 
         # 3、然后需要更新node节点的数据库的信息和集群的数据库信息
+        # 更新集群cluster的状态为running，删除缩容节点的数据库信息
+        session = get_session()
+        with session.begin():
+            db_cluster = session.get(Cluster, cluster_id)
+            db_cluster.status = 'running'
+        NodeSQL.delete_node_list(node_list)
 
     except subprocess.CalledProcessError as e:
         print(f"Ansible error: {e}")
