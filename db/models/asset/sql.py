@@ -28,7 +28,9 @@ flow_columns = [getattr(AssetFlowsInfo, column.name).label(column.name) for colu
 # 资产排序字段字典
 asset_manufacturer_dir_dic= {"name":AssetManufacturesInfo.name}
 # 配件排序字段字典
-asset_part_dir_dic= {"asset_name":AssetBasicInfo.name,"name":AssetPartsInfo.name,"part_type":AssetPartsInfo.part_type,"part_config":AssetPartsInfo.part_config,"part_number":AssetPartsInfo.part_number,"surplus":AssetPartsInfo.surplus,"description":AssetPartsInfo.description,"personal_used_flag":AssetPartsInfo.personal_used_flag}
+asset_part_dir_dic= {"asset_name":AssetBasicInfo.name,"name":AssetPartsInfo.name,"part_type":AssetPartsInfo.part_type,"part_config":AssetPartsInfo.part_config,"part_number":AssetPartsInfo.part_number,
+                     "surplus":AssetPartsInfo.surplus,"description":AssetPartsInfo.description,"personal_used_flag":AssetPartsInfo.personal_used_flag, "part_brand": AssetPartsInfo.part_brand,
+                     "part_model": AssetPartsInfo.part_model,"purchase_contract_number": AssetPartsInfo.purchase_contract_number,"position": AssetPartsInfo.position,"fixed_flag": AssetPartsInfo.fixed_flag,}
 
 class AssetSQL:
 

@@ -51,7 +51,6 @@ class ResourceAssetManagementModel(BaseModel):
     resource_project_name: Optional[str] = Field(None, description="资源所属project的名称")
     # resource_vpc_id: Optional[str] = Field(None, description="资源所属VPC ID")
     # resource_vpc_name: Optional[str] = Field(None, description="资源所属VPC名称")
-    resource_order_id: Optional[str] = Field(None, description="资源所属订单ID")
-    resource_order_name: Optional[str] = Field(None, description="资源所属订单名称")
+    resource_order_number: Optional[str] = Field(None, description="资源所属订单编号")
     resource_lease_start_time: Optional[int] = Field(None, description="资源租赁开始时间")
     resource_lease_end_time: Optional[int] = Field(None, description="资源租赁结束时间")

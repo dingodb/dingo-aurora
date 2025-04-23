@@ -12,10 +12,32 @@ async def resource_asset_management_list(
         page: int = Query(1, description="页码"),
         page_size: int = Query(10, description="页数量大小"),
         sort_keys: str = Query(None, description="排序字段"),
-        sort_dirs: str = Query(None, description="排序方式"),):
+        sort_dirs: str = Query(None, description="排序方式"),
+        resource_name: str = Query(None, description="资源名称"),
+        resource_status: str = Query(None, description="资源状态"),
+        asset_name: str = Query(None, description="资产名称"),
+        asset_status: str = Query(None, description="资产状态"),
+        resource_user_name: str = Query(None, description="资源所属用户名称"),
+        resource_project_name: str = Query(None, description="资源所属project的名称"),
+        resource_order_number: str = Query(None, description="资源所属订单编号"),
+):
     try:
         # 声明查询条件的dict
         query_params = {}
+        if resource_name:
+            query_params['resource_name'] = resource_name
+        if resource_status:
+            query_params['resource_status'] = resource_status
+        if asset_name:
+            query_params['asset_name'] = asset_name
+        if asset_status:
+            query_params['asset_status'] = asset_status
+        if resource_user_name:
+            query_params['resource_user_name'] = resource_user_name
+        if resource_project_name:
+            query_params['resource_project_name'] = resource_project_name
+        if resource_order_number:
+            query_params['resource_order_number'] = resource_order_number
 
         # 查询资源与资产管理列表数据
         return resources_service.resource_asset_management_list(query_params, page, page_size, sort_keys, sort_dirs)
