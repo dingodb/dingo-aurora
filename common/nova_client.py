@@ -1,22 +1,21 @@
-# dingoops的裸机的client
-# self.region_name = region_name
+# dingoops的nova的client
 import requests
 import json
 
 from common import CONF
 
-# 配置ironic信息
-IRONIC_AUTH_URL = CONF.ironic.auth_url
-IRONIC_AUTH_TYPE = CONF.ironic.auth_type
-IRONIC_PROJECT_NAME = CONF.ironic.project_name
-IRONIC_PROJECT_DOMAIN = CONF.ironic.project_domain
-IRONIC_USER_NAME = CONF.ironic.user_name
-IRONIC_USER_DOMAIN = CONF.ironic.user_domain
-IRONIC_PASSWORD = CONF.ironic.password
-IRONIC_REGION_NAME = CONF.ironic.region_name
+# 配置nova信息
+NOVA_AUTH_URL = CONF.nova.auth_url
+NOVA_AUTH_TYPE = CONF.nova.auth_type
+NOVA_PROJECT_NAME = CONF.nova.project_name
+NOVA_PROJECT_DOMAIN = CONF.nova.project_domain
+NOVA_USER_NAME = CONF.nova.user_name
+NOVA_USER_DOMAIN = CONF.nova.user_domain
+NOVA_PASSWORD = CONF.nova.password
+NOVA_REGION_NAME = CONF.nova.region_name
 
 
-class IronicClient:
+class NovaClient:
 
     def __init__(self):
         self.session = requests.Session()
@@ -34,25 +33,25 @@ class IronicClient:
                     "methods": ["password"],
                     "password": {
                         "user": {
-                            "name": IRONIC_USER_NAME,
-                            "password": IRONIC_PASSWORD,
-                            "domain": {"name": IRONIC_USER_DOMAIN}
+                            "name": NOVA_USER_NAME,
+                            "password": NOVA_PASSWORD,
+                            "domain": {"name": NOVA_USER_DOMAIN}
                         }
                     }
                 },
                 "scope": {
                     "project": {
-                        "name": IRONIC_PROJECT_NAME,
-                        "domain": {"name": IRONIC_PROJECT_DOMAIN}
+                        "name": NOVA_PROJECT_NAME,
+                        "domain": {"name": NOVA_PROJECT_DOMAIN}
                     }
                 }
             }
         }
 
         headers = {'Content-Type': 'application/json'}
-        response = requests.post(f"{IRONIC_AUTH_URL}/v3/auth/tokens", data=json.dumps(auth_data), headers=headers)
+        response = requests.post(f"{NOVA_AUTH_URL}/v3/auth/tokens", data=json.dumps(auth_data), headers=headers)
         if response.status_code != 201:
-            print(f"ironic获取token失败: {response.text}")
+            print(f"nova获取token失败: {response.text}")
         else:
             self.token = response.headers['X-Subject-Token']
             self.service_catalog = response.json()['token']['catalog']
@@ -68,13 +67,13 @@ class IronicClient:
                         return endpoint['url']
         raise Exception(f"未找到服务: {service_type}")
 
-    def ironic_list_nodes(self):
-        """获取Ironic节点列表"""
-        endpoint = self.get_service_endpoint('baremetal')
-        response = self.session.get(f"{endpoint}/v1/nodes/detail")
+    # 添加Nova服务调用
+    def nova_list_servers(self):
+        endpoint = self.get_service_endpoint('compute')
+        response = self.session.get(f"{endpoint}/servers")
         if response.status_code != 200:
-            raise Exception(f"ironic请求失败: {response.text}")
-        return response.json()['nodes']
+            raise Exception(f"nova请求失败: {response.text}")
+        return response.json()['servers']
 
-# 声明裸金属的client
-ironic_client = IronicClient()
+# 声明nova的client
+nova_client = NovaClient()
