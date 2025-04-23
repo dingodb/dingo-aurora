@@ -58,7 +58,7 @@ class API:
             neutron_client = self.get_neutron_client(CONF)
         
         # 查询所有外部网络
-        networks = neutron_client.list_networks(filters={'router:external': 'true'})
+        networks = neutron_client.list_networks(**{'router:external': True})
         
         return networks.get('networks', [])
 

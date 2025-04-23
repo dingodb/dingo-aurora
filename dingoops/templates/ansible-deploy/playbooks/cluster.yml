@@ -97,10 +97,11 @@
   tasks:
     - name: Check k8s nodes status
       shell: >
-        {{ kubectl }} get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}' | grep -q 'False' && exit 1 || exit 0
+        kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}' | grep -q 'False' && exit 1 || exit 0
       register: node_status_result
       failed_when: node_status_result.rc != 0
       changed_when: false
+      tags: check
 
 - name: Install Kubernetes apps
   hosts: kube_control_plane

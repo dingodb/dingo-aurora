@@ -81,8 +81,8 @@ class TestCreateCluster(unittest.TestCase):
     # "cni": "calico"
     # }
     self.cluster_tf_dict = {
-      'id': 'dsl986410-1a8f-4862-a646-32d8845612f4',
-      'cluster_name': 'dsy',
+      'id': 'b4eaf586-8d4f-4dfa-8e9f-bc1129007033',
+      'cluster_name': 'dsy5',
       'image': 'ubuntu2204-dsy',
       'k8s_masters': {'master1': {'flavor': 'a0ee8641-fcb0-486e-9251-db9a4cf81225', 'etcd': True, 'floating_ip': True,'user': 'root', 'password': 'daz3502'}},
       'k8s_nodes': {'worker1': {'flavor': 'a0ee8641-fcb0-486e-9251-db9a4cf81225','floating_ip': False,'etcd': False,'user': 'root', 'password': 'daz3502'}, 'worker2': {'flavor': 'a0ee8641-fcb0-486e-9251-db9a4cf81225','floating_ip': False,'etcd': False,'user': 'root', 'password': 'daz3502'}},
@@ -112,7 +112,7 @@ class TestCreateCluster(unittest.TestCase):
     }
     
     self.cluster_dict = {
-    "name": "dsy",
+    "name": "dsy5",
     "description": "dedadasdasd",
     "region_name": "regionOne",
     "network_config": {

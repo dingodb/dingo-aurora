@@ -3,22 +3,23 @@ from dingoops.api.model.cluster import ClusterObject
 
 from starlette import status
 from dingoops.api.model.system import OperateLogApiModel
-from dingoops.services.cluster import ClusterService
+from dingoops.services.cluster import ClusterService,TaskService
 from dingoops.services.system import SystemService
 from dingoops.services.custom_exception import Fail
 from fastapi import APIRouter, HTTPException
     
 router = APIRouter()
 cluster_service = ClusterService()
+task_service = TaskService()
 
 @router.post("/cluster", summary="创建k8s集群", description="创建k8s集群")
 async def create_cluster(cluster_object:ClusterObject):
     try:
         # 集群信息存入数据库
-        result = cluster_service.create_cluster(cluster_object)
+        cluster_id = cluster_service.create_cluster(cluster_object)
         # 操作日志
-        SystemService.create_system_log(OperateLogApiModel(operate_type="create", resource_type="flow", resource_id=result, resource_name=cluster_object.name, operate_flag=True))
-        return result
+        #SystemService.create_system_log(OperateLogApiModel(operate_type="create", resource_type="flow", resource_id=cluster_id, resource_name=cluster_object.name, operate_flag=True))
+        return cluster_id
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
@@ -85,11 +86,11 @@ async def get_cluster(cluster_id:str):
         traceback.print_exc()
         raise HTTPException(status_code=400, detail="get cluster error")
     
-@router.delete("/cluster/progress", summary="创建k8s集群进度", description="创建k8s集群进度")
-async def get_cluster(cluster_id:str,):
+@router.get("/progress", summary="创建k8s集群进度", description="创建k8s集群进度")
+async def get_cluster(cluster_id:str):
     try:
         # 集群信息存入数据库
-        result = cluster_service.get_cluster(cluster_id)
+        result =task_service.get_tasks(cluster_id)
         # 操作日志
         #SystemService.create_system_log(OperateLogApiModel(operate_type="create", resource_type="flow", resource_id=result, resource_name=cluster_object.name, operate_flag=True))
         return result

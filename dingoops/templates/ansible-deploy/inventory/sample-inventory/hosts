@@ -35,7 +35,7 @@ def tfstates(root=None):
     root = root or os.getcwd()
     for dirpath, _, filenames in os.walk(root):
         for name in filenames:
-            print(name)
+            #print(name)
             if os.path.splitext(name)[-1] == '.tfstate':
                 yield os.path.join(dirpath, name)
 
@@ -127,7 +127,7 @@ def iterlbips(resources):
     '''yield ip tuples of (port_id, ip)'''
     for module_name, key, resource in resources:
         resource_type, name = key.split('.', 1)
-        if resource_type == 'openstack_networking_floatingip_associate_v2' and 'public_ip' == name:
+        if resource_type == 'openstack_networking_floatingip_associate_v2' and 'public_ip.0' == name:
             raw_attrs = resource['primary']['attributes']
             return raw_attrs['floating_ip']
 
@@ -462,7 +462,7 @@ def main():
 
     # Perform a second pass on the file to pick up floating_ip entries to update the ip address of referenced hosts
     ips = dict(iterips(iterresources(tfstates(args.root))))
-    lb_ip = dict(iterlbips(iterresources(tfstates(args.root))))
+    lb_ip = iterlbips(iterresources(tfstates(args.root)))
     
     if ips:
         hosts = iter_host_ips(hosts, ips,lb_ip)

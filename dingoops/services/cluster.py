@@ -1,4 +1,5 @@
 # 资产的service层
+from enum import Enum
 import json
 import logging
 import os
@@ -14,7 +15,7 @@ from openpyxl.styles import Border, Side
 from typing_extensions import assert_type
 
 from dingoops.celery_api.celery_app import celery_app
-from dingoops.db.models.cluster.sql import ClusterSQL
+from dingoops.db.models.cluster.sql import ClusterSQL,TaskSQL
 from math import ceil
 from oslo_log import log
 from dingoops.api.model.cluster import ClusterTFVarsObject, NodeGroup, ClusterObject
@@ -44,9 +45,9 @@ class ClusterService:
     def get_az_value(self, node_type):
         """根据节点类型返回az值"""
         return "nova" if node_type == "vm" else ""
-    def generate_k8s_nodes(self, cluster, k8s_masters, k8s_nodes):
+    def generate_k8s_nodes(self, cluster:ClusterObject, k8s_masters, k8s_nodes):
         for idx, node in enumerate(cluster.node_config):
-            if node.get("role") == "master":
+            if node.role== "master":
                 for i in range(node.count):
                     if i == 0:
                         float_ip_bool = True
@@ -58,15 +59,15 @@ class ClusterService:
                         etcd_bool = False
                     k8s_masters[f"master-{int(i) + 1}"] = NodeGroup(
                         az=self.get_az_value(node.type),
-                        flavor_id=node.flavor_id,
+                        flavor=node.flavor_id,
                         floating_ip=float_ip_bool,
                         etcd=etcd_bool
                     )
-            if node.get("role") == "worker":
+            if node.role == "worker":
                 for i in range(node.count):
                     k8s_nodes[f"node-{int(i) + 1}"] = NodeGroup(
                         az=self.get_az_value(node.type),
-                        flavor_id=node.flavor_id,
+                        flavor=node.flavor_id,
                         floating_ip=False,
                         etcd=False
                     )
@@ -141,20 +142,21 @@ class ClusterService:
                 k8s_masters=k8s_masters,
                 k8s_nodes=k8s_nodes,
                 admin_subnet_id=cluster.network_config.admin_subnet_id,
-                bus_subnet_id=cluster.network_config.admin_subnet_id,
-                admin_network_id=cluster.network_config.admin_subnet_id,
+                bus_subnet_id=cluster.network_config.bus_subnet_id,
+                admin_network_id=cluster.network_config.admin_network_id,
                 bus_network_id=cluster.network_config.bus_network_id,
-                floatingip_pool="physnet2",
+                floatingip_pool=external_net[0]['name'],
                 subnet_cidr=cluster.network_config.pod_cidr,
                 external_net=external_net[0]['id'],
                 use_existing_network=True,
                 group_vars_path="group_vars",
                 password=cluster.node_config[0].password,
-                k8s_master_loadbalancer_enabled=cluster.loadbalancer_enabled
+                ssh_user=cluster.node_config[0].user,
+                k8s_master_loadbalancer_enabled=cluster.network_config.loadbalancer_enabled
                 )
                 #调用celery_app项目下的work.py中的create_cluster方法
             result = celery_app.send_task("dingoops.celery_api.workers.create_cluster", args=[tfvars.dict(),cluster.dict()])
-            logging.info(result.get())
+            #logging.info(result.get())
         except Fail as e:
             raise e
         except Exception as e:
@@ -162,7 +164,7 @@ class ClusterService:
             traceback.print_exc()
             raise e
         # 成功返回资产id
-        return cluster_id
+        return cluster_info_db.id
     
 
     def delete_cluster(self, cluster_id):
@@ -249,3 +251,35 @@ class ClusterService:
         return nodeinfo_list
         node_info_db.node_type = ""
         return cluster_info_db
+        
+class TaskService:
+    
+
+    class TaskMessage(Enum):
+        instructure_check = "参数校验"
+        instructure_create = "创建基础设施"
+        pre_install = "安装前准备"
+        etcd_deploy = "安装etcd"
+        controler_deploy = "配置kubernetes控制面"
+        worker_deploy = "配置kubernetes工作节点"
+        component_deploy = "安装组件"
+    
+    
+    def get_tasks(self, cluster_id):
+        if not cluster_id:
+            return None
+        # 详情
+        try:
+            # 根据id查询
+            query_params = {}
+            query_params["cluster_id"] = cluster_id
+            res = TaskSQL.list(query_params, None, None)
+            # 空
+            if not res :
+                return None
+            # 返回第一条数据
+            return res
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
