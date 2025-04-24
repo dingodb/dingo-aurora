@@ -28,8 +28,8 @@ class NodeSQL:
             # 数据库查询参数
             if "id" in query_params and query_params["id"]:
                 query = query.filter(NodeInfo.id == query_params["id"])
-            if "name" in query_params and query_params["name"]:
-                query = query.filter(NodeInfo.cluster_name.like('%' + query_params["name"] + '%'))
+            if "cluster_name" in query_params and query_params["cluster_name"]:
+                query = query.filter(NodeInfo.cluster_name.like('%' + query_params["cluster_name"] + '%'))
             if "cluster_id" in query_params and query_params["cluster_id"]:
                 query = query.filter(NodeInfo.cluster_id == query_params["cluster_id"])
             # 总数

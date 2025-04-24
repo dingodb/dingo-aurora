@@ -14,7 +14,7 @@ node_service = NodeService()
 
 @router.get("/node/list", summary="k8s集群节点列表", description="k8s集群节点列表")
 async def list_nodes(cluster_id:str = Query(None, description="集群id"),
-        name:str = Query(None, description="集群名称"),
+        cluster_name:str = Query(None, description="集群名称"),
         type:str = Query(None, description="节点类型"),
         page: int = Query(1, description="页码"),
         page_size: int = Query(10, description="页数量大小"),
@@ -24,16 +24,14 @@ async def list_nodes(cluster_id:str = Query(None, description="集群id"),
          # 声明查询条件的dict
         query_params = {}
         # 查询条件组装
-        if name:
-            query_params['name'] = name
+        if cluster_name:
+            query_params['cluster_name'] = cluster_name
         if type:
             query_params['type'] = type
         query_params = {}
         # 查询条件组装
         if cluster_id:
             query_params['cluster_id'] = cluster_id
-        if name:
-            query_params['name'] = name
         if type:
             query_params['type'] = type
         result = node_service.list_nodes(query_params, page,page_size, sort_keys, sort_dirs)
@@ -55,7 +53,7 @@ async def get_node(node_id:str):
         traceback.print_exc()
         raise HTTPException(status_code=400, detail="get cluster error")
 
-@router.post("/node/", summary="创建节点", description="创建节点")
+@router.post("/node", summary="扩容节点", description="扩容节点")
 async def create_node(cluster: ClusterObject):
     try:
         # 先检查下是否有正在处于扩容的状态，如果是就直接返回
@@ -74,12 +72,12 @@ async def create_node(cluster: ClusterObject):
         traceback.print_exc()
         raise HTTPException(status_code=400, detail="get cluster error")
 
-@router.delete("/node", summary="删除某个节点", description="删除某个节点")
+@router.delete("/node", summary="缩容节点", description="缩容节点")
 async def delete_node(node_list_info: NodeRemoveObject):
     try:
         # 先检查下是否有正在处于缩容的状态，如果是就直接返回
         cluster_service = ClusterService()
-        result = cluster_service.get_cluster(node_list_info.cluter_id)
+        result = cluster_service.get_cluster(node_list_info.cluster_id)
         if result.status == "removing":
             raise HTTPException(status_code=400, detail="the cluster is scaling, please wait")
 
