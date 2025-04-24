@@ -9,7 +9,6 @@ class NetworkConfigObject(BaseModel):
     network_id: Optional[str] = Field(None, description="网络id")
     cni: Optional[str] = Field(None, description="集群标签")
     pod_cidr: Optional[str] = Field(None, description="集群状态原因")
-    network_id: Optional[str] = Field(None, description="网络id")
     admin_subnet_id: Optional[str] = Field(None, description="管理网id")
     bus_subnet_id: Optional[str] = Field(None, description="业务子网id")
     admin_network_id: Optional[str] = Field(None, description="管理网络id")
@@ -54,6 +53,11 @@ class ClusterObject(DingoopsObject):
     kube_lb_address: Optional[str] = Field(None, description="负载均衡器的浮动ip")
     security_group: Optional[str] = Field(None, description="安全组名称")
     kube_config: Optional[str] = Field(None, description="cni插件")
+    
+class KubeClusterObject(BaseModel):
+    kube_lb_address: Optional[str] = Field(None, description="负载均衡器的浮动ip")
+    security_group: Optional[str] = Field(None, description="安全组名称")
+    runtime: Optional[str] = Field(None, description="运行时类型")
     
 class ClusterInfo(DingoopsObject):
     project_id: Optional[str] = Field(None, description="项目id")
@@ -120,3 +124,10 @@ class ClusterTFVarsObject(BaseModel):
     number_of_k8s_nodes: Optional[int] = Field(0, description="K8s worker节点数量")
     number_of_k8s_nodes_no_floating_ip: Optional[int] = Field(0, description="无浮动IP的K8s worker节点数量")
     k8s_master_loadbalancer_enabled: Optional[bool] = Field(False, description="是否启用负载均衡器")
+
+
+
+class NodeRemoveObject(DingoopsObject):
+    cluter_id: Optional[str] = Field(None, description="集群id")
+    node_list: Optional[List[NodeObject]] = Field(None, description="缩容节点列表")
+

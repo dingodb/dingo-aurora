@@ -26,7 +26,7 @@ class CustomCallback(CallbackBase):
 
 
 
-def run_playbook(playbook_name, inventory, data_dir):
+def run_playbook(playbook_name, inventory, data_dir, extravars=None):
     # 设置环境变量
     envvars = {
         "ANSIBLE_FORKS": 1,
@@ -37,7 +37,8 @@ def run_playbook(playbook_name, inventory, data_dir):
         playbook=playbook_name,
         inventory=inventory,
         quiet=True,
-        envvars=envvars
+        envvars=envvars,
+        extravars=extravars
     )
 
     

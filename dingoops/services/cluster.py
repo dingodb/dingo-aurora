@@ -15,12 +15,14 @@ from openpyxl.styles import Border, Side
 from typing_extensions import assert_type
 
 from dingoops.celery_api.celery_app import celery_app
+
 from dingoops.db.models.cluster.sql import ClusterSQL,TaskSQL
+from dingoops.db.models.node.sql import NodeSQL
 from math import ceil
 from oslo_log import log
 from dingoops.api.model.cluster import ClusterTFVarsObject, NodeGroup, ClusterObject
 from dingoops.db.models.cluster.models import Cluster as ClusterDB
-from dingoops.db.models.cluster.models import Nodeinfo as NodeDB
+from dingoops.db.models.node.models import NodeInfo as NodeDB
 from dingoops.utils import neutron
 
 from dingoops.services.custom_exception import Fail
@@ -46,6 +48,7 @@ class ClusterService:
         """根据节点类型返回az值"""
         return "nova" if node_type == "vm" else ""
     def generate_k8s_nodes(self, cluster:ClusterObject, k8s_masters, k8s_nodes):
+
         for idx, node in enumerate(cluster.node_config):
             if node.role== "master":
                 for i in range(node.count):
@@ -132,8 +135,8 @@ class ClusterService:
             k8s_nodes = {}
             self.generate_k8s_nodes(cluster, k8s_masters, k8s_nodes)
              # 保存node信息到数据库
-            node_list = self.convert_clusterinfo_todb(cluster)
-            res = ClusterSQL.create_cluster(cluster_info_db)
+            node_list = self.convert_nodeinfo_todb(cluster)
+            #res = NodeSQL.create_nodes(node_list)
             # 创建terraform变量
             tfvars = ClusterTFVarsObject(
                 id = cluster_info_db.id,
@@ -154,9 +157,9 @@ class ClusterService:
                 ssh_user=cluster.node_config[0].user,
                 k8s_master_loadbalancer_enabled=cluster.network_config.loadbalancer_enabled
                 )
-                #调用celery_app项目下的work.py中的create_cluster方法
-            result = celery_app.send_task("dingoops.celery_api.workers.create_cluster", args=[tfvars.dict(),cluster.dict()])
-            #logging.info(result.get())
+
+            result = celery_app.send_task("dingoops.celery_api.workers.create_cluster",
+                                          args=[tfvars.dict(), cluster.dict(),node_list ])
         except Fail as e:
             raise e
         except Exception as e:
@@ -237,20 +240,53 @@ class ClusterService:
             if node_conf.role == "worker":
                 cluster_info_db.worker_count += node_conf.count
         return cluster_info_db
+
     def convert_nodeinfo_todb(self, cluster:ClusterObject):
         nodeinfo_list = []
-    
+
         if not cluster or not hasattr(cluster, 'node_config') or not cluster.node_config:
             return nodeinfo_list
-        
+
         # 遍历 node_config 并转换为 Nodeinfo 对象
         for node_conf in cluster.node_config:
-            nodeinfo = NodeDB(**node_conf)
-            nodeinfo_list.append(nodeinfo)
-        
+            node_db = NodeDB()
+            node_db.id = str(uuid.uuid4())
+            node_db.node_type = node_conf.type
+            node_db.cluster_id = cluster.id
+            node_db.cluster_name = cluster.name
+            node_db.region = cluster.region_name
+            node_db.role = node_conf.role
+            node_db.user = node_conf.user
+            node_db.password = node_conf.password
+            node_db.private_key = node_conf.private_key
+            node_db.openstack_id = node_conf.openstack_id
+            node_db.status = "creating"
+
+            # 节点的ip地址，创建虚拟机的时候不知道，只能等到后面从集群中获取ip地址，node的名字如何匹配，节点的状态是not ready还是ready？
+            node_db.admin_address = ""
+            node_db.name = ""
+            node_db.bus_address = ""
+
+            # Create a clean dictionary with only serializable fields
+            node_dict = {
+                'id': node_db.id,
+                'node_type': node_db.node_type,
+                'cluster_id': node_db.cluster_id,
+                'cluster_name': node_db.cluster_name,
+                'region': node_db.region,
+                'role': node_db.role,
+                'user': node_db.user,
+                'password': node_db.password,
+                'private_key': node_db.private_key,
+                'openstack_id': node_db.openstack_id,
+                'status': node_db.status,
+                'admin_address': node_db.admin_address,
+                'name': node_db.name,
+                'bus_address': node_db.bus_address
+            }
+            nodeinfo_list.append(node_dict)
         return nodeinfo_list
-        node_info_db.node_type = ""
-        return cluster_info_db
+
         
 class TaskService:
     
@@ -264,7 +300,15 @@ class TaskService:
         worker_deploy = "配置kubernetes工作节点"
         component_deploy = "安装组件"
     
-    
+    class TaskDetail(Enum):
+        instructure_check = "instructure check passed"
+        instructure_create = "instructure create success"
+        pre_install = "install prepare success"
+        etcd_deploy = "etcd deploy success"
+        controler_deploy = "control plane deploy success"
+        worker_deploy = "worker node deploy success"
+        component_deploy = "component deploy success"
+        
     def get_tasks(self, cluster_id):
         if not cluster_id:
             return None
@@ -283,3 +327,5 @@ class TaskService:
             import traceback
             traceback.print_exc()
             raise e
+
+

@@ -18,7 +18,7 @@ from alembic import context
 from databases import DatabaseURL
 from sqlalchemy import create_engine, pool
 
-from db import CONF
+from dingoops.db import CONF
 
 basicConfig()
 # log_setup(StreamHandler())

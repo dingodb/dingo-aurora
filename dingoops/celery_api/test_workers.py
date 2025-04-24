@@ -3,8 +3,8 @@ from unittest.mock import patch, MagicMock
 from pathlib import Path
 import subprocess
 import time
-from celery_api.workers import create_infrastructure, create_cluster, ClusterTFVarsObject,delete_cluster
-from api.model.cluster import ClusterObject, NodeConfigObject, NetworkConfigObject
+from dingoops.celery_api.workers import create_infrastructure, create_cluster, ClusterTFVarsObject, delete_cluster
+from dingoops.api.model.cluster import ClusterObject, NodeConfigObject, NetworkConfigObject
 
 
 class TestCreateCluster(unittest.TestCase):
@@ -156,7 +156,7 @@ class TestCreateCluster(unittest.TestCase):
 
     #调用celery_app项目下的work.py中的create_cluster方法
     # Test execution
-    create_cluster(self.cluster_tf_dict, self.cluster_dict)
+    create_cluster(self.cluster_tf_dict, self.cluster_dict, [])
   
   def test_delete_cluster_success(self):
     #调用celery_app项目下的work.py中的create_cluster方法

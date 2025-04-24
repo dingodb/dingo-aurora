@@ -3,7 +3,7 @@ import time
 from typing import Optional
 
 import celery.result
-from celery_api.celery_app import celery_app
+from dingoops.celery_api.celery_app import celery_app
 
 
 class TasksDatabase:

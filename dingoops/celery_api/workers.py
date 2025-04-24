@@ -12,13 +12,14 @@ from dingoops.celery_api.ansible import run_playbook,CustomCallback
 from dingoops.celery_api.util import update_task_state
 from dingoops.services.cluster import TaskService
 from dingoops.db.models.cluster.models import Cluster,Taskinfo
+from dingoops.db.models.node.models import NodeInfo
 from pydantic import BaseModel, Field
 from fastapi import Path
 from pathlib import Path as PathLib
 from requests import Session
 from dingoops.celery_api.celery_app import celery_app
 from dingoops.celery_api import CONF
-from dingoops.db.engines.mysql import get_engine 
+from dingoops.db.engines.mysql import get_engine, get_session
 from dingoops.db.models.cluster.sql import ClusterSQL, TaskSQL
 # 用于导入资产文件
 from ansible.inventory.manager import InventoryManager
@@ -204,6 +205,7 @@ def deploy_kubernetes(cluster:ClusterObject,lb_ip:str, task_id:str = None):
                     if task_name == etcd_task_name and host != None:    
                         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
                         task_info.state = "success"
+                        task_info.detail = TaskService.TaskDetail.etcd_deploy.value
                         update_task_state(task_info)                  
                         # 写入下一个任务
                         task_info = control_plane_task
@@ -211,6 +213,7 @@ def deploy_kubernetes(cluster:ClusterObject,lb_ip:str, task_id:str = None):
                     if task_name == control_plane_task_name and host != None: 
                         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
                         task_info.state = "success"
+                        task_info.detail = TaskService.TaskDetail.controler_deploy.value
                         update_task_state(task_info)   
                         # 写入下一个任务
                         task_info = worker_task
@@ -218,6 +221,7 @@ def deploy_kubernetes(cluster:ClusterObject,lb_ip:str, task_id:str = None):
                     if task_name == work_node_task_name and host != None and task_status != "failed":
                         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
                         task_info.state = "success"
+                        task_info.detail = TaskService.TaskDetail.worker_deploy.value
                         update_task_state(task_info)   
                         task_info = component_task
                         TaskSQL.insert(component_task)
@@ -242,12 +246,13 @@ def deploy_kubernetes(cluster:ClusterObject,lb_ip:str, task_id:str = None):
 
         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
         task_info.state = "success"
-        task_info.detail = event['event_data'].get('res').get('msg')
+        task_info.detail = TaskService.TaskDetail.component_deploy.value
         update_task_state(task_info)
     
     except subprocess.CalledProcessError as e:
         print(f"Ansible error: {e}")
         return False
+
 
 def update_ansible_status(task_info, event, task_name, host, task_status):
     if task_name == work_node_task_name and host != None:
@@ -263,6 +268,21 @@ def update_ansible_status(task_info, event, task_name, host, task_status):
             task_info.state = "success"
             task_info.detail = event['event_data'].get('res').get('msg')
             update_task_state(task_info)
+
+
+def scale_kubernetes(cluster: ClusterObject):
+    """使用Ansible扩容K8s集群"""
+    try:
+        ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
+        os.chdir(ansible_dir)
+        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "hosts")
+        playbook_file = os.path.join(WORK_DIR, "ansible-deploy", "scale.yml")
+        run_playbook(playbook_file, host_file, ansible_dir)
+
+    except subprocess.CalledProcessError as e:
+        print(f"Ansible error: {e}")
+        return False
+
     
 def get_cluster_kubeconfig(cluster, lb_ip):
     """获取集群的kubeconfig配置"""
@@ -313,7 +333,7 @@ def get_cluster_kubeconfig(cluster, lb_ip):
         return None
     
 @celery_app.task(bind=True)
-def create_cluster(self, cluster_tf_dict,cluster_dict):
+def create_cluster(self, cluster_tf_dict, cluster_dict, node_list, scale=False):
     try:
         task_id = self.request.id.__str__()
         #task_id = "da"
@@ -412,7 +432,13 @@ def create_cluster(self, cluster_tf_dict,cluster_dict):
         # 2. 使用Ansible部署K8s集群
 
         cluster.id = cluster_tf_dict["id"]
-        ansible_result = deploy_kubernetes(cluster,lb_ip,task_id)
+
+
+        if scale:
+            ansible_result = scale_kubernetes(cluster)
+        else:
+            ansible_result = deploy_kubernetes(cluster,lb_ip,task_id)
+
         #阻塞线程，直到ansible_client.get_playbook_result()返回结果
         
         if not ansible_result:
@@ -430,7 +456,16 @@ def create_cluster(self, cluster_tf_dict,cluster_dict):
             db_cluster.status = 'running'
             db_cluster.kube_config = kube_config
             session.commit()
-        # 更新数据库的状态为failed
+
+        # 更新集群node的状态为running
+        session = get_session()
+        with session.begin():
+            for node in node_list:
+                db_node = session.get(NodeInfo, node.id)
+                db_node.status = "running"
+                session.commit()
+
+        # 更新数据库的状态为success
         task_info.end_time = time.time()
         task_info.state = "success"
         task_info.detail = ""
@@ -442,24 +477,6 @@ def create_cluster(self, cluster_tf_dict,cluster_dict):
         db_cluster.status = 'failed'
         db_cluster.error_message = str(e.__str__())
         ClusterSQL.update_cluster(cluster_dict["id"])
-        raise
-
-@celery_app.task(bind=True)
-def create_node(cluster_id, node_name):
-    
-    try:
-        # Add your cluster creation logic here
-        pass
-        
-    except Exception as e:
-        # 发生错误时更新集群状态为"失败"
-        with Session(get_engine()) as session:
-            cluster = session.get(Cluster, cluster.id)
-            cluster.status = 'failed'
-            cluster.error_message = str(e)
-            session.commit()
-        
-        # 重新抛出异常供 Celery 处理
         raise
 
 
@@ -484,8 +501,22 @@ def delete_cluster(self, cluster_id):
     pass
     
 @celery_app.task(bind=True)
-def delete_node(self, cluster_tf_dict,cluster_dict):
-    pass
+def delete_node(self, cluster_id, extravars):
+    try:
+        # 1、在这里先找到cluster的文件夹，找到对应的目录，先通过发来的node_list组合成extravars的变量，再执行remove-node.yaml
+        ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
+        os.chdir(ansible_dir)
+        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), "hosts")
+        playbook_file = os.path.join(WORK_DIR, "ansible-deploy", "remove-node.yml")
+        run_playbook(playbook_file, host_file, ansible_dir, extravars)
+
+        # 2、执行完删除k8s这些节点之后，再执行terraform销毁这些节点（这里是单独修改output.json文件还是需要通过之前生成的output.json文件生成）
+
+        # 3、然后需要更新node节点的数据库的信息和集群的数据库信息
+
+    except subprocess.CalledProcessError as e:
+        print(f"Ansible error: {e}")
+        return False
 
 @celery_app.task(bind=True)
 def install_component(cluster_id, node_name):
