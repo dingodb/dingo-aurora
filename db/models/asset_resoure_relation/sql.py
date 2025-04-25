@@ -88,3 +88,9 @@ class AssetResourceRelationSQL:
         session = get_session()
         with session.begin():
             session.merge(asset_resource_relation)
+
+    @classmethod
+    def get_asset_resource_relation_by_resource_id(cls, resource_id):
+        session = get_session()
+        with session.begin():
+            return session.query(AssetResourceRelationInfo).filter(AssetResourceRelationInfo.resource_id == resource_id).first()

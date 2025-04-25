@@ -57,6 +57,7 @@ class IronicClient:
             self.token = response.headers['X-Subject-Token']
             self.service_catalog = response.json()['token']['catalog']
             self.session.headers.update({'X-Auth-Token': self.token})
+            self.session.headers.update({'X-OpenStack-Ironic-API-Version': "latest" })
 
 
     def get_service_endpoint(self, service_type, interface='public', region='RegionOne'):
@@ -75,6 +76,22 @@ class IronicClient:
         if response.status_code != 200:
             raise Exception(f"ironic请求失败: {response.text}")
         return response.json()['nodes']
+
+    def keystone_get_user_by_id(self, user_id):
+        """获取Ironic节点列表"""
+        endpoint = self.get_service_endpoint('identity')
+        response = self.session.get(f"{endpoint}/v3/users/"+user_id)
+        if response.status_code != 200:
+            raise Exception(f"user请求失败: {response.text}")
+        return response.json()['user']
+
+    def keystone_get_project_by_id(self, project_id):
+        """获取Ironic节点列表"""
+        endpoint = self.get_service_endpoint('identity')
+        response = self.session.get(f"{endpoint}/v3/projects/"+project_id)
+        if response.status_code != 200:
+            raise Exception(f"project请求失败: {response.text}")
+        return response.json()['project']
 
 # 声明裸金属的client
 ironic_client = IronicClient()

@@ -32,6 +32,7 @@ def upgrade() -> None:
         sa.Column("resource_project_name", sa.String(length=128), nullable=True, comment='资源所属的project的名称'),
         sa.Column("resource_user_id", sa.String(length=128), nullable=True, comment='资源所属的用户的id'),
         sa.Column("resource_user_name", sa.String(length=128), nullable=True, comment='资源所属的用户的名称'),
+        sa.Column("resource_ip", sa.String(length=256), nullable=True, comment='资源的ip地址'),
         sa.Column("resource_description", sa.String(length=255), nullable=True, comment='资源的描述'),
         sa.Column("resource_extra", sa.Text(), nullable=True, comment='资源的扩展信息'),
         sa.Column("create_date", sa.DateTime(), nullable=True, comment='创建时间'),

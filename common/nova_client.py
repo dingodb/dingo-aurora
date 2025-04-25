@@ -56,6 +56,7 @@ class NovaClient:
             self.token = response.headers['X-Subject-Token']
             self.service_catalog = response.json()['token']['catalog']
             self.session.headers.update({'X-Auth-Token': self.token})
+            self.session.headers.update({'X-OpenStack-Nova-API-Version': "latest" })
 
 
     def get_service_endpoint(self, service_type, interface='public', region='RegionOne'):
@@ -74,6 +75,14 @@ class NovaClient:
         if response.status_code != 200:
             raise Exception(f"nova请求失败: {response.text}")
         return response.json()['servers']
+
+    # 虚拟机详情
+    def nova_get_server_detail(self, server_id):
+        endpoint = self.get_service_endpoint('compute')
+        response = self.session.get(f"{endpoint}/servers/"+ server_id)
+        if response.status_code != 200:
+            raise Exception(f"nova请求失败: {response.text}")
+        return response.json()['server']
 
 # 声明nova的client
 nova_client = NovaClient()
