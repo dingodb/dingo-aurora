@@ -21,6 +21,7 @@ class AssetResourceRelationInfo(Base):
     resource_project_name = Column(String(length=128), nullable=True)
     resource_user_id = Column(String(length=128), nullable=True)
     resource_user_name = Column(String(length=128), nullable=True)
+    resource_ip = Column(String(length=256), nullable=True)
     resource_description = Column(String(length=255), nullable=True)
     resource_extra = Column(Text)
     create_date = Column(DateTime, nullable=True)
