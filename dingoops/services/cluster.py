@@ -9,6 +9,7 @@ from io import BytesIO
 import pandas as pd
 from datetime import datetime
 
+from ansible_collections.inspur.sm.plugins.modules.media_instance_info import Instance
 from openpyxl.reader.excel import load_workbook
 from openpyxl.styles import Border, Side
 from typing_extensions import assert_type
@@ -16,11 +17,14 @@ from typing_extensions import assert_type
 from dingoops.celery_api.celery_app import celery_app
 from dingoops.db.models.cluster.sql import ClusterSQL
 from dingoops.db.models.node.sql import NodeSQL
+from dingoops.db.models.instance.sql import InstanceSQL
 from math import ceil
 from oslo_log import log
 from dingoops.api.model.cluster import ClusterTFVarsObject, NodeGroup, ClusterObject
+from dingoops.api.model.instance import InstanceConfigObject
 from dingoops.db.models.cluster.models import Cluster as ClusterDB
 from dingoops.db.models.node.models import NodeInfo as NodeDB
+from dingoops.db.models.instance.models import Instance as InstanceDB
 from dingoops.utils import neutron
 
 from dingoops.services.custom_exception import Fail
@@ -132,9 +136,12 @@ class ClusterService:
             k8s_masters = {}
             k8s_nodes = {}
             self.generate_k8s_nodes(cluster, k8s_masters, k8s_nodes)
-             # 保存node信息到数据库
+            # 保存node信息到数据库
             node_list = self.convert_nodeinfo_todb(cluster, k8s_masters, k8s_nodes)
-            res = NodeSQL.create_nodes(node_list)
+            NodeSQL.create_nodes(node_list)
+            # 保存instance信息到数据库
+            instance_list = self.convert_instance_todb(cluster, k8s_masters, k8s_nodes)
+            InstanceSQL.create_instance(instance_list)
             # 创建terraform变量
             tfvars = ClusterTFVarsObject(
                 id = cluster_info_db.id,
@@ -155,7 +162,7 @@ class ClusterService:
                 )
                 #调用celery_app项目下的work.py中的create_cluster方法
             result = celery_app.send_task("dingoops.celery_api.workers.create_cluster",
-                                          args=[tfvars.dict(), cluster.dict(), node_list])
+                                          args=[tfvars.dict(), cluster.dict(), node_list, instance_list])
             logging.info(result.get())
         except Fail as e:
             raise e
@@ -318,3 +325,74 @@ class ClusterService:
             node_db.create_time = datetime.now()
             nodeinfo_list.append(node_db)
         return nodeinfo_list
+
+    def convert_instance_todb(self, cluster:ClusterObject, k8s_masters, k8s_nodes):
+        instance_list = []
+
+        if not cluster or not hasattr(cluster, 'node_config') or not cluster.node_config:
+            return instance_list
+
+        master_type, worker_type = "vm", "vm"
+        master_usr, worker_usr, master_password, worker_password = "", "", "", ""
+        mmaster_image, worker_image = "", ""
+        master_flavor_id, worker_flavor_id, master_openstack_id, worker_openstack_id = "", "", "", ""
+        master_security_group, worker_security_group = "", ""
+        for config in cluster.node_config:
+            if config.role == "master":
+                master_type = config.type
+                master_usr = config.user
+                master_password = config.password
+                master_image = config.image
+                master_openstack_id = config.openstack_id
+                master_security_group = config.security_group
+                master_flavor_id = config.flavor_id
+            if config.role == "worker":
+                worker_type = config.type
+                worker_usr = config.user
+                worker_password = config.password
+                worker_image = config.image
+                worker_openstack_id = config.openstack_id
+                worker_security_group = config.security_group
+                worker_flavor_id = config.flavor_id
+
+        # 遍历 node_config 并转换为 Nodeinfo 对象
+        for master_node in k8s_masters:
+            instance_db = InstanceDB()
+            instance_db.id = str(uuid.uuid4())
+            instance_db.node_type = master_type
+            instance_db.cluster_id = cluster.id
+            instance_db.cluster_name = cluster.name
+            instance_db.region = cluster.region_name
+            instance_db.user = master_usr
+            instance_db.password = master_password
+            instance_db.image = master_image
+            instance_db.openstack_id = master_openstack_id
+            instance_db.security_group = master_security_group
+            instance_db.flavor_id = master_flavor_id
+            instance_db.status = "creating"
+            instance_db.ip_address = ""
+            instance_db.name = cluster.name + "-k8s-" + master_node
+            instance_db.floating_ip = ""
+            instance_db.create_time = datetime.now()
+            instance_list.append(instance_db)
+
+        for worker_node in k8s_nodes:
+            instance_db = InstanceDB()
+            instance_db.id = str(uuid.uuid4())
+            instance_db.node_type = worker_type
+            instance_db.cluster_id = cluster.id
+            instance_db.cluster_name = cluster.name
+            instance_db.region = cluster.region_name
+            instance_db.user = worker_usr
+            instance_db.password = worker_password
+            instance_db.image = worker_image
+            instance_db.openstack_id = worker_openstack_id
+            instance_db.security_group = worker_security_group
+            instance_db.flavor_id = worker_flavor_id
+            instance_db.status = "creating"
+            instance_db.ip_address = ""
+            instance_db.name = cluster.name + "-k8s-" + worker_node
+            instance_db.floating_ip = ""
+            instance_db.create_time = datetime.now()
+            instance_list.append(instance_db)
+        return instance_list
