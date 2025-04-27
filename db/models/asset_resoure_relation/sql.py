@@ -84,6 +84,12 @@ class AssetResourceRelationSQL:
             session.query(AssetResourceRelationInfo).filter(AssetResourceRelationInfo.id == relation_id).delete()
 
     @classmethod
+    def delete_asset_resource_relation_by_resource_id(cls, resource_id):
+        session = get_session()
+        with session.begin():
+            session.query(AssetResourceRelationInfo).filter(AssetResourceRelationInfo.resource_id == resource_id).delete()
+
+    @classmethod
     def update_asset_resource_relation(cls, asset_resource_relation):
         session = get_session()
         with session.begin():
@@ -94,3 +100,9 @@ class AssetResourceRelationSQL:
         session = get_session()
         with session.begin():
             return session.query(AssetResourceRelationInfo).filter(AssetResourceRelationInfo.resource_id == resource_id).first()
+
+    @classmethod
+    def get_all_asset_resource_relation(cls):
+        session = get_session()
+        with session.begin():
+            return session.query(AssetResourceRelationInfo).all()
