@@ -359,6 +359,10 @@ async def list_assets(
         asset_part_module:str = Query(None, description="配件模块信息"),
         asset_part_nic:str = Query(None, description="配件网卡信息"),
         asset_description:str = Query(None, description="资产描述"),
+        resource_name: str = Query(None, description="资源名称"),
+        resource_status: str = Query(None, description="资源状态"),
+        resource_user_name: str = Query(None, description="资源所属用户名称"),
+        resource_project_name: str = Query(None, description="资源所属项目名称"),
         page: int = Query(1, description="页码"),
         page_size: int = Query(10, description="页数量大小"),
         sort_keys:str = Query(None, description="排序字段"),
@@ -431,10 +435,17 @@ async def list_assets(
             query_params['asset_part_nic'] = asset_part_nic
         if asset_description:
             query_params['asset_description'] = asset_description
+        if resource_name:
+            query_params['resource_name'] = resource_name
+        if resource_status:
+            query_params['resource_status'] = resource_status
+        if resource_user_name:
+            query_params['resource_user_name'] = resource_user_name
+        if resource_project_name:
+            query_params['resource_project_name'] = resource_project_name
         # 查询成功
         result = assert_service.list_assets(query_params, page, page_size, sort_keys, sort_dirs)
         return result
-        # return success_response(result)
     except Exception as e:
         raise HTTPException(status_code=400, detail="asset not found")
 

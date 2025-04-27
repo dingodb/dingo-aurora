@@ -81,7 +81,7 @@ class NovaClient:
         endpoint = self.get_service_endpoint('compute')
         response = self.session.get(f"{endpoint}/servers/"+ server_id)
         if response.status_code != 200:
-            raise Exception(f"nova请求失败: {response.text}")
+            raise Exception(f"nova详情请求失败: {response.text}")
         return response.json()['server']
 
 # 声明nova的client

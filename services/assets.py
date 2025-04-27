@@ -127,6 +127,16 @@ class AssetsService:
                             temp["asset_part_" + temp_asset_part["part_type"]] = temp_asset_part["part_config"]
                 # 流量信息 列表上不需要
                 # temp["asset_flow"] = self.list_assets_flows(r.id)
+                # 资源信息
+                temp_resource_info = {}
+                temp_resource_info['resource_id'] = None if r.resource_id is None else r.resource_id
+                temp_resource_info['resource_name'] = r.resource_name
+                temp_resource_info['resource_status'] = r.resource_status
+                temp_resource_info['resource_user_id'] = r.resource_user_id
+                temp_resource_info['resource_user_name'] = r.resource_user_name
+                temp_resource_info['resource_project_id'] = r.resource_project_id
+                temp_resource_info['resource_project_name'] = r.resource_project_name
+                temp['resource_info'] = temp_resource_info
                 # 加入列表
                 ret.append(temp)
 
@@ -1930,6 +1940,11 @@ class AssetsService:
         # 定义id
         asset_part_id = None
         try:
+            if asset_part and asset_part.part_number:
+                # 根据配件编号查询判断数据库中是否已存在
+                asset_part_db = AssetSQL.get_asset_part_by_number(asset_part.part_number)
+                if asset_part_db is not None:
+                    raise Fail("part number used", error_message="配件编号已被使用")
             # 数据组装
             # 配件信息
             asset_part_info_db = self.convert_asset_part_info_db_4api(asset_part)
@@ -1981,8 +1996,7 @@ class AssetsService:
         # 返回数据
         return asset_part_info_db
 
-        # 创建配件对象数据转换 1个数据对象
-
+    # 创建配件对象数据转换 1个数据对象
     def convert_asset_part_relation_info_db_4api(self, asset_part, asset_part_id: str):
         # 判空
         if asset_part is None or len(asset_part.part_sn) == 0:
@@ -2014,6 +2028,12 @@ class AssetsService:
             # 判空
             if asset_part_db is None:
                 return None
+            # 判断配件编号是否唯一
+            if asset_part.part_number is not None and asset_part.part_number != asset_part_db.part_number:
+                # 根据配件编号查询判断数据库中是否已存在
+                asset_part_db = AssetSQL.get_asset_part_by_number(asset_part.part_number)
+                if asset_part_db is not None:
+                    raise Fail("part number used", error_message="配件编号已被使用")
             # 填充需要修改的数据
             # 名称
             if asset_part.name is not None and len(asset_part.name) > 0:

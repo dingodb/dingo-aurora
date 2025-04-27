@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-from sqlalchemy.orm import sessionmaker, aliased
-from sqlalchemy import create_engine, func
-from typing_extensions import assert_type
+from sqlalchemy.orm import aliased
+from sqlalchemy import func
 
 from db.engines.mysql import get_session
 from db.models.asset.models import Asset, AssetBasicInfo, AssetPartsInfo, AssetManufacturesInfo, AssetPositionsInfo, \
     AssetContractsInfo, AssetBelongsInfo, AssetCustomersInfo, AssetType, AssetFlowsInfo, AssetManufactureRelationInfo, \
     AssetExtendsColumnsInfo, AssetPartRelationInfo
-
-from enum import Enum
+from db.models.asset_resoure_relation.models import AssetResourceRelationInfo
 
 from utils.constant import asset_part_type_dict
 
@@ -20,7 +18,8 @@ from utils.constant import asset_part_type_dict
 # 资产排序字段字典
 asset_dir_dic= {"asset_type":AssetBasicInfo.asset_type, "frame_position":AssetPositionsInfo.frame_position, "u_position":AssetPositionsInfo.u_position, "cabinet_position":AssetPositionsInfo.cabinet_position,
                 "asset_status":AssetBasicInfo.asset_status, "asset_name":AssetBasicInfo.name, "id": AssetBasicInfo.id, "equipment_number":AssetBasicInfo.equipment_number, "asset_number":AssetBasicInfo.asset_number,
-                "sn_number":AssetBasicInfo.asset_number, "department_name":AssetBelongsInfo.department_name, "user_name":AssetBelongsInfo.user_name, "manufacturer_name":AssetManufacturesInfo.name, }
+                "sn_number":AssetBasicInfo.asset_number, "department_name":AssetBelongsInfo.department_name, "user_name":AssetBelongsInfo.user_name, "manufacturer_name":AssetManufacturesInfo.name,
+                "resource_name":AssetResourceRelationInfo.resource_name, "resource_status":AssetResourceRelationInfo.resource_status, "resource_user_name": AssetResourceRelationInfo.resource_user_name, "resource_project_name":AssetResourceRelationInfo.resource_project_name}
 # 配件的所有列
 part_columns = [getattr(AssetPartsInfo, column.name).label(column.name) for column in AssetPartsInfo.__table__.columns]
 # 流的所有列
@@ -85,6 +84,13 @@ class AssetSQL:
                                   AssetCustomersInfo.float_ip.label("customer_float_ip"),
                                   AssetCustomersInfo.band_width.label("customer_band_width"),
                                   AssetCustomersInfo.description.label("customer_description"),
+                                  AssetResourceRelationInfo.resource_id.label("resource_id"),
+                                  AssetResourceRelationInfo.resource_name.label("resource_name"),
+                                  AssetResourceRelationInfo.resource_status.label("resource_status"),
+                                  AssetResourceRelationInfo.resource_user_id.label("resource_user_id"),
+                                  AssetResourceRelationInfo.resource_user_name.label("resource_user_name"),
+                                  AssetResourceRelationInfo.resource_project_id.label("resource_project_id"),
+                                  AssetResourceRelationInfo.resource_project_name.label("resource_project_name"),
                                   )
             # 外连接
             query = query.outerjoin(AssetManufactureRelationInfo, AssetManufactureRelationInfo.asset_id == AssetBasicInfo.id). \
@@ -93,7 +99,8 @@ class AssetSQL:
                 outerjoin(AssetPositionsInfo, AssetPositionsInfo.asset_id == AssetBasicInfo.id). \
                 outerjoin(AssetContractsInfo, AssetContractsInfo.asset_id == AssetBasicInfo.id). \
                 outerjoin(AssetBelongsInfo, AssetBelongsInfo.asset_id == AssetBasicInfo.id). \
-                outerjoin(AssetCustomersInfo, AssetCustomersInfo.asset_id == AssetBasicInfo.id)
+                outerjoin(AssetCustomersInfo, AssetCustomersInfo.asset_id == AssetBasicInfo.id). \
+                outerjoin(AssetResourceRelationInfo, AssetResourceRelationInfo.asset_id == AssetBasicInfo.id)
             # 数据库查询参数
             if "asset_name" in query_params and query_params["asset_name"]:
                 query = query.filter(AssetBasicInfo.name.like('%' + str(query_params["asset_name"]) + '%'))
@@ -167,6 +174,15 @@ class AssetSQL:
             # 描述模糊查询，存储的json字段，需要解然后模糊查询
             if "asset_description" in query_params and query_params["asset_description"]:
                 query = query.filter(AssetBasicInfo.description.like('%' + query_params["asset_description"] + '%'))
+            # 资源相关
+            if "resource_name" in query_params and query_params["resource_name"]:
+                query = query.filter(AssetResourceRelationInfo.resource_name.like('%' + query_params["resource_name"] + '%'))
+            if "resource_status" in query_params and query_params["resource_status"]:
+                query = query.filter(AssetResourceRelationInfo.resource_status == query_params["resource_status"])
+            if "resource_user_name" in query_params and query_params["resource_user_name"]:
+                query = query.filter(AssetResourceRelationInfo.resource_user_name.like('%' + query_params["resource_user_name"] + '%'))
+            if "resource_project_name" in query_params and query_params["resource_project_name"]:
+                query = query.filter(AssetResourceRelationInfo.resource_project_name.like('%' + query_params["resource_project_name"] + '%'))
             # 总数
             count = query.count()
             # 排序
@@ -691,6 +707,12 @@ class AssetSQL:
         session = get_session()
         with session.begin():
             return session.query(AssetPartsInfo).filter(AssetPartsInfo.id == asset_part_id).first()
+
+    @classmethod
+    def get_asset_part_by_number(cls, asset_part_number):
+        session = get_session()
+        with session.begin():
+            return session.query(AssetPartsInfo).filter(AssetPartsInfo.part_number == asset_part_number).first()
 
     @classmethod
     def get_asset_part_relation_sn_by_id(cls, asset_part_id):
