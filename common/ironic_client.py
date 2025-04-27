@@ -78,7 +78,7 @@ class IronicClient:
         return response.json()['nodes']
 
     def keystone_get_user_by_id(self, user_id):
-        """获取Ironic节点列表"""
+        """获取指定用户信息"""
         endpoint = self.get_service_endpoint('identity')
         response = self.session.get(f"{endpoint}/v3/users/"+user_id)
         if response.status_code != 200:
@@ -86,7 +86,7 @@ class IronicClient:
         return response.json()['user']
 
     def keystone_get_project_by_id(self, project_id):
-        """获取Ironic节点列表"""
+        """获取指定项目信息"""
         endpoint = self.get_service_endpoint('identity')
         response = self.session.get(f"{endpoint}/v3/projects/"+project_id)
         if response.status_code != 200:
