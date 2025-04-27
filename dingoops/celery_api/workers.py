@@ -44,31 +44,30 @@ class NodeGroup(BaseModel):
     etcd: Optional[bool] = Field(None, description="是否是etcd节点")
 
 class ClusterTFVarsObject(BaseModel):
-    id: Optional[str] = Field(None, description="项目id")
-    cluster_name: Optional[str] = Field(None, description="集群名称")   
+    id: Optional[str] = Field(None, description="集群id")
+    cluster_name: Optional[str] = Field(None, description="集群id")
     image: Optional[str] = Field(None, description="用户id")
-    k8s_masters: Optional[Dict[str, NodeGroup]] = Field(None, description="集群标签")
-    k8s_nodes: Optional[Dict[str, NodeGroup]] = Field(None, description="集群状态")
+    nodes: Optional[Dict[str, NodeGroup]] = Field(None, description="集群状态")
     admin_subnet_id: Optional[str] = Field(None, description="管理子网id")
     bus_network_id: Optional[str] = Field(None, description="业务网络id")
     admin_network_id: Optional[str] = Field(None, description="管理网id")
     bus_subnet_id: Optional[str] = Field(None, description="业务子网id")
-    floatingip_pool: Optional[str] = Field(None, description="节点配置")
+    ssh_user: Optional[str] = Field(None, description="用户名")
+    password: Optional[str] = Field(None, description="密码")
+    floatingip_pool: Optional[str] = Field(None, description="浮动ip池")
     subnet_cidr: Optional[str] = Field(None, description="运行时类型")
     use_existing_network: Optional[bool] = Field(None, description="是否使用已有网络")
     external_net: Optional[str] = Field(None, description="外部网络id")
     group_vars_path:  Optional[str] = Field(None, description="集群变量路径")
-    number_of_etcd: Optional[int] = Field(None, description="ETCD节点数量")
-    number_of_k8s_masters: Optional[int] = Field(None, description="K8s master节点数量")
-    number_of_k8s_masters_no_etcd: Optional[int] = Field(None, description="不带ETCD的K8s master节点数量")
-    number_of_k8s_masters_no_floating_ip: Optional[int] = Field(None, description="无浮动IP的K8s master节点数量")
-    number_of_k8s_masters_no_floating_ip_no_etcd: Optional[int] = Field(None, description="无浮动IP且不带ETCD的K8s master节点数量")
-    number_of_k8s_nodes: Optional[int] = Field(None, description="K8s worker节点数量")
-    number_of_k8s_nodes_no_floating_ip: Optional[int] = Field(None, description="无浮动IP的K8s worker节点数量")
-    ssh_user: Optional[str] = Field(None, description="用户名")
-    password: Optional[str] = Field(None, description="密码")
+    number_of_etcd: Optional[int] = Field(0, description="ETCD节点数量")
+    number_of_k8s_masters: Optional[int] = Field(0, description="K8s master节点数量")
+    number_of_k8s_masters_no_etcd: Optional[int] = Field(0, description="不带ETCD的K8s master节点数量")
+    number_of_k8s_masters_no_floating_ip: Optional[int] = Field(0, description="无浮动IP的K8s master节点数量")
+    number_of_k8s_masters_no_floating_ip_no_etcd: Optional[int] = Field(0, description="无浮动IP且不带ETCD的K8s master节点数量")
+    number_of_k8s_nodes: Optional[int] = Field(0, description="K8s worker节点数量")
+    number_of_k8s_nodes_no_floating_ip: Optional[int] = Field(0, description="无浮动IP的K8s worker节点数量")
     k8s_master_loadbalancer_enabled: Optional[bool] = Field(False, description="是否启用负载均衡器")
-    
+    public_key_path: Optional[str] = Field(None, description="公钥路径")
     
 def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, region_name:str = "regionOne"):
     """使用Terraform创建基础设施"""
@@ -76,7 +75,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, regio
         
         # 将templat下的terraform目录复制到WORK_DIR/cluster.id目录下
         cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id))
-        dd = subprocess.run(["cp", "-LRpf", os.path.join(WORK_DIR, "ansible-deploy", "inventory","sample-inventory"), str(cluster_dir)], capture_output=True)
+        subprocess.run(["cp", "-LRpf", os.path.join(WORK_DIR, "ansible-deploy", "inventory","sample-inventory"), str(cluster_dir)], capture_output=True)
 
         subprocess.run(["cp", "-r", str(TERRAFORM_DIR), str(cluster_dir)], capture_output=True)
         os.chdir(os.path.join(cluster_dir, "terraform"))
@@ -93,8 +92,20 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, regio
             print(f"Terraform error: {res.stderr}")
             return False
         
-        cluster.group_vars_path = os.path.join(cluster_dir, "group_vars")
-   
+        if cluster.password == "":
+            res = subprocess.run(['ssh-keygen -t rsa -b 4096 -C "" -f", os.path.join(str(cluster_dir), "id_rsa"), "-N ""'], capture_output=True)
+            if res.returncode != 0:
+            # 发生错误时更新任务状态为"失败"
+                task_info.end_time =datetime.fromtimestamp(datetime.now().timestamp())
+                task_info.state = "failed"
+                task_info.detail = res.stderr
+                update_task_state(task_info)
+                print(f"Terraform error: {res.stderr}")
+                return False
+            cluster.public_key_path = os.path.join(cluster_dir, "id_rsa.pub")
+        
+        
+        cluster.group_vars_path = os.path.join(cluster_dir, "group_vars")          
         tfvars_str = json.dumps(cluster, default=lambda o: o.__dict__, indent=2)
         with open("output.tfvars.json", "w") as f:
             f.write(tfvars_str)
@@ -134,6 +145,38 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, regio
         update_task_state(task_info)
         print(f"Terraform error: {e}")
         return False
+    
+@celery_app.task(bind=True)
+def create_cluster(self, cluster_tf:ClusterTFVarsObject,cluster:ClusterObject):
+    try:
+        task_id = self.request.id.__str__()
+        instructure_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress", start_time=datetime.fromtimestamp(datetime.now().timestamp()),msg=TaskService.TaskMessage.instructure_create.name)
+        TaskSQL.insert(instructure_task)
+        cluster_tfvars = ClusterTFVarsObject(**cluster_tf)
+        cluster_dict = ClusterTFVarsObject(**cluster)
+        terraform_result = create_infrastructure(cluster_tfvars,instructure_task, cluster.region_name)
+        
+        if not terraform_result:
+            raise Exception("Terraform infrastructure creation failed")
+        instructure_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+        instructure_task.state = "success"
+        instructure_task.detail = TaskService.TaskDetail.instructure_create.value
+        update_task_state(instructure_task)
+        print("Terraform apply succeeded")
+        db_cluster = ClusterSQL.list_cluster(cluster_dict["id"])
+        db_cluster.status = 'failed'
+        db_cluster.error_message = str(e.__str__())
+        ClusterSQL.update_cluster(cluster_dict["id"])
+    except Exception as e:
+        # 发生错误时更新集群状态为"失败"
+        db_cluster = ClusterSQL.list_cluster(cluster_dict["id"])[0]
+        db_cluster.status = 'failed'
+        db_cluster.error_message = str(e.__str__())
+        ClusterSQL.update_cluster(cluster_dict["id"])
+        raise
+        
+        
+    
 
 
 def deploy_kubernetes(cluster:ClusterObject,lb_ip:str, task_id:str = None):
@@ -147,11 +190,11 @@ def deploy_kubernetes(cluster:ClusterObject,lb_ip:str, task_id:str = None):
         # #替换
         # # 定义上下文字典，包含所有要替换的变量值
         context = {
-            'kube_version': cluster.version,
-            'kube_network_plugin': cluster.network_config.cni,
-            'service_cidr': cluster.network_config.service_cidr,
+            'kube_version': cluster.kube_info.version,
+            'kube_network_plugin': cluster.kube_info.cni,
+            'service_cidr': cluster.kube_info.service_cidr,
             "kube_vip_address": lb_ip,
-            "kube_proxy_mode": cluster.network_config.kube_proxy_mode,
+            "kube_proxy_mode": cluster.kube_info.kube_proxy_mode,
         }
         # 修正模板文件路径
         template_file = "k8s-cluster.yml.j2"
@@ -333,7 +376,7 @@ def get_cluster_kubeconfig(cluster, lb_ip):
         return None
     
 @celery_app.task(bind=True)
-def create_cluster(self, cluster_tf_dict, cluster_dict, node_list, scale=False):
+def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, scale=False):
     try:
         task_id = self.request.id.__str__()
         #task_id = "da"
@@ -345,7 +388,6 @@ def create_cluster(self, cluster_tf_dict, cluster_dict, node_list, scale=False):
         task_info = Taskinfo(task_id=task_id, cluster_id=cluster_tf_dict["id"], state="progress", start_time=datetime.fromtimestamp(datetime.now().timestamp()),msg=TaskService.TaskMessage.instructure_create.name)
         TaskSQL.insert(task_info)
         terraform_result = create_infrastructure(cluster_tfvars,task_info, cluster.region_name)
-        
         if not terraform_result:
             raise Exception("Terraform infrastructure creation failed")
         # 打印日志
@@ -368,71 +410,27 @@ def create_cluster(self, cluster_tf_dict, cluster_dict, node_list, scale=False):
             "-m", "ping",
             "all"
         ], capture_output=True)
-        if res.returncode != 0:
-            # Keep trying to connect to all nodes until successful
-            max_attempts = 12  # Try for up to 1 minute (12 * 5 seconds)
-            attempt = 1
-            start_time = time.time()
-            timeout = 1800  # 30 minutes in seconds
-            while True:
-                if time.time() - start_time > timeout:
-                    raise Exception("Operation timed out after 30 minutes. Terminating execution.")
-                print(f"Attempting to connect to all nodes with Ansible (attempt {attempt}/{max_attempts})...")
-                res = subprocess.run([
-                    "ansible",
-                    "-i", "inventory/hosts",
-                    "-m", "ping",
-                    "all"
-                ], capture_output=True)
-                
-                if res.returncode == 0:
-                    print("Successfully connected to all nodes")
-                    break
-                
-                attempt += 1
-                if attempt > max_attempts:
-                    raise Exception(f"Failed to connect to all nodes with Ansible ping after {max_attempts} attempts")
-                
-                print(f"Connection attempt failed. Waiting 5 seconds before retrying...")
-                time.sleep(5)
-                # Add timeout check - terminate after 30 minute
+   
         
         
-        res = subprocess.run(["python3", host_file, "--list"], capture_output=True, text=True)
-        if res.returncode != 0:
-            #更新数据库的状态为failed
-            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-            task_info.state = "failed"
-            task_info.detail = str(res.stderr)
-            update_task_state(task_info)
-            raise Exception("Error generating Ansible inventory")
-        hosts = res.stdout
-        # todo 添加节点时，需要将节点信息写入到inventory/inventory.yaml文件中
-        # 如果是密码登录与master节点1做免密
-        hosts_data = json.loads(hosts)
-        # 从_meta.hostvars中获取master节点的IP
-        master_node_name = cluster_tfvars.cluster_name+"-k8s-master-1"
-        master_ip = hosts_data["_meta"]["hostvars"][master_node_name]["access_ip_v4"]
-        
-        lb_ip = hosts_data["_meta"]["hostvars"][master_node_name]["lb_ip"]
+        master_ip, lb_ip = get_ips(cluster_tfvars, task_info, host_file)
         result = subprocess.run("", shell=True, capture_output=True)
-        cmd = f'ssh-keygen -f "/root/.ssh/known_hosts" -R "{master_ip}" && sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no {cluster_tfvars.ssh_user}@{master_ip}'
-        result = subprocess.run(cmd, shell=True, capture_output=True)
-        if result.returncode != 0:
-            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-            task_info.state = "failed"
-            task_info.detail = str(result.stderr)
-            update_task_state(task_info)
-            raise Exception("Ansible kubernetes deployment failed")
         
+        if cluster_tfvars.password == "":
+            cmd = f'ssh-keygen -f "/root/.ssh/known_hosts" -R "{master_ip}" && sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no {cluster_tfvars.ssh_user}@{master_ip}'
+            result = subprocess.run(cmd, shell=True, capture_output=True)
+            if result.returncode != 0:
+                task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                task_info.state = "failed"
+                task_info.detail = str(result.stderr)
+                update_task_state(task_info)
+                raise Exception("Ansible kubernetes deployment failed")
         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
         task_info.state = "success"
         task_info.detail = str(res.stdout)
         update_task_state(task_info)
         # 2. 使用Ansible部署K8s集群
-
         cluster.id = cluster_tf_dict["id"]
-
 
         if scale:
             ansible_result = scale_kubernetes(cluster)
@@ -440,7 +438,6 @@ def create_cluster(self, cluster_tf_dict, cluster_dict, node_list, scale=False):
             ansible_result = deploy_kubernetes(cluster,lb_ip,task_id)
 
         #阻塞线程，直到ansible_client.get_playbook_result()返回结果
-        
         if not ansible_result:
             # 更新数据库的状态为failed
             task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp()), # 当前时间
@@ -478,6 +475,25 @@ def create_cluster(self, cluster_tf_dict, cluster_dict, node_list, scale=False):
         db_cluster.error_message = str(e.__str__())
         ClusterSQL.update_cluster(cluster_dict["id"])
         raise
+
+def get_ips(cluster_tfvars, task_info, host_file):
+    res = subprocess.run(["python3", host_file, "--list"], capture_output=True, text=True)
+    if res.returncode != 0:
+            #更新数据库的状态为failed
+        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+        task_info.state = "failed"
+        task_info.detail = str(res.stderr)
+        update_task_state(task_info)
+        raise Exception("Error generating Ansible inventory")
+    hosts = res.stdout
+        # todo 添加节点时，需要将节点信息写入到inventory/inventory.yaml文件中
+        # 如果是密码登录与master节点1做免密
+    hosts_data = json.loads(hosts)
+        # 从_meta.hostvars中获取master节点的IP
+    master_node_name = cluster_tfvars.cluster_name+"-k8s-master-1"
+    master_ip = hosts_data["_meta"]["hostvars"][master_node_name]["access_ip_v4"]
+    lb_ip = hosts_data["_meta"]["hostvars"][master_node_name]["lb_ip"]
+    return master_ip,lb_ip
 
 
 @celery_app.task(bind=True)

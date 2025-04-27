@@ -1,10 +1,10 @@
 module "network" {
   source = "./modules/network"
-
+  number_subnet         = var.number_subnet
   external_net          = var.external_net
   admin_network_name    = var.admin_network_name
   bus_network_name      = var.bus_network_name
-  subnet_cidr           = var.subnet_cidr
+  subnet_cidr           = var.subnet_cidr 
   cluster_name          = var.cluster_name
   dns_nameservers       = var.dns_nameservers
   network_dns_domain    = var.network_dns_domain
@@ -21,14 +21,14 @@ module "ips" {
 
   number_of_k8s_masters         = var.number_of_k8s_masters
   number_of_k8s_masters_no_etcd = var.number_of_k8s_masters_no_etcd
-  number_of_k8s_nodes           = var.number_of_k8s_nodes
+  number_of_nodes               = var.number_of_nodes
   floatingip_pool               = var.floatingip_pool
   number_of_bastions            = var.number_of_bastions
   external_net                  = var.external_net
   admin_network_name            = var.admin_network_name
   admin_network_id              = var.admin_network_id
   router_id                     = module.network.router_id
-  k8s_nodes                     = var.k8s_nodes
+  nodes                         = var.nodes
   k8s_masters                   = var.k8s_masters
   k8s_master_fips               = var.k8s_master_fips
   bastion_fips                  = var.bastion_fips
@@ -46,12 +46,12 @@ module "compute" {
   number_of_etcd                               = var.number_of_etcd
   number_of_k8s_masters_no_floating_ip         = var.number_of_k8s_masters_no_floating_ip
   number_of_k8s_masters_no_floating_ip_no_etcd = var.number_of_k8s_masters_no_floating_ip_no_etcd
-  number_of_k8s_nodes                          = var.number_of_k8s_nodes
+  number_of_nodes                              = var.number_of_nodes
   number_of_bastions                           = var.number_of_bastions
-  number_of_k8s_nodes_no_floating_ip           = var.number_of_k8s_nodes_no_floating_ip
+  number_of_nodes_no_floating_ip               = var.number_of_nodes_no_floating_ip
   number_of_gfs_nodes_no_floating_ip           = var.number_of_gfs_nodes_no_floating_ip
   k8s_masters                                  = var.k8s_masters
-  k8s_nodes                                    = var.k8s_nodes
+  nodes                                        = var.nodes
   bastion_root_volume_size_in_gb               = var.bastion_root_volume_size_in_gb
   etcd_root_volume_size_in_gb                  = var.etcd_root_volume_size_in_gb
   master_root_volume_size_in_gb                = var.master_root_volume_size_in_gb
@@ -75,14 +75,16 @@ module "compute" {
   flavor_gfs_node                              = var.flavor_gfs_node
   bus_network_name                             = var.bus_network_name
   admin_network_name                           = var.admin_network_name
-  bus_network_id                               = var.bus_network_id
-  admin_network_id                             = var.admin_network_id
+
+  #bus_network_id                               = module.network.bus_network_id
+  network_router_id                            = module.network.router_id
+  admin_network_id                             = module.network.admin_network_id
   flavor_bastion                               = var.flavor_bastion
   k8s_master_fips                              = module.ips.k8s_master_fips
   k8s_master_no_etcd_fips                      = module.ips.k8s_master_no_etcd_fips
   k8s_masters_fips                             = module.ips.k8s_masters_fips
-  k8s_node_fips                                = module.ips.k8s_node_fips
-  k8s_nodes_fips                               = module.ips.k8s_nodes_fips
+  node_fips                                    = module.ips.node_fips
+  nodes_fips                                   = module.ips.nodes_fips
   bastion_fips                                 = module.ips.bastion_fips
   bastion_allowed_remote_ips                   = var.bastion_allowed_remote_ips
   bastion_allowed_remote_ipv6_ips              = var.bastion_allowed_remote_ipv6_ips
@@ -109,9 +111,8 @@ module "compute" {
   group_vars_path                              = var.group_vars_path
   port_security_enabled                        = var.port_security_enabled
   force_null_port_security                     = var.force_null_port_security
-  network_router_id                            = module.network.router_id
   use_existing_network                         = var.use_existing_network
-  private_subnet_id                            = module.network.subnet_id
+  private_subnet_id                            = module.network.admin_subnet_id
   additional_server_groups                     = var.additional_server_groups
   depends_on = [
     module.network.subnet_id
@@ -139,7 +140,7 @@ module "loadbalancer" {
 
 
 output "private_subnet_id" {
-  value = module.network.subnet_id
+  value = module.network.admin_subnet_id
 }
 
 output "floating_network_id" {
@@ -154,8 +155,8 @@ output "k8s_master_fips" {
   value = var.number_of_k8s_masters + var.number_of_k8s_masters_no_etcd > 0 ? concat(module.ips.k8s_master_fips, module.ips.k8s_master_no_etcd_fips) : [for key, value in module.ips.k8s_masters_fips : value.address]
 }
 
-output "k8s_node_fips" {
-  value = var.number_of_k8s_nodes > 0 ? module.ips.k8s_node_fips : [for key, value in module.ips.k8s_nodes_fips : value.address]
+output "node_fips" {
+  value = var.number_of_nodes > 0 ? module.ips.node_fips : [for key, value in module.ips.nodes_fips : value.address]
 }
 
 output "bastion_fips" {

@@ -6,25 +6,19 @@ from dingoops.api.model.base import DingoopsObject
 
 
 class NetworkConfigObject(BaseModel):
-    network_id: Optional[str] = Field(None, description="网络id")
-    cni: Optional[str] = Field(None, description="集群标签")
-    pod_cidr: Optional[str] = Field(None, description="集群状态原因")
     admin_subnet_id: Optional[str] = Field(None, description="管理网id")
     bus_subnet_id: Optional[str] = Field(None, description="业务子网id")
     admin_network_id: Optional[str] = Field(None, description="管理网络id")
     bus_network_id: Optional[str] = Field(None, description="业务网络id")
     vip: Optional[str] = Field(None, description="管理网访问地址")
     floating_ip: Optional[bool] = Field(None, description="是否启用浮动ip")
-    service_cidr: Optional[str] = Field(None, description="服务网段")
-    router_id: Optional[str] = Field(None, description="虚拟路由id")
-    kube_proxy_mode: Optional[str] = Field(None, description="kube proxy模式")
-    loadbalancer_enabled: Optional[bool] = Field(False, description="是否启用负载均衡器")
+    
     
 class NodeConfigObject(BaseModel):
     count: Optional[int] = Field(None, description="项目id")
     image: Optional[str] = Field(None, description="用户id")
     flavor_id: Optional[str] = Field(None, description="节点规格")
-    openstack_id: Optional[str] = Field(None, description="node在openstack中的id")
+    key_id: Optional[str] = Field(None, description="node在openstack中的id")
     private_key: Optional[str] = Field(None, description="node在openstack中的id")
     user: Optional[str] = Field(None, description="node在openstack中的id")
     password: Optional[str] = Field(None, description="node在openstack中的id")
@@ -38,39 +32,49 @@ class NodeGroup(BaseModel):
     flavor: Optional[str] = Field(None, description="规格")
     floating_ip: Optional[bool] = Field(None, description="浮动ip")
     etcd: Optional[bool] = Field(None, description="是否是etcd节点")
+
+class KubeClusterObject(BaseModel):
+    kube_lb_address: Optional[str] = Field(None, description="负载均衡器的浮动ip")
+    kube_proxy_mode: Optional[str] = Field(None, description="kube proxy模式")
+    loadbalancer_enabled: Optional[bool] = Field(False, description="是否启用负载均衡器")
     
+    runtime: Optional[str] = Field(None, description="运行时类型")
+    version: Optional[str] = Field(None, description="k8s版本")
+    kube_config: Optional[str] = Field(None, description="cni插件")
+    service_cidr: Optional[str] = Field(None, description="服务网段")
+    cni: Optional[str] = Field(None, description="cni")
+    pod_cidr: Optional[str] = Field(None, description="pod的cidr")
+    number_master: Optional[int] = Field(0, description="master节点数量")
+      
 class ClusterObject(DingoopsObject):
+    name: Optional[str] = Field(None, description="集群名称")
     project_id: Optional[str] = Field(None, description="项目id")
     user_id: Optional[str] = Field(None, description="用户id")
     labels: Optional[str] = Field(None, description="集群标签")
     region_name: Optional[str] = Field(None, description="region名称")
-    network_config: Optional[NetworkConfigObject] = Field(None, description="网络配置")
+    #network_config: Optional[NetworkConfigObject] = Field(None, description="网络配置")
     node_config: Optional[List[NodeConfigObject]] = Field(None, description="节点配置")
-    runtime: Optional[str] = Field(None, description="运行时类型")
     type: Optional[str] = Field(None, description="集群类型")
-    version: Optional[str] = Field(None, description="k8s版本")
-    
-    kube_lb_address: Optional[str] = Field(None, description="负载均衡器的浮动ip")
     security_group: Optional[str] = Field(None, description="安全组名称")
-    kube_config: Optional[str] = Field(None, description="cni插件")
+    kube_info: Optional[KubeClusterObject] = Field(None, description="k8s信息")
     
-class KubeClusterObject(BaseModel):
-    kube_lb_address: Optional[str] = Field(None, description="负载均衡器的浮动ip")
-    security_group: Optional[str] = Field(None, description="安全组名称")
-    runtime: Optional[str] = Field(None, description="运行时类型")
+    
     
 class ClusterInfo(DingoopsObject):
     project_id: Optional[str] = Field(None, description="项目id")
+    project_name: Optional[str] = Field(None, description="项目名称")
     user_id: Optional[str] = Field(None, description="用户id")
     labels: Optional[str] = Field(None, description="集群标签")
     region_name: Optional[str] = Field(None, description="region名称")
     network_config: Optional[NetworkConfigObject] = Field(None, description="网络配置")
-    node_config: Optional[List[NodeConfigObject]] = Field(None, description="节点配置")
+    #node_config: Optional[List[NodeConfigObject]] = Field(None, description="节点配置")
     runtime: Optional[str] = Field(None, description="运行时类型")
     type: Optional[str] = Field(None, description="集群类型")
     version: Optional[str] = Field(None, description="k8s版本")
     kube_config: Optional[str] = Field(None, description="cni插件")
     loadbalancer_enabled: Optional[bool] = Field(None, description="是否启用负载均衡器")
+
+
 
 class NodeObject(DingoopsObject):
     project_id: Optional[str] = Field(None, description="项目id")
@@ -103,8 +107,7 @@ class ClusterTFVarsObject(BaseModel):
     id: Optional[str] = Field(None, description="集群id")
     cluster_name: Optional[str] = Field(None, description="集群id")
     image: Optional[str] = Field(None, description="用户id")
-    k8s_masters: Optional[Dict[str, NodeGroup]] = Field(None, description="集群标签")
-    k8s_nodes: Optional[Dict[str, NodeGroup]] = Field(None, description="集群状态")
+    nodes: Optional[Dict[str, NodeGroup]] = Field(None, description="集群状态")
     admin_subnet_id: Optional[str] = Field(None, description="管理子网id")
     bus_network_id: Optional[str] = Field(None, description="业务网络id")
     admin_network_id: Optional[str] = Field(None, description="管理网id")
@@ -124,6 +127,7 @@ class ClusterTFVarsObject(BaseModel):
     number_of_k8s_nodes: Optional[int] = Field(0, description="K8s worker节点数量")
     number_of_k8s_nodes_no_floating_ip: Optional[int] = Field(0, description="无浮动IP的K8s worker节点数量")
     k8s_master_loadbalancer_enabled: Optional[bool] = Field(False, description="是否启用负载均衡器")
+    public_key_path: Optional[str] = Field(None, description="公钥路径")
 
 
 

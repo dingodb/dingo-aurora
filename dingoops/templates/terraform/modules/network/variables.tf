@@ -7,6 +7,7 @@ variable "bus_network_name" {}
 variable "network_dns_domain" {}
 
 variable "cluster_name" {}
+variable "number_subnet" {}
 
 variable "dns_nameservers" {
   type = list

@@ -15,7 +15,7 @@ task_service = TaskService()
 @router.post("/cluster", summary="创建k8s集群", description="创建k8s集群")
 async def create_cluster(cluster_object:ClusterObject):
     try:
-        # 集群信息存入数据库
+
         cluster_id = cluster_service.create_cluster(cluster_object)
         # 操作日志
         #SystemService.create_system_log(OperateLogApiModel(operate_type="create", resource_type="flow", resource_id=cluster_id, resource_name=cluster_object.name, operate_flag=True))

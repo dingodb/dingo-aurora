@@ -18,9 +18,9 @@ variable "number_of_k8s_masters_no_floating_ip" {}
 
 variable "number_of_k8s_masters_no_floating_ip_no_etcd" {}
 
-variable "number_of_k8s_nodes" {}
+variable "number_of_nodes" {}
 
-variable "number_of_k8s_nodes_no_floating_ip" {}
+variable "number_of_nodes_no_floating_ip" {}
 
 variable "number_of_bastions" {}
 
@@ -89,7 +89,7 @@ variable "k8s_master_no_etcd_fips" {
   type = list
 }
 
-variable "k8s_node_fips" {
+variable "node_fips" {
   type = list
 }
 
@@ -99,7 +99,7 @@ variable "k8s_masters_fips" {
   }))
 }
 
-variable "k8s_nodes_fips" {
+variable "nodes_fips" {
   type = map(object({
     address = string
   }))
@@ -156,7 +156,7 @@ variable "k8s_masters" {
   }))
 }
 
-variable "k8s_nodes" {
+variable "nodes" {
   type = map(object({
     az                     = string
     flavor                 = string

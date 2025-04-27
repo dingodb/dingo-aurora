@@ -14,6 +14,10 @@ variable "az_list_node" {
   default     = ["nova"]
 }
 
+variable "number_subnet" {
+  default = 1
+}
+
 variable "number_of_bastions" {
   default = 1
 }
@@ -38,12 +42,12 @@ variable "number_of_k8s_masters_no_floating_ip_no_etcd" {
   default = 2
 }
 
-variable "number_of_k8s_nodes" {
-  default = 1
+variable "number_of_nodes" {
+  default = 0
 }
 
-variable "number_of_k8s_nodes_no_floating_ip" {
-  default = 1
+variable "number_of_nodes_no_floating_ip" {
+  default = 0
 }
 
 variable "number_of_gfs_nodes_no_floating_ip" {
@@ -370,7 +374,7 @@ variable "k8s_masters" {
   default = {}
 }
 
-variable "k8s_nodes" {
+variable "nodes" {
   default = {}
 }
 

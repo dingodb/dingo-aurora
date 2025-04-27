@@ -2,7 +2,7 @@ variable "number_of_k8s_masters" {}
 
 variable "number_of_k8s_masters_no_etcd" {}
 
-variable "number_of_k8s_nodes" {}
+variable "number_of_nodes" {}
 
 variable "floatingip_pool" {}
 
@@ -20,7 +20,7 @@ variable "router_id" {
 
 variable "k8s_masters" {}
 
-variable "k8s_nodes" {}
+variable "nodes" {}
 
 variable "k8s_master_fips" {}
 

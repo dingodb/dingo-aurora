@@ -23,21 +23,14 @@ class Cluster(Base):
     admin_subnet_id = Column(String(length=128), nullable=True)
     bus_network_id = Column(String(length=128), nullable=True)
     bus_subnet_id = Column(String(length=128), nullable=True)
-    runtime = Column(String(length=128), nullable=True)
-    type = Column(String(length=128), nullable=True)
-    service_cidr = Column(String(length=255), nullable=True)
-    bus_address = Column(String(length=255), nullable=True)
-    api_address = Column(String(length=255), nullable=True)
-    cni = Column(String(length=255), nullable=True)
-    kube_config = Column(Text, nullable=False)
     
-    master_count = Column(Integer, default=0, nullable= False)
-    worker_count = Column(Integer, default=0, nullable= False)
-    version = Column(String(length=255), nullable=True)
+    type = Column(String(length=128), nullable=True)
+    kube_info = Column(Text, nullable=True)
+    
     create_time = Column(DateTime, nullable=True)
     update_time = Column(DateTime, nullable=True)
     description = Column(String(length=255), nullable=True)
-    extra = Column(String(length=255), nullable=True)
+    extra = Column(Text, nullable=True)
 
     
 # 节点对象
