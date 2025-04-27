@@ -8,40 +8,40 @@ from typing_extensions import assert_type
 
 from dingoops.db.engines.mysql import get_session
 from dingoops.db.models.cluster.models import Cluster,Taskinfo
-from dingoops.db.models.node.models import NodeInfo
+from dingoops.db.models.instance.models import Instance
 from enum import Enum
 
-node_dir_dic= {"create_time":NodeInfo.create_time, "name":NodeInfo.name,"status":NodeInfo.status,
-                  "region_name":NodeInfo.region}
+instance_dir_dic= {"create_time":Instance.create_time, "name":Instance.name,"status":Instance.status,
+                  "region_name":Instance.region}
 
-class NodeSQL:
+class InstanceSQL:
 
     @classmethod
-    def list_nodes(cls, query_params, page=1, page_size=10, sort_keys=None, sort_dirs="ascend"):
+    def list_instances(cls, query_params, page=1, page_size=10, sort_keys=None, sort_dirs="ascend"):
         # 获取session
         session = get_session()
         with session.begin():
             # 根据query_params查询数据
-            query = session.query(NodeInfo)
+            query = session.query(Instance)
             # 查询语句
 
             # 数据库查询参数
             if "id" in query_params and query_params["id"]:
-                query = query.filter(NodeInfo.id == query_params["id"])
+                query = query.filter(Instance.id == query_params["id"])
             if "cluster_name" in query_params and query_params["cluster_name"]:
-                query = query.filter(NodeInfo.cluster_name.like('%' + query_params["cluster_name"] + '%'))
+                query = query.filter(Instance.cluster_name.like('%' + query_params["cluster_name"] + '%'))
             if "cluster_id" in query_params and query_params["cluster_id"]:
-                query = query.filter(NodeInfo.cluster_id == query_params["cluster_id"])
+                query = query.filter(Instance.cluster_id == query_params["cluster_id"])
             # 总数
             count = query.count()
             # 排序
-            if sort_keys is not None and sort_keys in node_dir_dic:
+            if sort_keys is not None and sort_keys in instance_dir_dic:
                 if sort_dirs == "ascend" or sort_dirs is None :
-                    query = query.order_by(node_dir_dic[sort_keys].asc())
+                    query = query.order_by(instance_dir_dic[sort_keys].asc())
                 elif sort_dirs == "descend":
-                    query = query.order_by(node_dir_dic[sort_keys].desc())
+                    query = query.order_by(instance_dir_dic[sort_keys].desc())
             else:
-                query = query.order_by(NodeInfo.create_time.desc())
+                query = query.order_by(Instance.create_time.desc())
             # 分页条件
             page_size = int(page_size)
             page_num = int(page)
@@ -56,46 +56,46 @@ class NodeSQL:
             return count, node_list
 
     @classmethod
-    def create_node(cls, node):
+    def create_instance(cls, instance):
         # Session = sessionmaker(bind=engine, expire_on_commit=False)
         # session = Session()
         session = get_session()
         with session.begin():
-            session.add(node)
+            session.add(instance)
 
     @classmethod
-    def create_node_list(cls, node_list):
+    def create_instance_list(cls, instance_list):
         # Session = sessionmaker(bind=engine, expire_on_commit=False)
         # session = Session()
-        for node in node_list:
-            cls.create_node(node)
+        for instance in instance_list:
+            cls.create_instance(instance)
 
     @classmethod
-    def update_node(cls, node):
-        # Session = sessionmaker(bind=engine, expire_on_commit=False)
-        # session = Session()
-        session = get_session()
-        with session.begin():
-            session.merge(node)
-
-    @classmethod
-    def update_node_list(cls, node_list):
-        # Session = sessionmaker(bind=engine, expire_on_commit=False)
-        # session = Session()
-        for node in node_list:
-            cls.update_node(node)
-
-    @classmethod
-    def delete_node_list(cls, node_list):
-        # Session = sessionmaker(bind=engine, expire_on_commit=False)
-        # session = Session()
-        for node in node_list:
-            cls.delete_node(node)
-
-    @classmethod
-    def delete_node(cls, node):
+    def update_instance(cls, instance):
         # Session = sessionmaker(bind=engine, expire_on_commit=False)
         # session = Session()
         session = get_session()
         with session.begin():
-            session.delete(node)
+            session.merge(instance)
+
+    @classmethod
+    def update_instance_list(cls, instance_list):
+        # Session = sessionmaker(bind=engine, expire_on_commit=False)
+        # session = Session()
+        for instance in instance_list:
+            cls.update_instance(instance)
+
+    @classmethod
+    def delete_instance_list(cls, instance_list):
+        # Session = sessionmaker(bind=engine, expire_on_commit=False)
+        # session = Session()
+        for instance in instance_list:
+            cls.delete_instance(instance)
+
+    @classmethod
+    def delete_instance(cls, instance):
+        # Session = sessionmaker(bind=engine, expire_on_commit=False)
+        # session = Session()
+        session = get_session()
+        with session.begin():
+            session.delete(instance)

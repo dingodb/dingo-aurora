@@ -10,6 +10,7 @@ from io import BytesIO
 import pandas as pd
 from datetime import datetime
 
+from ansible_collections.inspur.sm.plugins.modules.media_instance_info import Instance
 from openpyxl.reader.excel import load_workbook
 from openpyxl.styles import Border, Side
 from typing_extensions import assert_type
@@ -18,11 +19,16 @@ from dingoops.celery_api.celery_app import celery_app
 
 from dingoops.db.models.cluster.sql import ClusterSQL,TaskSQL
 from dingoops.db.models.node.sql import NodeSQL
+from dingoops.db.models.instance.sql import InstanceSQL
 from math import ceil
 from oslo_log import log
+
 from dingoops.api.model.cluster import ClusterTFVarsObject, NodeGroup, ClusterObject, KubeClusterObject
+from dingoops.api.model.instance import InstanceConfigObject
+
 from dingoops.db.models.cluster.models import Cluster as ClusterDB
 from dingoops.db.models.node.models import NodeInfo as NodeDB
+from dingoops.db.models.instance.models import Instance as InstanceDB
 from dingoops.utils import neutron
 
 from dingoops.services.custom_exception import Fail
@@ -48,27 +54,37 @@ class ClusterService:
     def get_az_value(self, node_type):
         """根据节点类型返回az值"""
         return "nova" if node_type == "vm" else ""
-    def generate_k8s_nodes(self, cluster:ClusterObject, k8s_nodes):
-        index = 1
+    def generate_k8s_nodes(self, cluster:ClusterObject, k8s_masters,k8s_nodes):
+        node_index = 1
+        master_index = 1
         for idx, node in enumerate(cluster.node_config):
+            if node.role == "master" and node.type == "vm":
+                for i in range(node.count):
+                    k8s_masters[f"master-{int(master_index) + 1}"] = NodeGroup(
+                        az=self.get_az_value(node.type),
+                        flavor=node.flavor_id,
+                        floating_ip=True,
+                        etcd=False
+                    )
+                    master_index=master_index+1
             if node.role == "worker" and node.type == "vm":
                 for i in range(node.count):
-                    k8s_nodes[f"node-{int(i) + 1}"] = NodeGroup(
+                    k8s_nodes[f"node-{int(node_index) + 1}"] = NodeGroup(
                         az=self.get_az_value(node.type),
                         flavor=node.flavor_id,
                         floating_ip=False,
                         etcd=False
                     )
-                    i=i+1
+                    node_index=node_index+1
             if node.role == "worker" and node.type == "baremental":
                 for i in range(node.count):
-                    k8s_nodes[f"node-{int(index) + 1}"] = NodeGroup(
+                    k8s_nodes[f"node-{int(node_index) + 1}"] = NodeGroup(
                         az=self.get_az_value(node.type),
                         flavor=node.flavor_id,
                         floating_ip=False,
                         etcd=False
                     )
-                    i=i+1
+                    node_index=node_index+1
     # 查询资产列表
     def list_clusters(self, query_params, page, page_size, sort_keys, sort_dirs):
         # 业务逻辑
@@ -162,18 +178,29 @@ class ClusterService:
             #查询openstack相关接口，返回需要的信息
             neutron_api = neutron.API()  # 创建API类的实例
             external_net = neutron_api.list_external_networks()
-            nodes = {}
-            self.generate_k8s_nodes(cluster, nodes)
+
             lb_enbale = False
             if cluster.kube_info.number_master>1:
                 lb_enbale = cluster.kube_info.loadbalancer_enabled
            
+
+            #组装cluster信息为ClusterTFVarsObject格式
+            k8s_masters = {}
+            k8s_nodes = {}
+            self.generate_k8s_nodes(cluster, k8s_masters, k8s_nodes)
+            # 保存node信息到数据库
+            node_list = self.convert_nodeinfo_todb(cluster, k8s_masters, k8s_nodes)
+            NodeSQL.create_node_list(node_list)
+            # 保存instance信息到数据库
+            instance_list = self.convert_instance_todb(cluster, k8s_masters, k8s_nodes)
+            InstanceSQL.create_instance_list(instance_list)
+
             # 创建terraform变量
             tfvars = ClusterTFVarsObject(
                 id = cluster_info_db.id,
                 cluster_name=cluster.name,
                 image=cluster.node_config[0].image,
-                nodes=nodes,
+                nodes=k8s_nodes,
                 floatingip_pool=external_net[0]['name'],
                 subnet_cidr=cluster.kube_info.pod_cidr,
                 external_net=external_net[0]['id'],
@@ -183,6 +210,7 @@ class ClusterService:
                 k8s_master_loadbalancer_enabled=lb_enbale,
                 number_of_k8s_masters = cluster.kube_info.number_master
                 )
+
             #组装cluster信息为ClusterTFVarsObject格式
         # 根据
             if cluster.type == "none":
@@ -197,12 +225,10 @@ class ClusterService:
                 pass
             else:
                 pass
+
         except Fail as e:
             raise e
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            raise e
+
         # 成功返回资产id
         return cluster_info_db.id
     
@@ -274,51 +300,160 @@ class ClusterService:
 
         return cluster_info_db
 
-    def convert_nodeinfo_todb(self, cluster:ClusterObject):
+    def convert_nodeinfo_todb(self, cluster:ClusterObject, k8s_masters, k8s_nodes):
         nodeinfo_list = []
 
         if not cluster or not hasattr(cluster, 'node_config') or not cluster.node_config:
             return nodeinfo_list
 
+        master_type, worker_type = "vm", "vm"
+        master_usr, worker_usr, master_password, worker_password = "", "", "", ""
+        master_private_key, worker_private_key, master_image, worker_image = "", "", "", ""
+        master_flavor_id, worker_flavor_id, master_openstack_id, worker_openstack_id = "", "", "", ""
+        master_auth_type, worker_auth_type, master_security_group, worker_security_group = "", "", "", ""
+        for config in cluster.node_config:
+            if config.role == "master":
+                master_type = config.type
+                master_usr = config.user
+                master_password = config.password
+                master_image = config.image
+                master_private_key = config.private_key
+                master_auth_type = config.auth_type
+                master_openstack_id = config.openstack_id
+                master_security_group = config.security_group
+                master_flavor_id = config.flavor_id
+            if config.role == "worker":
+                worker_type = config.type
+                worker_usr = config.user
+                worker_password = config.password
+                worker_image = config.image
+                worker_private_key = config.private_key
+                worker_auth_type = config.auth_type
+                worker_openstack_id = config.openstack_id
+                worker_security_group = config.security_group
+                worker_flavor_id = config.flavor_id
+
         # 遍历 node_config 并转换为 Nodeinfo 对象
-        for node_conf in cluster.node_config:
+        for master_node in k8s_masters:
             node_db = NodeDB()
             node_db.id = str(uuid.uuid4())
-            node_db.node_type = node_conf.type
+            node_db.node_type = master_type
             node_db.cluster_id = cluster.id
             node_db.cluster_name = cluster.name
             node_db.region = cluster.region_name
-            node_db.role = node_conf.role
-            node_db.user = node_conf.user
-            node_db.password = node_conf.password
-            node_db.private_key = node_conf.private_key
-            #node_db.openstack_id = node_conf.openstack_id
+            node_db.role = "master"
+            node_db.user = master_usr
+            node_db.password = master_password
+            node_db.image = master_image
+            node_db.private_key = master_private_key
+            node_db.openstack_id = master_openstack_id
+            node_db.auth_type = master_auth_type
+            node_db.security_group = master_security_group
+            node_db.flavor_id = master_flavor_id
             node_db.status = "creating"
-
-            # 节点的ip地址，创建虚拟机的时候不知道，只能等到后面从集群中获取ip地址，node的名字如何匹配，节点的状态是not ready还是ready？
             node_db.admin_address = ""
-            node_db.name = ""
+            node_db.name = cluster.name + "-k8s-" + master_node
             node_db.bus_address = ""
-
+            node_db.create_time = datetime.now()
+            nodeinfo_list.append(node_db)
+        for worker_node in k8s_nodes:
+            node_db = NodeDB()
+            node_db.id = str(uuid.uuid4())
+            node_db.node_type = worker_type
+            node_db.cluster_id = cluster.id
+            node_db.cluster_name = cluster.name
+            node_db.region = cluster.region_name
+            node_db.role = "worker"
+            node_db.user = worker_usr
+            node_db.password = worker_password
+            node_db.image = worker_image
+            node_db.private_key = worker_private_key
+            node_db.openstack_id = worker_openstack_id
+            node_db.auth_type = worker_auth_type
+            node_db.security_group = worker_security_group
+            node_db.flavor_id = worker_flavor_id
+            node_db.status = "creating"
+            node_db.admin_address = ""
+            node_db.name = cluster.name + "-k8s-" + worker_node
+            node_db.bus_address = ""
+            node_db.create_time = datetime.now()
+            nodeinfo_list.append(node_db)
+        
             # Create a clean dictionary with only serializable fields
-            node_dict = {
-                'id': node_db.id,
-                'node_type': node_db.node_type,
-                'cluster_id': node_db.cluster_id,
-                'cluster_name': node_db.cluster_name,
-                'region': node_db.region,
-                'role': node_db.role,
-                'user': node_db.user,
-                'password': node_db.password,
-                'private_key': node_db.private_key,
-                'openstack_id': node_db.openstack_id,
-                'status': node_db.status,
-                'admin_address': node_db.admin_address,
-                'name': node_db.name,
-                'bus_address': node_db.bus_address
-            }
-            nodeinfo_list.append(node_dict)
+            
         return nodeinfo_list
+
+
+    def convert_instance_todb(self, cluster:ClusterObject, k8s_masters, k8s_nodes):
+        instance_list = []
+
+        if not cluster or not hasattr(cluster, 'node_config') or not cluster.node_config:
+            return instance_list
+
+        master_type, worker_type = "vm", "vm"
+        master_usr, worker_usr, master_password, worker_password = "", "", "", ""
+        mmaster_image, worker_image = "", ""
+        master_flavor_id, worker_flavor_id, master_openstack_id, worker_openstack_id = "", "", "", ""
+        master_security_group, worker_security_group = "", ""
+        for config in cluster.node_config:
+            if config.role == "master":
+                master_type = config.type
+                master_usr = config.user
+                master_password = config.password
+                master_image = config.image
+                master_openstack_id = config.openstack_id
+                master_security_group = config.security_group
+                master_flavor_id = config.flavor_id
+            if config.role == "worker":
+                worker_type = config.type
+                worker_usr = config.user
+                worker_password = config.password
+                worker_image = config.image
+                worker_openstack_id = config.openstack_id
+                worker_security_group = config.security_group
+                worker_flavor_id = config.flavor_id
+
+        # 遍历 node_config 并转换为 Nodeinfo 对象
+        for master_node in k8s_masters:
+            instance_db = InstanceDB()
+            instance_db.id = str(uuid.uuid4())
+            instance_db.node_type = master_type
+            instance_db.cluster_id = cluster.id
+            instance_db.cluster_name = cluster.name
+            instance_db.region = cluster.region_name
+            instance_db.user = master_usr
+            instance_db.password = master_password
+            instance_db.image = master_image
+            instance_db.openstack_id = master_openstack_id
+            instance_db.security_group = master_security_group
+            instance_db.flavor_id = master_flavor_id
+            instance_db.status = "creating"
+            instance_db.ip_address = ""
+            instance_db.name = cluster.name + "-k8s-" + master_node
+            instance_db.floating_ip = ""
+            instance_db.create_time = datetime.now()
+            instance_list.append(instance_db)
+
+        for worker_node in k8s_nodes:
+            instance_db = InstanceDB()
+            instance_db.id = str(uuid.uuid4())
+            instance_db.node_type = worker_type
+            instance_db.cluster_id = cluster.id
+            instance_db.cluster_name = cluster.name
+            instance_db.region = cluster.region_name
+            instance_db.user = worker_usr
+            instance_db.password = worker_password
+            instance_db.image = worker_image
+            instance_db.openstack_id = worker_openstack_id
+            instance_db.security_group = worker_security_group
+            instance_db.flavor_id = worker_flavor_id
+            instance_db.status = "creating"
+            instance_db.ip_address = ""
+            instance_db.name = cluster.name + "-k8s-" + worker_node
+            instance_db.floating_ip = ""
+            instance_db.create_time = datetime.now()
+            instance_list.append(instance_db)
+        return instance_list
 
         
 class TaskService:
@@ -361,5 +496,3 @@ class TaskService:
             import traceback
             traceback.print_exc()
             raise e
-
-
