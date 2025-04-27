@@ -28,12 +28,8 @@ async def list_nodes(cluster_id:str = Query(None, description="集群id"),
             query_params['cluster_name'] = cluster_name
         if type:
             query_params['type'] = type
-        query_params = {}
-        # 查询条件组装
         if cluster_id:
             query_params['cluster_id'] = cluster_id
-        if type:
-            query_params['type'] = type
         result = instance_service.list_instances(query_params, page,page_size, sort_keys, sort_dirs)
         return result
     except Exception as e:

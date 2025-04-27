@@ -74,6 +74,8 @@ class NodeObject(DingoopsObject):
     admin_address: Optional[str] = Field(None, description="集群状态")
     business_address: Optional[str] = Field(None, description="集群状态")
     openstack_id: Optional[str] = Field(None, description="集群状态原因")
+    server_id: Optional[str] = Field(None, description="server的id")
+    instance_id: Optional[str] = Field(None, description="instance的id")
     region_name: Optional[str] = Field(None, description="region名称")
     role: Optional[str] = Field(None, description="网络id")
     operation_system: Optional[str] = Field(None, description="子网id")

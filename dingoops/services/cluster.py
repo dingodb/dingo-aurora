@@ -138,10 +138,10 @@ class ClusterService:
             self.generate_k8s_nodes(cluster, k8s_masters, k8s_nodes)
             # 保存node信息到数据库
             node_list = self.convert_nodeinfo_todb(cluster, k8s_masters, k8s_nodes)
-            NodeSQL.create_nodes(node_list)
+            NodeSQL.create_node_list(node_list)
             # 保存instance信息到数据库
             instance_list = self.convert_instance_todb(cluster, k8s_masters, k8s_nodes)
-            InstanceSQL.create_instance(instance_list)
+            InstanceSQL.create_instance_list(instance_list)
             # 创建terraform变量
             tfvars = ClusterTFVarsObject(
                 id = cluster_info_db.id,

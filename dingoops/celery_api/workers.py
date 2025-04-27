@@ -292,7 +292,7 @@ def create_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_list
         task_info = Taskinfo(task_id=task_id, cluster_id=cluster_tf_dict["id"], state="progress", start_time=datetime.fromtimestamp(datetime.now().timestamp()),msg="instructure_base")
         TaskSQL.insert(task_info)
         terraform_result = create_infrastructure(cluster_tfvars,task_info)
-        
+
         if not terraform_result:
             raise Exception("Terraform infrastructure creation failed")
         # 打印日志
@@ -307,7 +307,7 @@ def create_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_list
         host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory",cluster_tf_dict["id"], "hosts")
         # Give execute permissions to the host file
         os.chmod(host_file, 0o755)  # rwxr-xr-x permission
-        
+
         # 执行ansible命令验证是否能够连接到所有节点
         res = subprocess.run([
             "ansible",
@@ -331,15 +331,15 @@ def create_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_list
                     "-m", "ping",
                     "all"
                 ], capture_output=True)
-                
+
                 if res.returncode == 0:
                     print("Successfully connected to all nodes")
                     break
-                
+
                 attempt += 1
                 if attempt > max_attempts:
                     raise Exception(f"Failed to connect to all nodes with Ansible ping after {max_attempts} attempts")
-                
+
                 print(f"Connection attempt failed. Waiting 5 seconds before retrying...")
                 time.sleep(5)
                 # Add timeout check - terminate after 30 minutes
@@ -347,8 +347,8 @@ def create_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_list
         task_info.state = "success"
         task_info.detail = str(res.stdout)
         update_task_state(task_info)
-        
-        
+
+
         res = subprocess.run(["python3", host_file, "--list"], capture_output=True, text=True)
         if res.returncode != 0:
             #更新数据库的状态为failed
@@ -372,8 +372,8 @@ def create_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_list
             task_info.detail = str(result.stderr)
             update_task_state(task_info)
             raise Exception("Ansible kubernetes deployment failed")
-        
-        
+
+
         # 2. 使用Ansible部署K8s集群
         task_info = Taskinfo(task_id=task_id, cluster_id=cluster_tf_dict["id"], state="progress", start_time=datetime.fromtimestamp(datetime.now().timestamp()), msg="k8s_deploy")
         update_task_state(task_info)
@@ -383,7 +383,7 @@ def create_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_list
         else:
             ansible_result = deploy_kubernetes(cluster)
         #阻塞线程，直到ansible_client.get_playbook_result()返回结果
-        
+
         if not ansible_result:
             # 更新数据库的状态为failed
             task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp()), # 当前时间
@@ -402,8 +402,8 @@ def create_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_list
 
         # 更新集群node的状态为running
         session = get_session()
-        with session.begin():
-            for node in node_list:
+        for node in node_list:
+            with session.begin():
                 db_node = session.get(NodeInfo, node.id)
                 for k,v in hosts_data["_meta"]["hostvars"].items():
                     if db_node.name == k:
@@ -411,16 +411,15 @@ def create_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_list
                         db_node.status = "running"
                         db_node.admin_address = v.get("ip")
                         db_node.floating_ip = v.get("public_ipv4")
-                    for instance in instance_list:
-                        # 需要添加节点的ip地址等信息
-                        if db_node.name == instance.name:
-                            db_node.instance_id = instance.id
-                            break
-        
+                        for instance in instance_list:
+                            if db_node.name == instance.name:
+                                db_node.instance_id = instance.id
+                                break
+
         # 更新集群instance的状态为running
         session = get_session()
-        with session.begin():
-            for instance in instance_list:
+        for instance in instance_list:
+            with session.begin():
                 db_instance = session.get(Instance, instance.id)
                 for k,v in hosts_data["_meta"]["hostvars"].items():
                     # 需要添加节点的ip地址等信息
@@ -517,19 +516,9 @@ def delete_node(self, cluster_id, node_list, instance_list_db, extravars):
 @celery_app.task(bind=True)
 def create_instance(self, cluster_id, node_list, extravars):
     try:
-        # 1、在这里先找到cluster的文件夹，找到对应的目录，先通过发来的node_list组合成extravars的变量，再执行remove-node.yaml
-        ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
-        os.chdir(ansible_dir)
-        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), "hosts")
-        playbook_file = os.path.join(WORK_DIR, "ansible-deploy", "remove-node.yml")
-        run_playbook(playbook_file, host_file, ansible_dir, extravars)
-
-        session = get_session()
-        with session.begin():
-            db_cluster = session.get(Cluster, cluster_id)
-            db_cluster.status = 'running'
-        NodeSQL.delete_node_list(node_list)
-
+        # 1、拿到openstack的信息，就可以执行创建instance的流程，需要分别处理类型是vm还是裸金属的
+        # 2、将instance的信息写入数据库中的表中
+        pass
     except subprocess.CalledProcessError as e:
         print(f"Ansible error: {e}")
         return False
@@ -537,18 +526,9 @@ def create_instance(self, cluster_id, node_list, extravars):
 @celery_app.task(bind=True)
 def delete_instance(self, cluster_id, node_list, extravars):
     try:
-        # 1、在这里先找到cluster的文件夹，找到对应的目录，先通过发来的node_list组合成extravars的变量，再执行remove-node.yaml
-        ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
-        os.chdir(ansible_dir)
-        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), "hosts")
-        playbook_file = os.path.join(WORK_DIR, "ansible-deploy", "remove-node.yml")
-        run_playbook(playbook_file, host_file, ansible_dir, extravars)
-
-        session = get_session()
-        with session.begin():
-            db_cluster = session.get(Cluster, cluster_id)
-            db_cluster.status = 'running'
-        NodeSQL.delete_node_list(node_list)
+        # 1、拿到openstack的信息，就可以执行删除instance的流程，需要分别处理类型是vm还是裸金属的
+        # 2、将instance的信息在数据库中的表中删除
+        pass
 
     except subprocess.CalledProcessError as e:
         print(f"Ansible error: {e}")

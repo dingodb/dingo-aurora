@@ -56,13 +56,19 @@ class NodeSQL:
             return count, node_list
 
     @classmethod
-    def create_nodes(cls, node_list):
+    def create_node(cls, node):
         # Session = sessionmaker(bind=engine, expire_on_commit=False)
         # session = Session()
         session = get_session()
         with session.begin():
-            for node in node_list:
-                session.add(node)
+            session.add(node)
+
+    @classmethod
+    def create_node_list(cls, node_list):
+        # Session = sessionmaker(bind=engine, expire_on_commit=False)
+        # session = Session()
+        for node in node_list:
+            cls.create_node(node)
 
     @classmethod
     def update_node(cls, node):
@@ -76,19 +82,15 @@ class NodeSQL:
     def update_node_list(cls, node_list):
         # Session = sessionmaker(bind=engine, expire_on_commit=False)
         # session = Session()
-        session = get_session()
-        with session.begin():
-            for node in node_list:
-                session.merge(node)
+        for node in node_list:
+            cls.update_node(node)
 
     @classmethod
     def delete_node_list(cls, node_list):
         # Session = sessionmaker(bind=engine, expire_on_commit=False)
         # session = Session()
-        session = get_session()
-        with session.begin():
-            for node in node_list:
-                session.delete(node)
+        for node in node_list:
+            cls.delete_node(node)
 
     @classmethod
     def delete_node(cls, node):

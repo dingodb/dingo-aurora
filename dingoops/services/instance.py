@@ -139,8 +139,10 @@ class InstanceService:
 
     def create_instance(self, instance: InstanceConfigObject):
         # 在这里使用openstack的api接口，直接创建vm或者裸金属，根据type类型决定是创建vm还是裸金属，走不同的流程
+        # 创建instance，创建openstack种的虚拟机或者裸金属服务器，如果属于某个cluster就写入cluster_id
         # 数据校验 todo
         try:
+            # 获取openstack的参数，传入到create_instance的方法中，由这create_instance创建vm或者裸金属
             # 调用celery_app项目下的work.py中的create_instance方法
             result = celery_app.send_task("dingoops.celery_api.workers.create_instance", args=[])
             return result
@@ -160,7 +162,7 @@ class InstanceService:
             instance_list = instance_list_info.instance_list
             # 具体要操作的步骤，删除openstack中的server，删除数据库中instance表里面的该instance的数据
 
-            # 调用celery_app项目下的work.py中的delete_cluster方法
+            # 调用celery_app项目下的work.py中的delete_instance方法
             result = celery_app.send_task("dingoops.celery_api.workers.delete_instance", args=[])
             return result
         except Exception as e:

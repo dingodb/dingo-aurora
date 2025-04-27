@@ -56,13 +56,19 @@ class InstanceSQL:
             return count, node_list
 
     @classmethod
-    def create_instance(cls, instance_list):
+    def create_instance(cls, instance):
         # Session = sessionmaker(bind=engine, expire_on_commit=False)
         # session = Session()
         session = get_session()
         with session.begin():
-            for node in instance_list:
-                session.add(node)
+            session.add(instance)
+
+    @classmethod
+    def create_instance_list(cls, instance_list):
+        # Session = sessionmaker(bind=engine, expire_on_commit=False)
+        # session = Session()
+        for instance in instance_list:
+            cls.create_instance(instance)
 
     @classmethod
     def update_instance(cls, instance):
@@ -76,19 +82,15 @@ class InstanceSQL:
     def update_instance_list(cls, instance_list):
         # Session = sessionmaker(bind=engine, expire_on_commit=False)
         # session = Session()
-        session = get_session()
-        with session.begin():
-            for instance in instance_list:
-                session.merge(instance)
+        for instance in instance_list:
+            cls.update_instance(instance)
 
     @classmethod
     def delete_instance_list(cls, instance_list):
         # Session = sessionmaker(bind=engine, expire_on_commit=False)
         # session = Session()
-        session = get_session()
-        with session.begin():
-            for instance in instance_list:
-                session.delete(instance)
+        for instance in instance_list:
+            cls.delete_instance(instance)
 
     @classmethod
     def delete_instance(cls, instance):
