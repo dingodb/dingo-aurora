@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import func, distinct
 
 from db.engines.mysql import get_session
-from db.models.asset.models import AssetBasicInfo, AssetCustomersInfo
+from db.models.asset.models import AssetBasicInfo
 from db.models.asset_resoure_relation.models import AssetResourceRelationInfo
 
 # 资源详情列表排序字段字典

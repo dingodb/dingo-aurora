@@ -46,8 +46,11 @@ def fetch_relation_info():
             #print(f"裸金属列表数据:{temp_node.get('uuid')}")
             server_detail = None
             if temp_node.get('instance_uuid'):
-                server_detail = nova_client.nova_get_server_detail(temp_node.get('instance_uuid'))
-                print(f"虚拟机详情数据: {server_detail}")
+                try:
+                    server_detail = nova_client.nova_get_server_detail(temp_node.get('instance_uuid'))
+                    print(f"虚拟机详情数据: {server_detail}")
+                except Exception as e:
+                    print(f"获取虚拟机详情失败：{e}")
             # 裸金属的ipmi的ip地址
             ipmi_address = temp_node.get('driver_info').get('ipmi_address') if temp_node.get('driver_info') else None
             # 与裸机对应的资产的id
