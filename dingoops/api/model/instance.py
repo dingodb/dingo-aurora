@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 from typing import Dict, Optional, List
 
 from pydantic import BaseModel, Field
@@ -34,7 +33,7 @@ class InstanceConfigObject(DingoopsObject):
 
 class InstanceRemoveObject(BaseModel):
     cluster_id: Optional[str] = Field(None, description="集群id")
-=======
+
 from typing import Dict, Optional, List
 
 from pydantic import BaseModel, Field
@@ -70,5 +69,4 @@ class InstanceConfigObject(DingoopsObject):
 
 class InstanceRemoveObject(BaseModel):
     cluster_id: Optional[str] = Field(None, description="集群id")
->>>>>>> 4d76e7c (modify directory structure)
     instance_list: Optional[List[InstanceConfigObject]] = Field(None, description="instance列表")

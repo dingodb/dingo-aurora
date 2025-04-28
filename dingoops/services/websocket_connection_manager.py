@@ -2,7 +2,7 @@
 from fastapi import WebSocket
 import asyncio
 
-from utils.constant import websocket_data_type
+from dingoops.utils.constant import websocket_data_type
 
 # 单例模式的websocket连接管理器
 class WebSocketConnectionManager:

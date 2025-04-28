@@ -1,7 +1,7 @@
 import os
 import subprocess
 from oslo_config import cfg
-from dingoops.utils.common import register_ksa_opts
+from dingoops.common.common import register_ksa_opts
 # 读取config的信息
 CONF = cfg.CONF
 

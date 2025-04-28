@@ -1,5 +1,4 @@
 from oslo_config import cfg
-from dingoops.utils.common import register_ksa_opts
 
 
 # 读取config的信息
@@ -36,7 +35,7 @@ CONF.register_group(redis_group)
 CONF.register_opts(redis_opts, redis_group)
 
 # redis数据
-neutron_group = cfg.OptGroup(name='neutron', title='neutron conf data')
+
 # neutron_opts = [
 #     cfg.StrOpt('metadata_proxy_shared_secret', default=None, help='the redis ip'),
 #     cfg.IntOpt('service_metadata_proxy', default=None, help='the redis port'),
@@ -50,9 +49,6 @@ neutron_group = cfg.OptGroup(name='neutron', title='neutron conf data')
 #     cfg.StrOpt('valid_interfaces', default=None, help='the redis password'),
 #     cfg.StrOpt('cafile', default=None, help='the redis password')
 # ]
-# 注册redis配置
-CONF.register_group(neutron_group)
-register_ksa_opts(CONF, neutron_group, "network")
 
 
 # 注册默认配置
@@ -63,11 +59,5 @@ CONF.register_group(redis_group)
 CONF.register_opts(redis_opts, redis_group)
 
 
-
-
-
-
-
-=======
 neutron_group = cfg.OptGroup(name='neutron', title='neutron conf data')
->>>>>>> 4d76e7c (modify directory structure)
+

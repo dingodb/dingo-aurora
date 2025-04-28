@@ -2,7 +2,7 @@
 from math import ceil
 from zoneinfo import available_timezones
 
-from db.models.asset_resoure_relation.sql import AssetResourceRelationSQL
+from dingoops.db.models.asset_resoure_relation.sql import AssetResourceRelationSQL
 
 class ResourcesService:
 

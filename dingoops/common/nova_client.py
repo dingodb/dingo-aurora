@@ -2,7 +2,7 @@
 import requests
 import json
 
-from common import CONF
+from dingoops.common import CONF
 
 # 配置nova信息
 NOVA_AUTH_URL = CONF.nova.auth_url

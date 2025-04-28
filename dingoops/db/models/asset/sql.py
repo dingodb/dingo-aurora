@@ -9,9 +9,9 @@ from dingoops.db.engines.mysql import get_session
 from dingoops.db.models.asset.models import Asset, AssetBasicInfo, AssetPartsInfo, AssetManufacturesInfo, AssetPositionsInfo, \
     AssetContractsInfo, AssetBelongsInfo, AssetCustomersInfo, AssetType, AssetFlowsInfo, AssetManufactureRelationInfo, \
     AssetExtendsColumnsInfo, AssetPartRelationInfo
-from db.models.asset_resoure_relation.models import AssetResourceRelationInfo
+from dingoops.db.models.asset_resoure_relation.models import AssetResourceRelationInfo
 
-from utils.constant import asset_part_type_dict
+from dingoops.utils.constant import asset_part_type_dict
 
 #链接数据库，可以使用配置文件进行定义
 # engine = create_engine("mysql+pymysql://root:HworLIIDvmTRsPfQauNskuJF8PcoTuULfu3dEHFg@10.220.56.254:3306/dingoops?charset=utf8mb3", echo=True)

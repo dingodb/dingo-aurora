@@ -23,7 +23,7 @@ from dingoops.api.model.cluster import ClusterTFVarsObject, NodeGroup, ClusterOb
 from dingoops.db.models.cluster.models import Cluster as ClusterDB
 from dingoops.db.models.node.models import NodeInfo as NodeDB
 from dingoops.db.models.instance.models import Instance as InstanceDB
-from dingoops.utils import neutron
+from dingoops.common import neutron
 from dingoops.services.cluster import ClusterService
 
 from dingoops.services.custom_exception import Fail

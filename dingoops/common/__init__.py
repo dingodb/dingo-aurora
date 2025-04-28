@@ -1,4 +1,5 @@
 from oslo_config import cfg
+from dingoops.common.common import register_ksa_opts
 
 # 读取config的信息
 CONF = cfg.CONF
@@ -37,3 +38,8 @@ nova_opts = [
 # 注册nova配置
 CONF.register_group(nova_group)
 CONF.register_opts(nova_opts, nova_group)
+
+# 注册neutron配置
+neutron_group = cfg.OptGroup(name='neutron', title='neutron conf data')
+CONF.register_group(neutron_group)
+register_ksa_opts(CONF, neutron_group, "network")

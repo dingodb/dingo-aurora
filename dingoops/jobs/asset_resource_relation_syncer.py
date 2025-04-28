@@ -3,13 +3,13 @@ import json
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from common.ironic_client import ironic_client
-from common.nova_client import nova_client
-from db.models.asset_resoure_relation.models import AssetResourceRelationInfo
-from db.models.asset_resoure_relation.sql import AssetResourceRelationSQL
-from services.assets import AssetsService
-from services.bigscreens import BigScreensService
-from utils import datetime as datatime_util
+from dingoops.common.ironic_client import ironic_client
+from dingoops.common.nova_client import nova_client
+from dingoops.db.models.asset_resoure_relation.models import AssetResourceRelationInfo
+from dingoops.db.models.asset_resoure_relation.sql import AssetResourceRelationSQL
+from dingoops.services.assets import AssetsService
+from dingoops.services.bigscreens import BigScreensService
+from dingoops.utils import datetime as datatime_util
 from datetime import datetime, timedelta
 
 relation_scheduler = BackgroundScheduler()

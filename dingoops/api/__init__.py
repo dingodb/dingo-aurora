@@ -7,8 +7,7 @@ from dingoops.api import assets, bigscreens, system, monitor, cluster, node,webs
 
 # 启动时创建excel的临时存放目录
 excel_temp_dir = "/home/dingoops/temp_excel/"
-if not os.path.exists(excel_temp_dir):
-    os.makedirs(excel_temp_dir)
+os.makedirs(excel_temp_dir, exist_ok=True)
 
 api_router = APIRouter()
 api_router.include_router(assets.router, tags=["Assets"])

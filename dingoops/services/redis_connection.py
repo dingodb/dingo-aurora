@@ -1,7 +1,7 @@
 # redis连接工具 用于连接redis数据库 读取和写入数据
 import redis
 
-from services import CONF
+from dingoops.services import CONF
 
 # redis的配置信息
 REDIS_HOST = CONF.redis.redis_ip

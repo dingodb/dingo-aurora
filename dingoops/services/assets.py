@@ -24,7 +24,6 @@ from oslo_log import log
 
 from dingoops.services.custom_exception import Fail
 from dingoops.services.system import SystemService
-from dingoops.utils.common import format_excel_str
 from dingoops.utils.constant import ASSET_SERVER_TEMPLATE_FILE_DIR, asset_equipment_columns, asset_basic_info_columns, \
     asset_manufacture_info_columns, asset_position_info_columns, asset_contract_info_columns, asset_belong_info_columns, \
     asset_customer_info_columns, asset_part_info_columns, asset_network_basic_info_columns, \
@@ -47,6 +46,14 @@ system_service = SystemService()
 
 class AssetsService:
 
+    def format_excel_str(origin:str):
+        # 判空
+        if not origin:
+            return origin
+        # 去除两端的两端的空白字符
+        new_value = origin.strip()
+        # 返回
+        return new_value
     # 查询资产列表
     def list_assets(self, query_params, page, page_size, sort_keys, sort_dirs):
         # 业务逻辑

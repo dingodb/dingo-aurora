@@ -1,8 +1,8 @@
 # redis的频道服务
 import redis
 
-from services import CONF
-from utils.constant import websocket_channels
+from dingoops.services import CONF
+from dingoops.utils.constant import websocket_channels
 
 # redis的配置信息
 REDIS_HOST = CONF.redis.redis_ip

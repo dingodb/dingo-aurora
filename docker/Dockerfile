@@ -11,8 +11,8 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends apt-utils \
 COPY . /opt/dingo-aurora
 
 
-#ENV https_proxy=172.20.3.88:1088
-#ENV http_proxy=172.20.3.88:1088
+ENV https_proxy=172.20.3.88:1088
+ENV http_proxy=172.20.3.88:1088
 
 RUN pip install -r /opt/dingo-aurora/requirements.txt
 

@@ -1,11 +1,10 @@
 # 资源的api接口
 from typing import Any
-from warnings import deprecated
 
 from fastapi import APIRouter, HTTPException, Query
 
-from services.custom_exception import Fail
-from services.resources import ResourcesService
+from dingoops.services.custom_exception import Fail
+from dingoops.services.resources import ResourcesService
 
 router = APIRouter()
 resources_service = ResourcesService()

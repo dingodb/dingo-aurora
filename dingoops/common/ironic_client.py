@@ -3,7 +3,7 @@
 import requests
 import json
 
-from common import CONF
+from dingoops.common import CONF
 
 # 配置ironic信息
 IRONIC_AUTH_URL = CONF.ironic.auth_url

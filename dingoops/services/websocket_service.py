@@ -4,12 +4,12 @@ import asyncio
 
 from fastapi import WebSocket
 
-from db.models.bigscreen.sql import BigscreenSQL
-from jobs import CONF
-from services.custom_exception import Fail
-from services.redis_channel import redis_channel_service, redis_client_instance
-from services.websocket_connection_manager import websocket_connection_manager
-from utils.constant import websocket_data_type, websocket_type_channels
+from dingoops.db.models.bigscreen.sql import BigscreenSQL
+from dingoops.jobs import CONF
+from dingoops.services.custom_exception import Fail
+from dingoops.services.redis_channel import redis_channel_service, redis_client_instance
+from dingoops.services.websocket_connection_manager import websocket_connection_manager
+from dingoops.utils.constant import websocket_data_type, websocket_type_channels
 
 # 当前region名称
 REGION_NAME = CONF.DEFAULT.region_name

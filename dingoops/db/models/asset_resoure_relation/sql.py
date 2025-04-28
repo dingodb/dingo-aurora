@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from sqlalchemy import func, distinct
 
-from db.engines.mysql import get_session
-from db.models.asset.models import AssetBasicInfo, AssetCustomersInfo
-from db.models.asset_resoure_relation.models import AssetResourceRelationInfo
+from dingoops.db.engines.mysql import get_session
+from dingoops.db.models.asset.models import AssetBasicInfo, AssetCustomersInfo
+from dingoops.db.models.asset_resoure_relation.models import AssetResourceRelationInfo
 
 # 资源详情列表排序字段字典
 resource_detail_list_dir_dic= {"resource_name":AssetResourceRelationInfo.resource_name, "resource_status":AssetResourceRelationInfo.resource_status,"asset_name":AssetBasicInfo.name,

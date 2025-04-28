@@ -1,9 +1,9 @@
 # websocket的api接口
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
-from services.custom_exception import Fail
-from services.websocket_service import WebSocketService, websocket_connection_manager
-from utils.constant import websocket_data_type
+from dingoops.services.custom_exception import Fail
+from dingoops.services.websocket_service import WebSocketService, websocket_connection_manager
+from dingoops.utils.constant import websocket_data_type
 
 router = APIRouter()
 
