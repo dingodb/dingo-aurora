@@ -1,0 +1,17 @@
+<<<<<<< HEAD
+---
+containerd_repo_info:
+  repos:
+    - >
+      deb {{ containerd_ubuntu_repo_base_url }}
+      {{ ansible_distribution_release | lower }}
+      {{ containerd_ubuntu_repo_component }}
+=======
+---
+containerd_repo_info:
+  repos:
+    - >
+      deb {{ containerd_ubuntu_repo_base_url }}
+      {{ ansible_distribution_release | lower }}
+      {{ containerd_ubuntu_repo_component }}
+>>>>>>> 4d76e7c (modify directory structure)

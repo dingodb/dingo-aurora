@@ -1,0 +1,14 @@
+{
+  "python.testing.pytestArgs": [
+    "dingoops"
+  ],
+  "python.testing.unittestEnabled": true,
+  "python.testing.pytestEnabled": false,
+  "python.testing.unittestArgs": [
+    "-v",
+    "-s",
+    "./dingoops",
+    "-p",
+    "test_*.py"
+  ]
+}

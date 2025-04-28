@@ -173,7 +173,6 @@ python-vitrageclient==5.1.1
 python-zaqarclient==2.9.0
 python-zunclient==5.2.0
 pytz==2024.2
-PyYAML==5.4.1
 pyzmq==26.2.0
 referencing==0.35.1
 repoze.lru==0.7

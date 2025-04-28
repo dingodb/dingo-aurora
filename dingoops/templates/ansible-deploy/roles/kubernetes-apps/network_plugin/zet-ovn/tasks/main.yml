@@ -1,0 +1,31 @@
+<<<<<<< HEAD
+---
+- name: Execute install script
+  delegate_to: "{{ groups['kube_control_plane'][0] }}"
+  shell: "{{ kube_config_dir }}/install-kubeovn-1.13.1-stable.sh"
+  register: install_result
+  async: 1800  # 设置超时时间为1小时
+  poll: 30 
+  when: 
+    - inventory_hostname == groups['kube_control_plane'][0]
+
+- name: Show install result
+  debug:
+    var: install_result.stdout_lines
+
+=======
+---
+- name: Execute install script
+  delegate_to: "{{ groups['kube_control_plane'][0] }}"
+  shell: "{{ kube_config_dir }}/install-kubeovn-1.13.1-stable.sh"
+  register: install_result
+  async: 1800  # 设置超时时间为1小时
+  poll: 30 
+  when: 
+    - inventory_hostname == groups['kube_control_plane'][0]
+
+- name: Show install result
+  debug:
+    var: install_result.stdout_lines
+
+>>>>>>> 4d76e7c (modify directory structure)

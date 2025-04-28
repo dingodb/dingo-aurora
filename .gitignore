@@ -62,7 +62,7 @@ db.sqlite3
 db.sqlite3-journal
 
 # Flask stuff:
-instance/
+#instance/
 .webassets-cache
 
 # Scrapy stuff:
@@ -164,3 +164,4 @@ cython_debug/
 # direnv
 .python_orm_env.py
 .envrc
+.vscode
