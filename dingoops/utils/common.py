@@ -2,8 +2,8 @@
 from keystoneauth1 import loading as ks_loading
 from oslo_config import cfg
 
-
 _ADAPTER_VERSION_OPTS = ('version', 'min_version', 'max_version')
+
 
 def format_excel_str(origin:str):
     # 判空

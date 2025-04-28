@@ -1,6 +1,6 @@
 from oslo_config import cfg
-
 from dingoops.utils.common import register_ksa_opts
+
 
 # 读取config的信息
 CONF = cfg.CONF
@@ -8,7 +8,6 @@ CONF = cfg.CONF
 # 配置目录
 CONF(args=[], default_config_files = ['/etc/dingoops/dingoops.conf'])
 
-# 默认数据
 default_group = cfg.OptGroup(name='DEFAULT', title='default conf data')
 
 default_opts = [
@@ -20,9 +19,6 @@ default_opts = [
     cfg.StrOpt('region_name', default=None, help='the openstack region name'),
     cfg.StrOpt('cluster_work_dir', default='/var/lib/dingoops', help='the openstack region name')
 ]
-
-CONF.register_group(default_group)
-CONF.register_opts(default_opts, default_group)
 
 # redis数据
 redis_group = cfg.OptGroup(name='redis', title='redis conf data')
@@ -72,3 +68,6 @@ CONF.register_opts(redis_opts, redis_group)
 
 
 
+=======
+neutron_group = cfg.OptGroup(name='neutron', title='neutron conf data')
+>>>>>>> 4d76e7c (modify directory structure)

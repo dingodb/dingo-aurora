@@ -1,6 +1,5 @@
 FROM m.daocloud.io/docker.io/ubuntu:22.04
 
-
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
 
@@ -10,6 +9,7 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends apt-utils \
     python3-pip cmake build-essential python3-dev libxml2-dev supervisor 
 
 COPY . /opt/dingo-aurora
+
 
 #ENV https_proxy=172.20.3.88:1088
 #ENV http_proxy=172.20.3.88:1088
@@ -29,6 +29,7 @@ COPY ./docker/start_service.sh /usr/local/bin/start_service.sh
 RUN chmod +x /usr/local/bin/start_service.sh
 
 WORKDIR /opt/dingo-aurora
+
 
 EXPOSE 8887
 

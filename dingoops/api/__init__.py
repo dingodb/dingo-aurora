@@ -20,4 +20,3 @@ api_router.include_router(cluster.router, tags=["Cluster"])
 api_router.include_router(node.router, tags=["Node"])
 api_router.include_router(websocket.router, tags=["WebSockets"])
 api_router.include_router(resources.router, tags=["Resources"])
-
