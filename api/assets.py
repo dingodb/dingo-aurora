@@ -1,25 +1,22 @@
 # 资产的api接口
 import os
-import time
 from io import BytesIO
 from typing import List, Optional
 
 import pandas
-from fastapi import APIRouter, UploadFile, File, Query, Path, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse, Response
-from mako.testing.helpers import result_lines
+from fastapi import APIRouter, UploadFile, File, Query, HTTPException
+from fastapi.responses import FileResponse, StreamingResponse
 
 from api.model.assets import AssetCreateApiModel, AssetManufacturerApiModel, AssetUpdateStatusApiModel, \
     AssetPartApiModel, AssetTypeApiModel, AssetFlowApiModel, AssetBatchDownloadApiModel, AssetBatchUpdateApiModel, \
     AssetExtendColumnApiModel
 from api.model.system import OperateLogApiModel
-from api.response import ResponseModel, success_response
 from services.assets import AssetsService
 from services.custom_exception import Fail
 from services.system import SystemService
 from utils.constant import EXCEL_TEMP_DIR, ASSET_TEMPLATE_ASSET_SHEET, ASSET_TEMPLATE_PART_SHEET, \
     ASSET_TEMPLATE_ASSET_TYPE, ASSET_TEMPLATE_NETWORK_SHEET
-from utils.datetime import format_unix_timestamp, format_d8q_timestamp
+from utils.datetime import format_d8q_timestamp
 from oslo_log import log
 import io
 

@@ -1,7 +1,4 @@
 # 资源的api接口
-from typing import Any
-from warnings import deprecated
-
 from fastapi import APIRouter, HTTPException, Query
 
 from services.custom_exception import Fail
@@ -31,15 +28,14 @@ async def vpc_resource_statistic_list(page: int = Query(1, description="页码")
 @router.get("/resources/{resource_project_id}/resource_detail_list", summary="项目下资源详情列表", description="查询指定项目下资源详情列表")
 async def resource_detail_list(resource_project_id: str,
                                page: int = Query(1, description="页码"),
-                               page_size: int = Query(9999, description="页数量大小"),
+                               page_size: int = Query(10, description="页数量大小"),
                                sort_keys: str = Query(None, description="排序字段"),
                                sort_dirs: str = Query(None, description="排序方式"),
                                resource_name: str = Query(None, description="资源名称"),
                                resource_status: str = Query(None, description="资源状态"),
                                asset_name: str = Query(None, description="资产名称"),
                                asset_status: str = Query(None, description="资产状态"),
-                               resource_user_name: str = Query(None, description="资源所属用户名称"),
-                               ):
+                               resource_user_name: str = Query(None, description="资源所属用户名称"),):
     try:
         # 声明查询条件的dict
         query_params = {}

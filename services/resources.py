@@ -13,18 +13,24 @@ class ResourcesService:
         # 业务逻辑
         try:
             # 按照条件从数据库中查询数据
-            count, data = AssetResourceRelationSQL.vpc_resource_statistic_list(query_params, page, page_size, sort_keys, sort_dirs)
+            count, vpc_statistic_data = AssetResourceRelationSQL.vpc_resource_statistic(query_params, page, page_size, sort_keys, sort_dirs)
+            asset_statistic_data = AssetResourceRelationSQL.asset_statistic()
             # 数据处理
             # 遍历
             ret = []
-            for r in data:
+            for r in vpc_statistic_data:
                 # 填充数据
                 temp = {}
                 if r.resource_project_id:
                     temp["resource_project_id"] = r.resource_project_id
                     temp["resource_project_name"] = r.resource_project_name
                     temp["resource_count"] = r.resource_count
-                    temp["asset_count"] = r.asset_count
+                    if not asset_statistic_data:
+                        temp["asset_count"] = 0
+                    for asset_statistic in asset_statistic_data:
+                        if asset_statistic.resource_project_id == r.resource_project_id:
+                            temp["asset_count"] = asset_statistic.asset_count
+                            break
                     # 追加数据
                     ret.append(temp)
 

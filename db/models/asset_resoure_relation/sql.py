@@ -15,17 +15,16 @@ resource_detail_list_dir_dic= {"resource_name":AssetResourceRelationInfo.resourc
 class AssetResourceRelationSQL:
 
     @classmethod
-    def vpc_resource_statistic_list(cls, query_params, page=1, page_size=10, sort_keys=None, sort_dirs="ascend"):
+    def vpc_resource_statistic(cls, query_params, page=1, page_size=10, sort_keys=None, sort_dirs="ascend"):
         # 获取session
         session = get_session()
         with session.begin():
             query = session.query(AssetResourceRelationInfo.resource_project_id.label("resource_project_id"),
                                   AssetResourceRelationInfo.resource_project_name.label("resource_project_name"),
                                   func.count(AssetResourceRelationInfo.resource_id).label("resource_count"),
-                                  func.count(AssetResourceRelationInfo.asset_id).label("asset_count")
                                   )
             # 查询
-            query = query.filter(AssetResourceRelationInfo.resource_project_id.isnot(None))
+            query = query.filter(AssetResourceRelationInfo.resource_project_id.isnot(None)).group_by(AssetResourceRelationInfo.resource_project_id)
             # 数据库查询参数
             if 'resource_project_name' in query_params and query_params['resource_project_name']:
                 query = query.filter(AssetResourceRelationInfo.resource_project_name.like('%' + query_params['resource_project_name'] + '%'))
@@ -51,6 +50,17 @@ class AssetResourceRelationSQL:
             resource_asset_list = query.all()
             # 返回
             return count, resource_asset_list
+
+    @classmethod
+    def asset_statistic(cls):
+        # 获取session
+        session = get_session()
+        with session.begin():
+            query = session.query(AssetResourceRelationInfo.resource_project_id.label("resource_project_id"),
+                                  func.count(AssetResourceRelationInfo.asset_id).label("asset_count"),)
+            # 查询
+            query = query.filter(AssetResourceRelationInfo.resource_project_id.isnot(None)).group_by(AssetResourceRelationInfo.resource_project_id)
+            return query.all()
 
     @classmethod
     def resource_detail_list(cls, resource_project_id, query_params, page=1, page_size=10, sort_keys=None, sort_dirs="ascend"):

@@ -126,11 +126,19 @@ def update_asset_resource_relation(db_relation, temp_relation):
 def attach_user_and_project(temp_relation):
     # 追加资源的用户和项目名称
     if temp_relation.resource_user_id:
-        user = ironic_client.keystone_get_user_by_id(temp_relation.resource_user_id)
+        user = None
+        try:
+            user = ironic_client.keystone_get_user_by_id(temp_relation.resource_user_id)
+        except Exception as e:
+            print(f"获取资源[{temp_relation.resource_name}]的用户[{temp_relation.resource_user_id}]名称报错：{e}")
         if user:
             temp_relation.resource_user_name = user.get('name')
     if temp_relation.resource_project_id:
-        project = ironic_client.keystone_get_project_by_id(temp_relation.resource_project_id)
+        project = None
+        try:
+            project = ironic_client.keystone_get_project_by_id(temp_relation.resource_project_id)
+        except Exception as e:
+            print(f"获取资源[{temp_relation.resource_name}]的项目[{temp_relation.resource_project_id}]名称报错：{e}")
         if project:
             temp_relation.resource_project_name = project.get('name')
 
