@@ -1,8 +1,12 @@
 # 资源的service层
+import uuid
+
 from math import ceil
 from zoneinfo import available_timezones
 
+from dingoops.db.models.asset_resoure_relation.models import ResourceMetrics
 from dingoops.db.models.asset_resoure_relation.sql import AssetResourceRelationSQL
+from dingoops.utils import datetime
 
 class ResourcesService:
 
@@ -129,3 +133,36 @@ class ResourcesService:
             traceback.print_exc()
             return None
 
+    # 保存资源监控指标项数据
+    def update_resource_metrics(self, resource_id, resource_metrics_dict):
+        # 空
+        if not resource_id or not resource_metrics_dict:
+            return None
+        # 遍历
+        for name, metrics_value in resource_metrics_dict.items():
+            # 查询指标名称对应的数据
+            db_resource_metrics = AssetResourceRelationSQL.get_resource_metrics_by_resource_id_and_name(resource_id, name)
+            # 判空
+            if not db_resource_metrics:
+                temp_resource_metrics = ResourceMetrics(
+                    id = uuid.uuid4().hex,
+                    resource_id = resource_id,
+                    name = name,
+                    data = metrics_value,
+                    region = None,
+                    last_modified = datetime.get_now_time()
+                )
+                # 插入数据
+                AssetResourceRelationSQL.create_resource_metrics(temp_resource_metrics)
+            else:
+                # 更新数据
+                db_resource_metrics.data = metrics_value
+                db_resource_metrics.last_modified = datetime.get_now_time()
+                AssetResourceRelationSQL.update_resource_metrics(db_resource_metrics)
+
+    # 查询某个资源的监控指标项数据
+    def get_resource_metrics_by_resource_id(self, resource_id):
+        # 查询数据
+        db_resource_metrics = AssetResourceRelationSQL.get_resource_metrics_by_resource_id(resource_id)
+        # 返回
+        return db_resource_metrics

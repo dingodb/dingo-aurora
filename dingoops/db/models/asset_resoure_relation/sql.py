@@ -6,7 +6,8 @@ from sqlalchemy import func, distinct
 
 from dingoops.db.engines.mysql import get_session
 from dingoops.db.models.asset.models import AssetBasicInfo, AssetCustomersInfo
-from dingoops.db.models.asset_resoure_relation.models import AssetResourceRelationInfo
+from dingoops.db.models.asset_resoure_relation.models import AssetResourceRelationInfo, ResourceMetricsConfig, \
+    ResourceMetrics
 
 # 资源详情列表排序字段字典
 resource_detail_list_dir_dic= {"resource_name":AssetResourceRelationInfo.resource_name, "resource_status":AssetResourceRelationInfo.resource_status,"asset_name":AssetBasicInfo.name,
@@ -183,3 +184,35 @@ class AssetResourceRelationSQL:
                         filter(AssetResourceRelationInfo.asset_id.isnot(None)). \
                         filter(AssetBasicInfo.asset_status == "3")
             return query.count()
+
+
+    @classmethod
+    def get_all_resource_metrics_config(cls):
+        session = get_session()
+        with session.begin():
+            return session.query(ResourceMetricsConfig).all()
+
+    @classmethod
+    def update_resource_metrics(cls, resource_metrics):
+        session = get_session()
+        with session.begin():
+            session.merge(resource_metrics)
+
+    @classmethod
+    def create_resource_metrics(cls, resource_metrics):
+        session = get_session()
+        with session.begin():
+            session.add(resource_metrics)
+
+    @classmethod
+    def get_resource_metrics_by_resource_id(cls, resource_id):
+        session = get_session()
+        with session.begin():
+            return session.query(ResourceMetrics).filter(ResourceMetrics.resource_id == resource_id).all()
+
+    @classmethod
+    def get_resource_metrics_by_resource_id_and_name(cls, resource_id, name):
+        session = get_session()
+        with session.begin():
+            return session.query(ResourceMetrics).filter(ResourceMetrics.resource_id == resource_id, ResourceMetrics.name == name).first()
+

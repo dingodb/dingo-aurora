@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlalchemy import JSON, Column, MetaData, String, Table, Text, DateTime, Integer, Boolean
-from sqlalchemy.orm import declarative_base
+from sqlalchemy import JSON, Column, MetaData, String, Table, Text, DateTime, Integer, Boolean, ForeignKey
+from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 
@@ -28,3 +28,26 @@ class AssetResourceRelationInfo(Base):
     update_date = Column(DateTime, nullable=True)
 
 
+# 资源指标配置信息对象
+class ResourceMetricsConfig(Base):
+    __tablename__ = "ops_resource_metrics_configs"
+
+    id = Column(String(length=128), primary_key=True, nullable=False, index=True, unique=False)
+    name = Column(String(length=128), nullable=False, index=True, unique=True)
+    query = Column(String(length=512), nullable=False)
+    description = Column(String(length=255), nullable=True)
+    sub_class = Column(String(length=128), nullable=True)
+    unit = Column(String(length=32), nullable=True)
+    extra = Column(Text)
+    metrics = relationship("ResourceMetrics", back_populates="config", cascade="all, delete-orphan")
+
+class ResourceMetrics(Base):
+    __tablename__ = "ops_resource_metrics"
+
+    id = Column(String(length=128), primary_key=True, nullable=False, index=True, unique=False)
+    resource_id = Column(String(length=128), nullable=False)
+    name = Column(String, ForeignKey("ops_resource_metrics_configs.name"), nullable=False)
+    data = Column(Text, nullable=True)
+    region = Column(String(length=128), nullable=True)
+    last_modified = Column(DateTime, nullable=True)
+    config = relationship("ResourceMetricsConfig", back_populates="metrics")

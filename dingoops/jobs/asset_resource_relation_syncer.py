@@ -9,11 +9,13 @@ from dingoops.db.models.asset_resoure_relation.models import AssetResourceRelati
 from dingoops.db.models.asset_resoure_relation.sql import AssetResourceRelationSQL
 from dingoops.services.assets import AssetsService
 from dingoops.services.bigscreens import BigScreensService
+from dingoops.services.resources import ResourcesService
 from dingoops.utils import datetime as datatime_util
 from datetime import datetime, timedelta
 
 relation_scheduler = BackgroundScheduler()
 assert_service = AssetsService()
+resource_service = ResourcesService()
 
 def start():
     relation_scheduler.add_job(fetch_relation_info, 'interval', seconds=300, next_run_time=datetime.now())
@@ -181,17 +183,35 @@ def fetch_resource_metrics_info():
     # 读取资源的监控数据项数据
     print(f"读取资源的监控数据项数据开始: {datatime_util.get_now_time_in_timestamp_format()}")
     try:
+        # 读取所有资源需要的指标配置项
+        resource_metrics_config_list = AssetResourceRelationSQL.get_all_resource_metrics_config()
+        # 空
+        if not resource_metrics_config_list:
+            print("资源的监控数据项配置数据为空，不需要采集资源的监控指标数据")
+            return
         # 读取所有裸机关联关系数据
         asset_resource_relation_list = AssetResourceRelationSQL.get_all_asset_resource_relation()
         # 非空
         if asset_resource_relation_list:
             for temp_relation in asset_resource_relation_list:
+                # 资源的名称作为查询监控项的入参，如果None则不需要查询，直接进入下次循环
+                if not temp_relation.resource_name:
+                    continue
                 # 通过config的metrics查询资源的使用率信息
-                print(f"当前的资源是{temp_relation.resource_id}")
-                # 读取裸机的监控数据
-                promql = "DCGM_FI_DEV_MEM_CLOCK{Hostname=\"k8s-demo-gpu-11-80\"}"
-                metrics = BigScreensService.fetch_metrics_with_promql(promql)
-                print(f"裸机的的测试监控数据: {metrics}")
+                print(f"当前的资源：{temp_relation.resource_id}")
+                # 资源的监控数据项
+                temp_resource_metrics_dict = {}
+                # 遍历监控指标项
+                for temp_config in resource_metrics_config_list:
+                    # 读取配置项的查询query字符串，写入参数，组装promql
+                    data = {"host_name": temp_relation.resource_name}
+                    promql = temp_config.query.format(**data)
+                    print(f"查询promql语句是{promql}")
+                    metrics_value = BigScreensService.fetch_metrics_with_promql(promql)
+                    print(f"监控项：{temp_config.name}数据:{metrics_value}")
+                    temp_resource_metrics_dict[temp_config.name] = metrics_value
+                # 存入数据库
+                resource_service.update_resource_metrics(temp_relation.resource_id, temp_resource_metrics_dict)
         # 读取每一个资源的监控数据信息
         print(f"读取资源的监控数据项数据开始: {datatime_util.get_now_time_in_timestamp_format()}")
     except Exception as e:
