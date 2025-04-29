@@ -1952,9 +1952,9 @@ class AssetsService:
         try:
             if asset_part and asset_part.part_number:
                 # 根据配件编号查询判断数据库中是否已存在
-                asset_part_db = AssetSQL.get_asset_part_by_number(asset_part.part_number)
-                if asset_part_db is not None:
-                    raise Fail("part number used", error_message="配件编号已被使用")
+                asset_part_db_temp = AssetSQL.get_asset_part_by_number(asset_part.part_number)
+                if asset_part_db_temp is not None:
+                    raise Fail("asset part number used", error_message="配件资产编号已被使用")
             # 数据组装
             # 配件信息
             asset_part_info_db = self.convert_asset_part_info_db_4api(asset_part)
@@ -2041,9 +2041,9 @@ class AssetsService:
             # 判断配件编号是否唯一
             if asset_part.part_number is not None and asset_part.part_number != asset_part_db.part_number:
                 # 根据配件编号查询判断数据库中是否已存在
-                asset_part_db = AssetSQL.get_asset_part_by_number(asset_part.part_number)
-                if asset_part_db is not None:
-                    raise Fail("part number used", error_message="配件编号已被使用")
+                asset_part_db_temp = AssetSQL.get_asset_part_by_number(asset_part.part_number)
+                if asset_part_db_temp is not None:
+                    raise Fail("asset part number used", error_message="配件资产编号已被使用")
             # 填充需要修改的数据
             # 名称
             if asset_part.name is not None and len(asset_part.name) > 0:

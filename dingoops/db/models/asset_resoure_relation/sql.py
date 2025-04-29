@@ -25,7 +25,7 @@ class AssetResourceRelationSQL:
                                   func.count(AssetResourceRelationInfo.asset_id).label("asset_count")
                                   )
             # 查询
-            query = query.filter(AssetResourceRelationInfo.resource_project_id.isnot(None))
+            query = query.filter(AssetResourceRelationInfo.resource_project_id.isnot(None)).group_by(AssetResourceRelationInfo.resource_project_id)
             # 数据库查询参数
             if 'resource_project_name' in query_params and query_params['resource_project_name']:
                 query = query.filter(AssetResourceRelationInfo.resource_project_name.like('%' + query_params['resource_project_name'] + '%'))
@@ -156,10 +156,30 @@ class AssetResourceRelationSQL:
     def get_resource_project_not_empty_count(cls):
         session = get_session()
         with ((session.begin())):
-            return session.query(distinct(AssetResourceRelationInfo.resource_project_id.isnot(None))).count()
+            return session.query(AssetResourceRelationInfo). \
+                filter(AssetResourceRelationInfo.resource_project_id.isnot(None)). \
+                distinct(AssetResourceRelationInfo.resource_project_id).count()
 
     @classmethod
     def get_all_resource_status_info(cls):
         session = get_session()
         with session.begin():
-            return session.query(AssetResourceRelationInfo.resource_id, AssetResourceRelationInfo.resource_name, AssetResourceRelationInfo.resource_status).all()
+            return session.query(AssetResourceRelationInfo.resource_id,
+                                 AssetResourceRelationInfo.resource_name,
+                                 AssetResourceRelationInfo.resource_status).all()
+
+    @classmethod
+    def get_asset_id_empty_resource_count(cls):
+        session = get_session()
+        with session.begin():
+            return session.query(AssetResourceRelationInfo).filter(AssetResourceRelationInfo.asset_id.is_(None)).count()
+
+    @classmethod
+    def get_resource_relation_asset_failure_count(cls):
+        session = get_session()
+        with session.begin():
+            query = session.query(AssetResourceRelationInfo). \
+                        outerjoin(AssetBasicInfo, AssetBasicInfo.id == AssetResourceRelationInfo.asset_id). \
+                        filter(AssetResourceRelationInfo.asset_id.isnot(None)). \
+                        filter(AssetBasicInfo.asset_status == "3")
+            return query.count()

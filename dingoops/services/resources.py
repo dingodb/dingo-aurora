@@ -98,10 +98,17 @@ class ResourcesService:
             project_count = AssetResourceRelationSQL.get_resource_project_not_empty_count()
             result['project_count'] = project_count
 
+            # 资源的资产ID为空数目，即为未分配节点数目
+            unassigned_asset_count = AssetResourceRelationSQL.get_asset_id_empty_resource_count()
+            result['unassigned_asset_count'] = unassigned_asset_count
+
+            # 故障节点数目：即为资源关联的资产中，资产状态为故障的数目
+            failure_asset_count = AssetResourceRelationSQL.get_resource_relation_asset_failure_count()
+            result['failure_asset_count'] = failure_asset_count
+
             # 资源状态
             resource_status_info_ret = []
             resource_status_info_data = AssetResourceRelationSQL.get_all_resource_status_info()
-            available_resource_count = 0
             if resource_status_info_data:
                 for resource_status_info in resource_status_info_data:
                     resource_status_info_temp = {}
@@ -110,13 +117,8 @@ class ResourcesService:
                     resource_status_info_temp['resource_status'] = resource_status_info.resource_status
                     # 追加数据
                     resource_status_info_ret.append(resource_status_info_temp)
-                    # if resource_status_info.resource_status == "available":
-                    if resource_status_info.resource_status == "active":
-                        available_resource_count += 1
-            result['resource_status_info'] = resource_status_info_ret
 
-            # 可用节点数目
-            result['available_resource_count'] = available_resource_count
+            result['resource_status_info'] = resource_status_info_ret
 
             # 资源使用情况：
             # 资产分配的情况
