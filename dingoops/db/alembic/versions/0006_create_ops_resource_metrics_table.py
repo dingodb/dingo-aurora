@@ -53,7 +53,7 @@ def upgrade() -> None:
         {
             "id": "0300dd7d-24c5-11f0-84fe-44a842237864",
             "name": "gpu_count",
-            "query": 'count(DCGM_FI_DEV_POWER_USAGE{{Hostname={host_name}}})',
+            "query": 'count(DCGM_FI_DEV_POWER_USAGE{{Hostname="{host_name}"}})',
             "description": 'GPU卡数',
             "sub_class": None,
             "unit": None,
@@ -62,7 +62,7 @@ def upgrade() -> None:
         {
             "id": "7bebdc86-24c5-11f0-84fe-44a842237864",
             "name": "gpu_power",
-            "query": 'avg(DCGM_FI_DEV_POWER_USAGE{{Hostname={host_name}}})',
+            "query": 'avg(DCGM_FI_DEV_POWER_USAGE{{Hostname="{host_name}"}})',
             "description": '资源GPU平均功率',
             "sub_class": None,
             "unit": 'watt',
@@ -71,7 +71,7 @@ def upgrade() -> None:
         {
             "id": "2c3d6b42-24c6-11f0-84fe-44a842237864",
             "name": "cpu_usage",
-            "query": '(1-avg(irate(node_cpu_seconds_total{{hostname={host_name},mode="idle"}}[5m])) by (instance))*100',
+            "query": '(1-avg(irate(node_cpu_seconds_total{{hostname="{host_name}",mode="idle"}}[5m])) by (instance))*100',
             "description": 'CPU使用率',
             "sub_class": None,
             "unit": 'percent',
@@ -80,7 +80,7 @@ def upgrade() -> None:
         {
             "id": "3311030e-24c6-11f0-84fe-44a842237864",
             "name": "memory_usage",
-            "query": '(1-(node_memory_MemAvailable_bytes{{hostname={host_name}}} / (node_memory_MemTotal_bytes{{hostname={host_name}}})))* 100',
+            "query": '(1-(node_memory_MemAvailable_bytes{{hostname="{host_name}"}} / (node_memory_MemTotal_bytes{{hostname="{host_name}"}})))* 100',
             "description": '内存使用率',
             "sub_class": None,
             "unit": 'percent',

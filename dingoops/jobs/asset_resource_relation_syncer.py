@@ -207,8 +207,9 @@ def fetch_resource_metrics_info():
                     data = {"host_name": temp_relation.resource_name}
                     promql = temp_config.query.format(**data)
                     print(f"查询promql语句是{promql}")
-                    metrics_value = BigScreensService.fetch_metrics_with_promql(promql)
-                    print(f"监控项：{temp_config.name}数据:{metrics_value}")
+                    metrics_json = BigScreensService.fetch_metrics_with_promql(promql)
+                    print(f"监控项：{temp_config.name}数据:{metrics_json}")
+                    metrics_value = handle_metrics_json(metrics_json)
                     temp_resource_metrics_dict[temp_config.name] = metrics_value
                 # 存入数据库
                 resource_service.update_resource_metrics(temp_relation.resource_id, temp_resource_metrics_dict)
@@ -216,3 +217,23 @@ def fetch_resource_metrics_info():
         print(f"读取资源的监控数据项数据开始: {datatime_util.get_now_time_in_timestamp_format()}")
     except Exception as e:
         print(f"读取资源的监控数据项失败: {e}")
+
+
+# 处理prometheus的返回数据
+def handle_metrics_json(metrics_json):
+    try:
+        # 数据不为空
+        if metrics_json:
+            # 数据的状态为success
+            if metrics_json['status'] == 'success':
+                # 数据对象
+                json_data = metrics_json['data']
+                # 数据结果
+                json_data_result = json_data['result']
+                # 读取数据结果中的value数值
+                if json_data_result:
+                    return json_data_result[0]['value'][1]
+    except Exception as e:
+        print(f"解析监控数据项失败: {e}")
+    # 返回None
+    return None

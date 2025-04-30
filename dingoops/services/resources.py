@@ -2,7 +2,6 @@
 import uuid
 
 from math import ceil
-from zoneinfo import available_timezones
 
 from dingoops.db.models.asset_resoure_relation.models import ResourceMetrics
 from dingoops.db.models.asset_resoure_relation.sql import AssetResourceRelationSQL
