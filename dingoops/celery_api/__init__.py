@@ -69,5 +69,5 @@ CONF.register_opts(redis_opts, redis_group)
 #复制ansible-deploy目录到WORK_DIR目录下
 ansible_dir = os.path.join(os.getcwd(), "dingoops","templates","ansible-deploy")
 WORK_DIR = CONF.DEFAULT.cluster_work_dir
-aaa = subprocess.run(["cp", "-LRpf", ansible_dir,WORK_DIR], capture_output=True)
+aaa = subprocess.run(["cp", "-LRpf", ansible_dir, WORK_DIR], capture_output=True)
 print(aaa.stdout)

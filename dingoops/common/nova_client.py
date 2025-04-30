@@ -83,6 +83,14 @@ class NovaClient:
         if response.status_code != 200:
             raise Exception(f"nova详情请求失败: {response.text}")
         return response.json()['server']
+    
+    # 根据id查询规格
+    def nova_get_flavor(self, flavor_id):
+        endpoint = self.get_service_endpoint('compute')
+        response = self.session.get(f"{endpoint}/flavors/"+ flavor_id)
+        if response.status_code != 200:
+            raise Exception(f"nova规格请求失败: {response.text}")
+        return response.json()['flavor']
 
 # 声明nova的client
 nova_client = NovaClient()

@@ -8,8 +8,20 @@ from dingoops.api.model.base import DingoopsObject
 class NetworkConfigObject(BaseModel):
     admin_subnet_id: Optional[str] = Field(None, description="管理网id")
     bus_subnet_id: Optional[str] = Field(None, description="业务子网id")
+    admin_cidr: Optional[str] = Field(None, description="管理网cidr")
+    bus_cidr: Optional[str] = Field(None, description="业务网cidr")
     admin_network_id: Optional[str] = Field(None, description="管理网络id")
     bus_network_id: Optional[str] = Field(None, description="业务网络id")
+    vip: Optional[str] = Field(None, description="管理网访问地址")
+    floating_ip: Optional[bool] = Field(None, description="是否启用浮动ip")
+
+class NetworkInfo(BaseModel):
+    admin_subnet_id: Optional[str] = Field(None, description="管理网id")
+    bus_subnet_id: Optional[str] = Field(None, description="业务子网id")
+    admin_network_id: Optional[str] = Field(None, description="管理网络id")
+    admin_network_name: Optional[str] = Field(None, description="管理网络id")
+    bus_network_id: Optional[str] = Field(None, description="业务网络id")
+    bus_network_name: Optional[str] = Field(None, description="管理网络名称")
     vip: Optional[str] = Field(None, description="管理网访问地址")
     floating_ip: Optional[bool] = Field(None, description="是否启用浮动ip")
     
@@ -66,7 +78,7 @@ class ClusterInfo(DingoopsObject):
     user_id: Optional[str] = Field(None, description="用户id")
     labels: Optional[str] = Field(None, description="集群标签")
     region_name: Optional[str] = Field(None, description="region名称")
-    network_config: Optional[NetworkConfigObject] = Field(None, description="网络配置")
+    network_config: Optional[NetworkInfo] = Field(None, description="网络配置")
     #node_config: Optional[List[NodeConfigObject]] = Field(None, description="节点配置")
     runtime: Optional[str] = Field(None, description="运行时类型")
     type: Optional[str] = Field(None, description="集群类型")

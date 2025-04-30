@@ -187,7 +187,7 @@ variable "force_null_port_security" {
 variable "subnet_cidr" {
   description = "Subnet CIDR block."
   type        = string
-  default     = "10.0.0.0/24"
+  default     = "192.168.10.0/24"
 }
 variable "admin_subnet_id" {
   description = "Subnet id"

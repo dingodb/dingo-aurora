@@ -2,7 +2,7 @@
 import os
 
 from fastapi import APIRouter
-from dingoops.api import assets, bigscreens, system, monitor, cluster, node,websocket, resources
+from dingoops.api import assets, bigscreens, system, monitor, cluster, node, instance, websocket, resources
 
 
 # 启动时创建excel的临时存放目录
@@ -19,3 +19,4 @@ api_router.include_router(cluster.router, tags=["Cluster"])
 api_router.include_router(node.router, tags=["Node"])
 api_router.include_router(websocket.router, tags=["WebSockets"])
 api_router.include_router(resources.router, tags=["Resources"])
+api_router.include_router(instance.router, tags=["Instance"])

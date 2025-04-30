@@ -23,13 +23,15 @@ class Cluster(Base):
     admin_subnet_id = Column(String(length=128), nullable=True)
     bus_network_id = Column(String(length=128), nullable=True)
     bus_subnet_id = Column(String(length=128), nullable=True)
-    
     type = Column(String(length=128), nullable=True)
     kube_info = Column(Text, nullable=True)
-    
     create_time = Column(DateTime, nullable=True)
     update_time = Column(DateTime, nullable=True)
     description = Column(String(length=255), nullable=True)
+    cpu =  Column(Integer, nullable=True)
+    mem =  Column(Integer, nullable=True)
+    gpu =  Column(Integer, nullable=True)
+    gpu_mem =  Column(Integer, nullable=True)
     extra = Column(Text, nullable=True)
 
     

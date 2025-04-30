@@ -30,7 +30,7 @@ from dingoops.db.models.cluster.models import Cluster as ClusterDB
 from dingoops.db.models.node.models import NodeInfo as NodeDB
 from dingoops.db.models.instance.models import Instance as InstanceDB
 from dingoops.common import neutron
-
+from dingoops.common.nova_client import NovaClient, nova_client
 from dingoops.services.custom_exception import Fail
 from dingoops.services.system import SystemService
 
@@ -60,7 +60,7 @@ class ClusterService:
         for idx, node in enumerate(cluster.node_config):
             if node.role == "master" and node.type == "vm":
                 for i in range(node.count):
-                    k8s_masters[f"master-{int(master_index) + 1}"] = NodeGroup(
+                    k8s_masters[f"master-{int(master_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
                         flavor=node.flavor_id,
                         floating_ip=True,
@@ -69,7 +69,7 @@ class ClusterService:
                     master_index=master_index+1
             if node.role == "worker" and node.type == "vm":
                 for i in range(node.count):
-                    k8s_nodes[f"node-{int(node_index) + 1}"] = NodeGroup(
+                    k8s_nodes[f"node-{int(node_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
                         flavor=node.flavor_id,
                         floating_ip=False,
@@ -78,7 +78,7 @@ class ClusterService:
                     node_index=node_index+1
             if node.role == "worker" and node.type == "baremental":
                 for i in range(node.count):
-                    k8s_nodes[f"node-{int(node_index) + 1}"] = NodeGroup(
+                    k8s_nodes[f"node-{int(node_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
                         flavor=node.flavor_id,
                         floating_ip=False,
@@ -160,22 +160,22 @@ class ClusterService:
 
     def check_cluster_param(self, cluster: ClusterObject):
         # 判断名称是否重复、判断是否有空值、判断是否有重复的节点配置
-        
+        query_params = {}
+        query_params["name"] = cluster.name
+        query_params["project_id"] = cluster.project_id
+        res = self.list_clusters(query_params, 1, -1, None, None)
+        if res.get("total") > 0:
+            raise Fail("集群名称已存在")
         return True
     
     
     def create_cluster(self, cluster: ClusterObject):
         # 数据校验 todo
-        if  not self.check_cluster_param(cluster):
-            raise Fail("参数校验失败")
+        self.check_cluster_param(cluster)
         try:
             cluster_info_db = self.convert_clusterinfo_todb(cluster)
-            # 保存对象到数据库
             res = ClusterSQL.create_cluster(cluster_info_db)
-             # 保存node信息到数据库
-            node_list = self.convert_nodeinfo_todb(cluster)
-            #res = NodeSQL.create_nodes(node_list)
-            #查询openstack相关接口，返回需要的信息
+
             neutron_api = neutron.API()  # 创建API类的实例
             external_net = neutron_api.list_external_networks()
 
@@ -190,11 +190,10 @@ class ClusterService:
             self.generate_k8s_nodes(cluster, k8s_masters, k8s_nodes)
             # 保存node信息到数据库
             node_list = self.convert_nodeinfo_todb(cluster, k8s_masters, k8s_nodes)
-            NodeSQL.create_node_list(node_list)
+            #NodeSQL.create_node_list(node_list)
             # 保存instance信息到数据库
-            instance_list = self.convert_instance_todb(cluster, k8s_masters, k8s_nodes)
-            InstanceSQL.create_instance_list(instance_list)
-
+            #instance_list = self.convert_instance_todb(cluster, k8s_masters, k8s_nodes)
+            #InstanceSQL.create_instance_list(instance_list)
             # 创建terraform变量
             tfvars = ClusterTFVarsObject(
                 id = cluster_info_db.id,
@@ -205,15 +204,16 @@ class ClusterService:
                 subnet_cidr=cluster.kube_info.pod_cidr,
                 external_net=external_net[0]['id'],
                 use_existing_network=False,
-                password=cluster.node_config[0].password,
                 ssh_user=cluster.node_config[0].user,
                 k8s_master_loadbalancer_enabled=lb_enbale,
                 number_of_k8s_masters = cluster.kube_info.number_master
                 )
-
+            if cluster.node_config[0].auth_type == "password":
+                tfvars.password = cluster.node_config[0].password
+            elif cluster.node_config[0].auth_type == "keypair":
+                tfvars.password = ""
             #组装cluster信息为ClusterTFVarsObject格式
-        # 根据
-            if cluster.type == "none":
+            if cluster.type == "baremental":
                 result = celery_app.send_task("dingoops.celery_api.workers.create_cluster",
                                           args=[tfvars.dict(), cluster.dict(), node_list ])
             elif cluster.type == "kubernetes":
@@ -225,12 +225,13 @@ class ClusterService:
                 pass
             else:
                 pass
-
+            # 成功返回资产id
+            return cluster_info_db
+            
         except Fail as e:
             raise e
 
-        # 成功返回资产id
-        return cluster_info_db.id
+
     
 
     def delete_cluster(self, cluster_id):
@@ -290,13 +291,35 @@ class ClusterService:
         else:
             cluster_info_db.kube_info = None
         # 计算集群中的cpu、mem、gpu、gpu_mem
+        nova_client = NovaClient()
+        cpu_total = 0
+        mem_total = 0
+        gpu_total = 0
+        gpu_mem_total = 0
         for idx, node in enumerate(cluster.node_config):
             if node.role == "worker" and node.type == "vm":
-                pass
+                flavor = nova_client.nova_get_flavor(node.flavor_id)
+                if flavor is not None:
+                    cpu_total += flavor['vcpus']
+                    mem_total += flavor['ram']
+                    if "extra_specs" in flavor and "pci_passthrough:alias" in flavor["extra_specs"]:
+                        pci_alias = flavor['extra_specs']['pci_passthrough:alias']
+                        if ':' in pci_alias:
+                            gpu_value = pci_alias.split(':')[1].strip("'")
+                            gpu_total += int(gpu_value)
+                    #gpu_mem_total += flavor['extra_specs']['gpu_mem']
                 #查询flavor信息
             elif node.role == "worker" and node.type == "baremental":
-                #查询flavor信息
-                pass
+                flavor = nova_client.nova_get_flavor(node.flavor_id)
+                cpu_total += flavor['vcpus']
+                mem_total += flavor['ram']
+                if "extra_specs" in flavor and "resources:GPU" in flavor["extra_specs"]:
+                    gpu_value = int(flavor["extra_specs"])
+                    gpu_total += int(gpu_value)
+        cluster_info_db.gpu = gpu_total
+        cluster_info_db.cpu = cpu_total
+        cluster_info_db.mem = mem_total
+        #gpu_mem_total = gpu_mem_total
 
         return cluster_info_db
 
@@ -319,7 +342,7 @@ class ClusterService:
                 master_image = config.image
                 master_private_key = config.private_key
                 master_auth_type = config.auth_type
-                master_openstack_id = config.openstack_id
+#                master_openstack_id = config.openstack_id
                 master_security_group = config.security_group
                 master_flavor_id = config.flavor_id
             if config.role == "worker":
@@ -329,7 +352,7 @@ class ClusterService:
                 worker_image = config.image
                 worker_private_key = config.private_key
                 worker_auth_type = config.auth_type
-                worker_openstack_id = config.openstack_id
+#                worker_openstack_id = config.openstack_id
                 worker_security_group = config.security_group
                 worker_flavor_id = config.flavor_id
 
@@ -381,7 +404,37 @@ class ClusterService:
         
             # Create a clean dictionary with only serializable fields
             
-        return nodeinfo_list
+        #return nodeinfo_list
+        # Convert list of NodeDB objects to a list of dictionaries
+        node_list_dict = []
+        for node in nodeinfo_list:
+            # Create a serializable dictionary from the NodeDB object
+            node_dict = {
+                "id": node.id,
+                "node_type": node.node_type,
+                "cluster_id": node.cluster_id,
+                "cluster_name": node.cluster_name,
+                "region": node.region,
+                "role": node.role,
+                "user": node.user,
+                "password": node.password,
+                "image": node.image,
+                "private_key": node.private_key,
+                "openstack_id": node.openstack_id,
+                "auth_type": node.auth_type,
+                "security_group": node.security_group,
+                "flavor_id": node.flavor_id,
+                "status": node.status,
+                "admin_address": node.admin_address,
+                "name": node.name,
+                "bus_address": node.bus_address,
+                "create_time": node.create_time.isoformat() if node.create_time else None
+            }
+            node_list_dict.append(node_dict)
+
+        # Convert the list of dictionaries to a JSON string
+        node_list_json = json.dumps(node_list_dict)
+        return node_list_json
 
 
     def convert_instance_todb(self, cluster:ClusterObject, k8s_masters, k8s_nodes):

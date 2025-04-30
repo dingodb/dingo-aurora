@@ -4,8 +4,8 @@ aiosqlite==0.17.0
 alembic==1.14.0
 amqp==5.3.1
 annotated-types==0.7.0
-ansible==9.10.0
-ansible-core==2.16.14
+ansible==8.7.0
+ansible-core==2.15.13
 ansible-runner==2.4.1
 anyio==4.5.2
 aodhclient==3.6.0
@@ -68,8 +68,8 @@ httpx==0.27.2
 humanize==4.12.1
 idna==2.10
 immutables==0.21
-importlib_metadata==8.5.0
-importlib_resources==6.4.5
+#importlib_metadata==8.5.0
+#importlib_resources==6.4.5
 iniconfig==2.0.0
 ipython==8.12.3
 iso8601==2.1.0

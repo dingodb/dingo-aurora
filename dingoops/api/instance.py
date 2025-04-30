@@ -1,5 +1,5 @@
 from fastapi import HTTPException, Query
-from dingoops.api.model.instance import InstanceConfigObject, InstanceRemoveObject
+from dingoops.api.model.instance import InstanceConfigObject, InstanceRemoveObject, InstanceCreateObject
 
 from starlette import status
 from dingoops.api.model.system import OperateLogApiModel
@@ -50,7 +50,7 @@ async def get_instance(instance_id:str):
         raise HTTPException(status_code=400, detail="get cluster error")
 
 @router.post("/instance", summary="创建instance", description="创建instance")
-async def create_instance(instance: InstanceConfigObject):
+async def create_instance(instance: InstanceCreateObject):
     try:
         # 创建instance，创建openstack种的虚拟机或者裸金属服务器，如果属于某个cluster就写入cluster_id
         result = instance_service.create_instance(instance)

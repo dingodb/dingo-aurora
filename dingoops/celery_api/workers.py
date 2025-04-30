@@ -10,6 +10,7 @@ import time
 from typing import Any, Dict, Optional
 from celery import Celery
 from dingoops.api.model.cluster import ClusterObject
+from dingoops.api.model.instance import InstanceConfigObject, InstanceCreateObject
 from dingoops.celery_api.ansible import run_playbook,CustomCallback
 from dingoops.celery_api.util import update_task_state
 from dingoops.services.cluster import TaskService
@@ -17,6 +18,7 @@ from dingoops.db.models.cluster.models import Cluster,Taskinfo
 from dingoops.db.models.node.models import NodeInfo
 from dingoops.db.models.instance.models import Instance
 from pydantic import BaseModel, Field
+import openstack
 from fastapi import Path
 from pathlib import Path as PathLib
 from requests import Session
@@ -39,6 +41,7 @@ BASE_DIR = os.getcwd()
 TERRAFORM_DIR = os.path.join(BASE_DIR, "dingoops", "templates", "terraform")
 ANSIBLE_DIR = os.path.join(BASE_DIR, "templates", "ansible-deploy")
 WORK_DIR = CONF.DEFAULT.cluster_work_dir
+TIMEOUT = 600
 
 etcd_task_name = "Check etcd cluster status"
 control_plane_task_name = "Check control plane status"
@@ -101,7 +104,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, regio
             return False
         
         if cluster.password == "":
-            res = subprocess.run(['ssh-keygen -t rsa -b 4096 -C "" -f", os.path.join(str(cluster_dir), "id_rsa"), "-N ""'], capture_output=True)
+            res = subprocess.run(["ssh-keygen", "-t", "rsa", "-b", "4096", "-C", "", "-f", os.path.join(str(cluster_dir), "id_rsa"), "-N", ""], capture_output=True)
             if res.returncode != 0:
             # 发生错误时更新任务状态为"失败"
                 task_info.end_time =datetime.fromtimestamp(datetime.now().timestamp())
@@ -382,9 +385,54 @@ def get_cluster_kubeconfig(cluster, lb_ip):
     except subprocess.CalledProcessError as e:
         print(f"Error getting kubeconfig: {e}")
         return None
+
+def delete_vm_instance(conn, instance_list):
+    # 在这里使用openstack的api接口，直接删除vm或bm
+    server_list = []
+    for instance in instance_list:
+        server = conn.compute.find_server(instance.id)
+        conn.compute.delete_server(server)
+        conn.compute.wait_for_delete(server, wait=TIMEOUT)
+        server_list.append(server.id)
+    return server_list
+
+def create_vm_instance(conn, instance_info: InstanceCreateObject, instance_list):
+    # 在这里使用openstack的api接口，直接创建vm
+    server_list = []
+    for ins in instance_list:
+        server = conn.create_server(
+            name=ins.name,
+            image=instance_info.image_id,
+            flavor=instance_info.flavor_id,
+            network=instance_info.network_id,
+            key_name=instance_info.sshkey_name,
+            wait=False
+        )
+        server_list.append(server.id)
+    return server_list
+
+def create_bm_instance(conn, instance_info: InstanceCreateObject, instance_list):
+    # 在这里使用openstack的api接口，直接创建bm
+    server_list = []
+    for ins in instance_list:
+        server = conn.create_server(
+            name=ins.name,
+            image=instance_info.image_id,
+            flavor=instance_info.flavor_id,
+            network=instance_info.network_id,
+            key_name=instance_info.sshkey_name,
+            config_drive=True,
+            meta={
+                "baremetal": "true",
+                "capabilities": "boot_option:local"
+            },
+            wait=False
+        )
+        server_list.append(server.id)
+    return server_list
     
 @celery_app.task(bind=True)
-def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_list, scale=False):
+def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, scale=False):
 
     try:
         task_id = self.request.id.__str__()
@@ -489,33 +537,33 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             session.commit()
 
         # 更新集群node的状态为running
-        session = get_session()
-        for node in node_list:
-            with session.begin():
-                db_node = session.get(NodeInfo, node.id)
-                for k,v in hosts_data["_meta"]["hostvars"].items():
-                    if db_node.name == k:
-                        db_node.server_id = v.get("id")
-                        db_node.status = "running"
-                        db_node.admin_address = v.get("ip")
-                        db_node.floating_ip = v.get("public_ipv4")
-                        for instance in instance_list:
-                            if db_node.name == instance.name:
-                                db_node.instance_id = instance.id
-                                break
+        # session = get_session()
+        # for node in node_list:
+        #     with session.begin():
+        #         db_node = session.get(NodeInfo, node.id)
+        #         for k,v in hosts_data["_meta"]["hostvars"].items():
+        #             if db_node.name == k:
+        #                 db_node.server_id = v.get("id")
+        #                 db_node.status = "running"
+        #                 db_node.admin_address = v.get("ip")
+        #                 db_node.floating_ip = v.get("public_ipv4")
+        #                 for instance in instance_list:
+        #                     if db_node.name == instance.name:
+        #                         db_node.instance_id = instance.id
+        #                         break
 
         # 更新集群instance的状态为running
-        session = get_session()
-        for instance in instance_list:
-            with session.begin():
-                db_instance = session.get(Instance, instance.id)
-                for k,v in hosts_data["_meta"]["hostvars"].items():
-                    # 需要添加节点的ip地址等信息
-                    if  db_instance.name == k:
-                        db_instance.server_id = v.get("id")
-                        db_instance.status = "running"
-                        db_instance.ip_address = v.get("ip")
-                        db_instance.floating_ip = v.get("public_ipv4")
+        # session = get_session()
+        # for instance in instance_list:
+        #     with session.begin():
+        #         db_instance = session.get(Instance, instance.id)
+        #         for k,v in hosts_data["_meta"]["hostvars"].items():
+        #             # 需要添加节点的ip地址等信息
+        #             if  db_instance.name == k:
+        #                 db_instance.server_id = v.get("id")
+        #                 db_instance.status = "running"
+        #                 db_instance.ip_address = v.get("ip")
+        #                 db_instance.floating_ip = v.get("public_ipv4")
 
         # 更新数据库的状态为success
         task_info.end_time = time.time()
@@ -621,25 +669,71 @@ def delete_node(self, cluster_id, node_list, instance_list_db, extravars):
         return False
 
 @celery_app.task(bind=True)
-def create_instance(self, cluster_id, node_list, extravars):
+def create_instance(self, instance: InstanceCreateObject, instance_list):
     try:
         # 1、拿到openstack的信息，就可以执行创建instance的流程，需要分别处理类型是vm还是裸金属的
-        # 2、将instance的信息写入数据库中的表中
-        pass
-    except subprocess.CalledProcessError as e:
-        print(f"Ansible error: {e}")
-        return False
+        conn = openstack.connect(
+            auth_url=instance.openstack_info.openstack_auth_url,
+            project_name=instance.openstack_info.project_name,
+            username=instance.openstack_info.openstack_username,
+            password=instance.openstack_info.openstack_password,
+            user_domain_name=instance.openstack_info.user_domain_name,
+            project_domain_name=instance.openstack_info.project_domain_name,
+            region_name=instance.openstack_info.region
+        )
+        if instance.node_type == "vm":
+            server_id_list = create_vm_instance(conn, instance, instance_list)
+        else:
+            server_id_list = create_bm_instance(conn, instance, instance_list)
+
+        # 2、判断server的状态，如果都成功就将instance的信息写入数据库中的表中
+        server_id_active = []
+        session = get_session()
+        while len(server_id_active) < len(server_id_list):
+            for server_id in server_id_list:
+                if server_id in server_id_active:
+                    continue
+                server = conn.get_server(server_id)
+                if server.status == "ACTIVE":
+                    # 写入数据库中
+                    for instance in instance_list:
+                        if instance.name == server.name:
+                            with session.begin():
+                                db_instance = session.get(Instance, instance.id)
+                                db_instance.server_id = server.id
+                                db_instance.status = server.status
+                                db_instance.ip_address = server.private_v4
+                                db_instance.floating_ip = server.public_v4
+                    server_id_active.append(server_id)
+            time.sleep(5)
+    except Exception as e:
+        print(f"create instance error: {e}")
+        raise ValueError(e)
 
 @celery_app.task(bind=True)
-def delete_instance(self, cluster_id, node_list, extravars):
+def delete_instance(self, openstack_info, instance_list):
     try:
         # 1、拿到openstack的信息，就可以执行删除instance的流程，需要分别处理类型是vm还是裸金属的
+        conn = openstack.connect(
+            auth_url=openstack_info.openstack_auth_url,
+            project_name=openstack_info.project_name,
+            username=openstack_info.openstack_username,
+            password=openstack_info.openstack_password,
+            user_domain_name=openstack_info.user_domain_name,
+            project_domain_name=openstack_info.project_domain_name,
+            region_name=openstack_info.region
+        )
         # 2、将instance的信息在数据库中的表中删除
-        pass
-
+        server_list = delete_vm_instance(conn, instance_list)
+        session = get_session()
+        for server in server_list:
+            with session.begin():
+                db_instance = session.get(Instance, server)
+                session.delete(db_instance)
     except subprocess.CalledProcessError as e:
-        print(f"Ansible error: {e}")
-        return False
+        print(f"delete instance error: {e}")
+        raise ValueError(e)
+
 
 @celery_app.task(bind=True)
 def install_component(cluster_id, node_name):
