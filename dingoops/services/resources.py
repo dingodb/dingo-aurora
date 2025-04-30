@@ -1,4 +1,5 @@
 # 资源的service层
+import json
 import uuid
 
 from math import ceil
@@ -67,11 +68,10 @@ class ResourcesService:
                 temp["resource_user_name"] = r.resource_user_name
                 temp["resource_project_id"] = r.resource_project_id
                 temp["resource_project_name"] = r.resource_project_name
-                # TODO：待处理数据字段: 资源GPU卡数、资源GPU功率、资源CPU使用率、资源内存使用率
-                temp["resource_gpu_cards_count"] = None
-                temp["resource_gpu_utilization_rate"] = None
-                temp["resource_cpu_utilization_rate"] = None
-                temp["resource_memory_utilization_rate"] = None
+
+                # prometheus metrics数据：资源GPU卡数、资源GPU功率、资源CPU使用率、资源内存使用率
+                resource_metrics_info = self.get_resource_metrics_by_resource_id(self, r.resource_id)
+                temp["resource_metrics_info"] = resource_metrics_info
                 # 追加数据
                 ret.append(temp)
 
@@ -98,20 +98,20 @@ class ResourcesService:
             resource_total_count = AssetResourceRelationSQL.get_all_asset_resource_relation_count()
             result['resource_total_count'] = resource_total_count
             # 项目数目
-            project_count = AssetResourceRelationSQL.get_resource_project_not_empty_count()
+            project_count = AssetResourceRelationSQL.get_vpc_resource_project_not_empty_count()
             result['project_count'] = project_count
 
             # 资源的资产ID为空数目，即为未分配节点数目
-            unassigned_asset_count = AssetResourceRelationSQL.get_asset_id_empty_resource_count()
+            unassigned_asset_count = AssetResourceRelationSQL.get_asset_id_empty_vpc_resource_count()
             result['unassigned_asset_count'] = unassigned_asset_count
 
             # 故障节点数目：即为资源关联的资产中，资产状态为故障的数目
-            failure_asset_count = AssetResourceRelationSQL.get_resource_relation_asset_failure_count()
+            failure_asset_count = AssetResourceRelationSQL.get_vpc_resource_relation_asset_failure_count()
             result['failure_asset_count'] = failure_asset_count
 
             # 资源状态
             resource_status_info_ret = []
-            resource_status_info_data = AssetResourceRelationSQL.get_all_resource_status_info()
+            resource_status_info_data = AssetResourceRelationSQL.get_all_vpc_resource_status_info()
             if resource_status_info_data:
                 for resource_status_info in resource_status_info_data:
                     resource_status_info_temp = {}
@@ -134,9 +134,14 @@ class ResourcesService:
 
     # 保存资源监控指标项数据
     def update_resource_metrics(self, resource_id, resource_metrics_dict):
-        # 空
-        if not resource_id or not resource_metrics_dict:
+        # 资源不为空，metrics数据为空
+        if resource_id is not None and not resource_metrics_dict:
+            print(f"当前资源[{resource_id}]在prometheus中的metric数据为空，删除数据中的该资源数据")
+            AssetResourceRelationSQL.delete_resource_metrics_by_resource_id(resource_id)
             return None
+        elif not resource_id or not resource_metrics_dict: # 空
+            return None
+
         # 遍历
         for name, metrics_value in resource_metrics_dict.items():
             # 查询指标名称对应的数据
@@ -161,7 +166,26 @@ class ResourcesService:
 
     # 查询某个资源的监控指标项数据
     def get_resource_metrics_by_resource_id(self, resource_id):
+        temp = {}
         # 查询数据
         db_resource_metrics = AssetResourceRelationSQL.get_resource_metrics_by_resource_id(resource_id)
+        print(db_resource_metrics)
+        if not db_resource_metrics:
+            return temp
+
+        for resource_metric in db_resource_metrics:
+            # GPU卡数
+            if resource_metric.name == 'gpu_count':
+                temp["resource_gpu_count"] = resource_metric.data
+            # 资源GPU平均功率
+            if resource_metric.name == 'gpu_power':
+                temp["resource_gpu_power"] = resource_metric.data
+            # CPU使用率
+            if resource_metric.name == 'cpu_usage':
+                temp["resource_cpu_usage"] = resource_metric.data
+            # 内存使用率
+            if resource_metric.name == 'memory_usage':
+                temp["resource_memory_usage"] = resource_metric.data
+
         # 返回
-        return db_resource_metrics
+        return temp

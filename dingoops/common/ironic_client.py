@@ -77,6 +77,15 @@ class IronicClient:
             raise Exception(f"ironic请求失败: {response.text}")
         return response.json()['nodes']
 
+    def ironic_node_info_by_id(self, node_id):
+        """获取Ironic指定节点信息"""
+        endpoint = self.get_service_endpoint('baremetal')
+        response = self.session.get(f"{endpoint}/v1/nodes/{node_id}")
+        if response.status_code != 200:
+            raise Exception(f"ironic查询指定node[{node_id}]请求{endpoint}失败: {response.text}")
+        print(response.json())
+        return response.json()
+
     def keystone_get_user_by_id(self, user_id):
         """获取指定用户信息"""
         endpoint = self.get_service_endpoint('identity')

@@ -192,6 +192,7 @@ def fetch_resource_metrics_info():
         # 读取所有裸机关联关系数据
         asset_resource_relation_list = AssetResourceRelationSQL.get_all_asset_resource_relation()
         # 非空
+        resource_id_list = []
         if asset_resource_relation_list:
             for temp_relation in asset_resource_relation_list:
                 # 资源的名称作为查询监控项的入参，如果None则不需要查询，直接进入下次循环
@@ -199,6 +200,7 @@ def fetch_resource_metrics_info():
                     continue
                 # 通过config的metrics查询资源的使用率信息
                 print(f"当前的资源：{temp_relation.resource_id}")
+                resource_id_list.append(temp_relation.resource_id)
                 # 资源的监控数据项
                 temp_resource_metrics_dict = {}
                 # 遍历监控指标项
@@ -213,6 +215,17 @@ def fetch_resource_metrics_info():
                     temp_resource_metrics_dict[temp_config.name] = metrics_value
                 # 存入数据库
                 resource_service.update_resource_metrics(temp_relation.resource_id, temp_resource_metrics_dict)
+
+            # 删除资源metrics中资源已经不存在的数据
+            print(f"资源ID列表：{resource_id_list}")
+            if not resource_id_list:
+                AssetResourceRelationSQL.delete_all_resource_metrics()
+            else:
+                AssetResourceRelationSQL.delete_resource_metrics_outside_resource_id_list(resource_id_list)
+        else: # 资源与资产关联表为空，则删除资源metrics表中所有数据
+            print("资源与资产关联表为空，删除资源metrics表中所有数据")
+            AssetResourceRelationSQL.delete_all_resource_metrics()
+
         # 读取每一个资源的监控数据信息
         print(f"读取资源的监控数据项数据开始: {datatime_util.get_now_time_in_timestamp_format()}")
     except Exception as e:

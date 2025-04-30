@@ -154,7 +154,7 @@ class AssetResourceRelationSQL:
             return session.query(AssetResourceRelationInfo).count()
 
     @classmethod
-    def get_resource_project_not_empty_count(cls):
+    def get_vpc_resource_project_not_empty_count(cls):
         session = get_session()
         with ((session.begin())):
             return session.query(AssetResourceRelationInfo). \
@@ -162,26 +162,29 @@ class AssetResourceRelationSQL:
                 distinct(AssetResourceRelationInfo.resource_project_id).count()
 
     @classmethod
-    def get_all_resource_status_info(cls):
+    def get_all_vpc_resource_status_info(cls):
         session = get_session()
         with session.begin():
             return session.query(AssetResourceRelationInfo.resource_id,
                                  AssetResourceRelationInfo.resource_name,
-                                 AssetResourceRelationInfo.resource_status).all()
+                                 AssetResourceRelationInfo.resource_status).filter(AssetResourceRelationInfo.resource_project_id.isnot(None)).all()
 
     @classmethod
-    def get_asset_id_empty_resource_count(cls):
+    def get_asset_id_empty_vpc_resource_count(cls):
         session = get_session()
         with session.begin():
-            return session.query(AssetResourceRelationInfo).filter(AssetResourceRelationInfo.asset_id.is_(None)).count()
+            return session.query(AssetResourceRelationInfo). \
+                filter(AssetResourceRelationInfo.asset_id.is_(None)). \
+                filter(AssetResourceRelationInfo.resource_project_id.isnot(None)).count()
 
     @classmethod
-    def get_resource_relation_asset_failure_count(cls):
+    def get_vpc_resource_relation_asset_failure_count(cls):
         session = get_session()
         with session.begin():
             query = session.query(AssetResourceRelationInfo). \
                         outerjoin(AssetBasicInfo, AssetBasicInfo.id == AssetResourceRelationInfo.asset_id). \
                         filter(AssetResourceRelationInfo.asset_id.isnot(None)). \
+                        filter(AssetResourceRelationInfo.resource_project_id.isnot(None)). \
                         filter(AssetBasicInfo.asset_status == "3")
             return query.count()
 
@@ -215,4 +218,22 @@ class AssetResourceRelationSQL:
         session = get_session()
         with session.begin():
             return session.query(ResourceMetrics).filter(ResourceMetrics.resource_id == resource_id, ResourceMetrics.name == name).first()
+
+    @classmethod
+    def delete_resource_metrics_by_resource_id(cls, resource_id):
+        session = get_session()
+        with session.begin():
+            return session.query(ResourceMetrics).filter(ResourceMetrics.resource_id == resource_id).delete()
+
+    @classmethod
+    def delete_resource_metrics_outside_resource_id_list(cls, resource_id_list):
+        session = get_session()
+        with session.begin():
+            return session.query(ResourceMetrics).filter(ResourceMetrics.resource_id.not_in(resource_id_list)).delete()
+
+    @classmethod
+    def delete_all_resource_metrics(cls):
+        session = get_session()
+        with session.begin():
+            return session.query(ResourceMetrics).delete()
 

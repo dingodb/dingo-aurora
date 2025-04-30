@@ -1,12 +1,10 @@
-import json
-
 
 import json
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from pymemcache.client.base import Client
 from apscheduler.schedulers.background import BackgroundScheduler
-from dingoops.services.bigscreens import BigScreensService
+from dingoops.services.bigscreens import BigScreensService, region_name
 from dingoops.services.bigscreenshovel import BigScreenShovelService
 from dingoops.jobs import CONF
 from datetime import datetime, timedelta

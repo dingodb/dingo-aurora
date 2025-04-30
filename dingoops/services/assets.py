@@ -2406,11 +2406,11 @@ class AssetsService:
                         asset_network_flow.__setattr__(basic_key, row[basic_column])
             # 读取对应名称的资产设备信息
             if asset_name:
-                asset_db = AssetSQL.get_asset_basic_info_by_catalog_name("NETWORK", format_excel_str(asset_name))
+                asset_db = AssetSQL.get_asset_basic_info_by_catalog_name("NETWORK", self.format_excel_str(asset_name))
                 if asset_db:
                     asset_network_flow.asset_id = asset_db.id
             if opposite_asset_name:
-                asset_db = AssetSQL.get_asset_basic_info_by_catalog_name("NETWORK", format_excel_str(opposite_asset_name))
+                asset_db = AssetSQL.get_asset_basic_info_by_catalog_name("NETWORK", self.format_excel_str(opposite_asset_name))
                 if asset_db:
                     asset_network_flow.opposite_asset_id = asset_db.id
             # 保存
