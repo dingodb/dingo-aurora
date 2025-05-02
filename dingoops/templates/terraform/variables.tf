@@ -19,27 +19,27 @@ variable "number_subnet" {
 }
 
 variable "number_of_bastions" {
-  default = 1
+  default = 0
 }
 
 variable "number_of_k8s_masters" {
-  default = 2
+  default = 1
 }
 
 variable "number_of_k8s_masters_no_etcd" {
-  default = 2
+  default = 0
 }
 
 variable "number_of_etcd" {
-  default = 2
+  default = 0
 }
 
 variable "number_of_k8s_masters_no_floating_ip" {
-  default = 2
+  default = 0
 }
 
 variable "number_of_k8s_masters_no_floating_ip_no_etcd" {
-  default = 2
+  default = 0
 }
 
 variable "number_of_nodes" {

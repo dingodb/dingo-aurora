@@ -78,7 +78,7 @@ class ClusterTFVarsObject(BaseModel):
     number_of_k8s_nodes: Optional[int] = Field(0, description="K8s worker节点数量")
     number_of_k8s_nodes_no_floating_ip: Optional[int] = Field(0, description="无浮动IP的K8s worker节点数量")
     k8s_master_loadbalancer_enabled: Optional[bool] = Field(False, description="是否启用负载均衡器")
-    public_key_path: Optional[str] = Field(None, description="公钥路径")
+    private_key_path: Optional[str] = Field(None, description="私钥路径")
     
 def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, region_name:str = "regionOne"):
     """使用Terraform创建基础设施"""
@@ -113,7 +113,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, regio
                 update_task_state(task_info)
                 print(f"Terraform error: {res.stderr}")
                 return False
-            cluster.public_key_path = os.path.join(cluster_dir, "id_rsa.pub")
+            cluster.private_key_path = os.path.join(cluster_dir, "id_rsa")
         
         
         cluster.group_vars_path = os.path.join(cluster_dir, "group_vars")          
@@ -130,7 +130,14 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, regio
             "-auto-approve",
             "-var-file=output.tfvars.json"
         ], capture_output=True, text=True) 
-        
+        count, data = ClusterSQL.list_cluster(cluster.id)
+        if count > 0:
+            db_cluster = data[0]          
+            db_cluster.admin_network_id = cluster.admin_network_id
+            db_cluster.admin_subnet_id = cluster.admin_subnet_id
+            db_cluster.bus_network_id = cluster.bus_network_id
+            db_cluster.bus_subnet_id = cluster.bus_subnet_id
+            ClusterSQL.update_cluster(db_cluster)
         if res.returncode != 0:
             # 发生错误时更新任务状态为"失败"
             task_info.end_time =datetime.fromtimestamp(datetime.now().timestamp())
@@ -177,13 +184,13 @@ def create_cluster(self, cluster_tf:ClusterTFVarsObject,cluster:ClusterObject):
         db_cluster = ClusterSQL.list_cluster(cluster_dict["id"])
         db_cluster.status = 'failed'
         db_cluster.error_message = str(e.__str__())
-        ClusterSQL.update_cluster(cluster_dict["id"])
+        ClusterSQL.update_cluster(db_cluster)
     except Exception as e:
         # 发生错误时更新集群状态为"失败"
         db_cluster = ClusterSQL.list_cluster(cluster_dict["id"])[0]
         db_cluster.status = 'failed'
         db_cluster.error_message = str(e.__str__())
-        ClusterSQL.update_cluster(cluster_dict["id"])
+        ClusterSQL.update_cluster(db_cluster)
         raise
         
         
@@ -241,9 +248,13 @@ def deploy_kubernetes(cluster:ClusterObject,lb_ip:str, task_id:str = None):
         TaskSQL.insert(etcd_task)
         ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
         os.chdir(ansible_dir)
-        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "hosts")
+        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), str(cluster.id),"id_rsa")
+        
         playbook_file  = os.path.join(WORK_DIR, "ansible-deploy", "cluster.yml")
-        thread,runner = run_playbook(playbook_file, host_file, ansible_dir)
+
+        key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory","")
+        cmdline_args=['--private-key=' + key_file_path]
+        thread,runner = run_playbook(playbook_file, host_file, ansible_dir, cmdline_args=cmdline_args)
         # 处理并打印事件日志
         while runner.status not in ['canceled', 'successful', 'timeout', 'failed']:
             # 处理事件日志
@@ -432,7 +443,7 @@ def create_bm_instance(conn, instance_info: InstanceCreateObject, instance_list)
     return server_list
     
 @celery_app.task(bind=True)
-def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, scale=False):
+def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_list, scale=False):
 
     try:
         task_id = self.request.id.__str__()
@@ -440,16 +451,20 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, scale=Fal
         print(f"Task ID: {task_id}")
         cluster_tfvars = ClusterTFVarsObject(**cluster_tf_dict)
         cluster = ClusterObject(**cluster_dict)
+        node_list = json.loads(node_list)
+        instance_list = json.loads(instance_list)
         # 1. 使用Terraform创建基础设施
          # 将task_info存入数据库
         task_info = Taskinfo(task_id=task_id, cluster_id=cluster_tf_dict["id"], state="progress", start_time=datetime.fromtimestamp(datetime.now().timestamp()),msg=TaskService.TaskMessage.instructure_create.name)
         TaskSQL.insert(task_info)
 
         terraform_result = create_infrastructure(cluster_tfvars,task_info, cluster.region_name)
+        
         if not terraform_result:
             raise Exception("Terraform infrastructure creation failed")
         # 打印日志
         print("Terraform infrastructure creation succeeded")
+        
         # 根据生成inventory
         # 复制script下面的host文件到WORK_DIR/cluster.id目录下
         #执行python3 host --list，将生成的内容转换为yaml格式写入到inventory/inventory.yaml文件中
@@ -471,7 +486,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, scale=Fal
         master_ip, lb_ip = get_ips(cluster_tfvars, task_info, host_file)
         result = subprocess.run("", shell=True, capture_output=True)
         
-        if cluster_tfvars.password == "":
+        if cluster_tfvars.password != "":
             cmd = f'ssh-keygen -f "/root/.ssh/known_hosts" -R "{master_ip}" && sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no {cluster_tfvars.ssh_user}@{master_ip}'
             result = subprocess.run(cmd, shell=True, capture_output=True)
             if result.returncode != 0:
@@ -501,14 +516,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, scale=Fal
         # 从_meta.hostvars中获取master节点的IP
         master_node_name = cluster_tfvars.cluster_name+"-k8s-master1"
         master_ip = hosts_data["_meta"]["hostvars"][master_node_name]["access_ip_v4"]
-        cmd = f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no {cluster_tfvars.ssh_user}@{master_ip}'
-        result = subprocess.run(cmd, shell=True, capture_output=True)
-        if result.returncode != 0:
-            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-            task_info.state = "failed"
-            task_info.detail = str(result.stderr)
-            update_task_state(task_info)
-            raise Exception("Ansible kubernetes deployment failed")
+        
 
         # 2. 使用Ansible部署K8s集群
         cluster.id = cluster_tf_dict["id"]
@@ -537,33 +545,32 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, scale=Fal
             session.commit()
 
         # 更新集群node的状态为running
-        # session = get_session()
-        # for node in node_list:
-        #     with session.begin():
-        #         db_node = session.get(NodeInfo, node.id)
-        #         for k,v in hosts_data["_meta"]["hostvars"].items():
-        #             if db_node.name == k:
-        #                 db_node.server_id = v.get("id")
-        #                 db_node.status = "running"
-        #                 db_node.admin_address = v.get("ip")
-        #                 db_node.floating_ip = v.get("public_ipv4")
-        #                 for instance in instance_list:
-        #                     if db_node.name == instance.name:
-        #                         db_node.instance_id = instance.id
-        #                         break
+        session = get_session()
+        for node in node_list:
+            with session.begin():
+                db_node = session.get(NodeInfo, node.get("id"))
+                for k,v in hosts_data["_meta"]["hostvars"].items():
+                    if db_node.name == k:
+                        db_node.server_id = v.get("id")
+                        db_node.status = "running"
+                        db_node.admin_address = v.get("ip")
+                        db_node.floating_ip = v.get("public_ipv4")
+                        for instance in instance_list:
+                            if db_node.name == instance.name:
+                                db_node.instance_id = instance.id
+                                break
 
         # 更新集群instance的状态为running
-        # session = get_session()
-        # for instance in instance_list:
-        #     with session.begin():
-        #         db_instance = session.get(Instance, instance.id)
-        #         for k,v in hosts_data["_meta"]["hostvars"].items():
-        #             # 需要添加节点的ip地址等信息
-        #             if  db_instance.name == k:
-        #                 db_instance.server_id = v.get("id")
-        #                 db_instance.status = "running"
-        #                 db_instance.ip_address = v.get("ip")
-        #                 db_instance.floating_ip = v.get("public_ipv4")
+        for instance in instance_list:
+            with session.begin():
+                db_instance = session.get(Instance, instance.get("id"))
+                for k,v in hosts_data["_meta"]["hostvars"].items():
+                    # 需要添加节点的ip地址等信息
+                    if  db_instance.name == k:
+                        db_instance.server_id = v.get("id")
+                        db_instance.status = "running"
+                        db_instance.ip_address = v.get("ip")
+                        db_instance.floating_ip = v.get("public_ipv4")
 
         # 更新数据库的状态为success
         task_info.end_time = time.time()

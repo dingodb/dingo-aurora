@@ -34,7 +34,18 @@ class Cluster(Base):
     gpu_mem =  Column(Integer, nullable=True)
     extra = Column(Text, nullable=True)
 
-    
+class Cluster_Params(Base):
+    __tablename__ = "ops_cluster_params"
+
+#     image = Column(String(length=128), primary_key= True, nullable=False, index=True, unique=False)
+#     k8s_version = Column(String(length=128), primary_key= True, nullable=False, index=True, unique=False)
+#     runtime = Column(String(length=128), nullable=True)
+#     network_plugin = Column(String(length=128), nullable=True)
+#     kube_proxy = Column(String(length=128), nullable=True)
+#     service_cidr = Column(String(length=128), nullable=True)
+#     lb_enable = Column(String(length=128), nullable=True)
+    key = Column(String(length=128), primary_key= True, nullable=False, index=True, unique=False)
+    value = Column(String(length=255), nullable=True)
 # 节点对象
 class Taskinfo(Base):
     __tablename__ = "ops_task_info"

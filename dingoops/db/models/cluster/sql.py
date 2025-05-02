@@ -7,7 +7,7 @@ from sqlalchemy import create_engine, func
 from typing_extensions import assert_type
 
 from dingoops.db.engines.mysql import get_session
-from dingoops.db.models.cluster.models import Cluster,Taskinfo
+from dingoops.db.models.cluster.models import Cluster,Taskinfo,Cluster_Params
 
 from enum import Enum
 
@@ -145,3 +145,14 @@ class  TaskSQL:
             # 返回
             return count, cluster_list
         
+class  ParamSQL:
+    @classmethod
+    def list(cls):
+        session = get_session()
+        with session.begin():
+            # 根据query_params查询数据
+            query = session.query(Cluster_Params)
+            count = query.count()
+            params = query.all()
+            # 返回
+            return count, params
