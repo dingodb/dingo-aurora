@@ -50,4 +50,6 @@ class InstanceCreateObject(BaseModel):
     network_id: Optional[str] = Field(None, description="network信息")
     sshkey_name: Optional[str] = Field(None, description="sshkey_name信息")
     security_group: Optional[str] = Field(None, description="security_group信息")
+    user: Optional[str] = Field(None, description="user信息")
+    password: Optional[str] = Field(None, description="password信息")
     openstack_info: Optional[OpenStackConfigObject] = Field(None, description="openstack中的信息")
