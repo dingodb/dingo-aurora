@@ -97,11 +97,12 @@ class InstanceService:
                 return ErrorResponse(code=400, status="fail", message="number parameter is 0, no instance is created",
                                      error=ErrorDetail(type="ValidationError"))
             # 写入instance信息到数据库中
-            instance_list = self.convert_instance_todb(instance)
-            InstanceSQL.create_instance_list(instance_list)
+            instance_info_db_list, instance_list = self.convert_instance_todb(instance)
+            InstanceSQL.create_instance_list(instance_info_db_list)
             # 获取openstack的参数，传入到create_instance的方法中，由这create_instance创建vm或者裸金属
             # 调用celery_app项目下的work.py中的create_instance方法
-            result = celery_app.send_task("dingoops.celery_api.workers.create_instance", args=[instance, instance_list])
+            result = celery_app.send_task("dingoops.celery_api.workers.create_instance",
+                                          args=[instance.dict(), instance_list])
             return BaseResponse(data=result.id)
         except Fail as e:
             raise e
@@ -118,11 +119,11 @@ class InstanceService:
             openstack_info = instance_list_info.openstack_info
             instance_list = instance_list_info.instance_list
             # 具体要操作的步骤，删除openstack中的server，删除数据库中instance表里面的该instance的数据
-            instance_db_list = self.update_instance_todb(instance_list)
-            InstanceSQL.update_instance_list(instance_db_list)
+            instance_list_db, instance_list_json = self.update_instance_todb(instance_list)
+            InstanceSQL.update_instance_list(instance_list_db)
             # 调用celery_app项目下的work.py中的delete_instance方法
             result = celery_app.send_task("dingoops.celery_api.workers.delete_instance",
-                                          args=[openstack_info, instance_list])
+                                          args=[openstack_info.dict(), instance_list_json])
             return result
         except Exception as e:
             import traceback
@@ -166,7 +167,29 @@ class InstanceService:
                 instance_info_db.security_group = instance_info.security_group
                 instance_info_db.region = instance_info.openstack_info.region
                 instance_info_db_list.append(instance_info_db)
-        return instance_info_db_list
+
+        instance_list_dict = []
+        for instance in instance_info_db_list:
+            # Create a serializable dictionary from the instanceDB object
+            instance_dict = {
+                "id": instance.id,
+                "instance_type": instance.node_type,
+                "cluster_id": instance.cluster_id,
+                "cluster_name": instance.cluster_name,
+                "region": instance.region,
+                "image_id": instance.image_id,
+                "project_id": instance.project_id,
+                "security_group": instance.security_group,
+                "flavor_id": instance.flavor_id,
+                "status": instance.status,
+                "name": instance.name,
+                "create_time": instance.create_time.isoformat() if instance.create_time else None
+            }
+            instance_list_dict.append(instance_dict)
+
+        # Convert the list of dictionaries to a JSON string
+        instance_list_json = json.dumps(instance_list_dict)
+        return instance_info_db_list, instance_list_json
     
     def update_instance_todb(self, instance_list):
         instance_list_db = []
@@ -176,4 +199,16 @@ class InstanceService:
             instance_info_db.status = "deleting"
             instance_info_db.update_time = datetime.now()
             instance_list_db.append(instance_info_db)
-        return instance_list_db
+        instance_list_dict = []
+        for instance in instance_list_db:
+            # Create a serializable dictionary from the instanceDB object
+            instance_dict = {
+                "id": instance.id,
+                "status": instance.status,
+                "update_time": instance.update_time
+            }
+            instance_list_dict.append(instance_dict)
+
+        # Convert the list of dictionaries to a JSON string
+        instance_list_json = json.dumps(instance_list_dict)
+        return instance_list_db, instance_list_json

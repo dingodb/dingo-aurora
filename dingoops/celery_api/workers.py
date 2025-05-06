@@ -165,9 +165,10 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, regio
         return False
     
 @celery_app.task(bind=True)
-def create_cluster(self, cluster_tf:ClusterTFVarsObject,cluster:ClusterObject):
+def create_cluster(self, cluster_tf:ClusterTFVarsObject,cluster:ClusterObject, instance_bm_list):
     try:
         task_id = self.request.id.__str__()
+        instance_list = json.loads(instance_bm_list)
         instructure_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress", start_time=datetime.fromtimestamp(datetime.now().timestamp()),msg=TaskService.TaskMessage.instructure_create.name)
         TaskSQL.insert(instructure_task)
         cluster_tfvars = ClusterTFVarsObject(**cluster_tf)
@@ -181,6 +182,33 @@ def create_cluster(self, cluster_tf:ClusterTFVarsObject,cluster:ClusterObject):
         instructure_task.detail = TaskService.TaskDetail.instructure_create.value
         update_task_state(instructure_task)
         print("Terraform apply succeeded")
+
+        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tfvars.id, "hosts")
+        res = subprocess.run(["python3", host_file, "--list"], capture_output=True, text=True)
+        if res.returncode != 0:
+            # 更新数据库的状态为failed
+            instructure_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            instructure_task.state = "failed"
+            instructure_task.detail = str(res.stderr)
+            update_task_state(instructure_task)
+            raise Exception("Error generating Ansible inventory")
+        hosts = res.stdout
+        # todo 添加节点时，需要将节点信息写入到inventory/inventory.yaml文件中
+        # 如果是密码登录与master节点1做免密
+        hosts_data = json.loads(hosts)
+        session = get_session()
+        # 更新集群instance的状态为running
+        for instance in instance_list:
+            with session.begin():
+                db_instance = session.get(Instance, instance.get("id"))
+                for k, v in hosts_data["_meta"]["hostvars"].items():
+                    # 需要添加节点的ip地址等信息
+                    if db_instance.name == k:
+                        db_instance.server_id = v.get("id")
+                        db_instance.status = "running"
+                        db_instance.ip_address = v.get("ip")
+                        db_instance.floating_ip = v.get("public_ipv4")
+
         db_cluster = ClusterSQL.list_cluster(cluster_dict["id"])
         db_cluster.status = 'failed'
         db_cluster.error_message = str(e.__str__())
@@ -443,7 +471,7 @@ def create_bm_instance(conn, instance_info: InstanceCreateObject, instance_list)
     return server_list
     
 @celery_app.task(bind=True)
-def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, scale=False):
+def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_list, scale=False):
 
     try:
         task_id = self.request.id.__str__()
@@ -678,6 +706,7 @@ def delete_node(self, cluster_id, node_list, instance_list_db, extravars):
 @celery_app.task(bind=True)
 def create_instance(self, instance: InstanceCreateObject, instance_list):
     try:
+        instance_list = json.loads(instance_list)
         # 1、拿到openstack的信息，就可以执行创建instance的流程，需要分别处理类型是vm还是裸金属的
         conn = openstack.connect(
             auth_url=instance.openstack_info.openstack_auth_url,
@@ -720,6 +749,7 @@ def create_instance(self, instance: InstanceCreateObject, instance_list):
 @celery_app.task(bind=True)
 def delete_instance(self, openstack_info, instance_list):
     try:
+        instance_list = json.loads(instance_list)
         # 1、拿到openstack的信息，就可以执行删除instance的流程，需要分别处理类型是vm还是裸金属的
         conn = openstack.connect(
             auth_url=openstack_info.openstack_auth_url,

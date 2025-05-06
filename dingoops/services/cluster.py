@@ -376,8 +376,8 @@ class ClusterService:
             node_list, instance_list = self.generate_k8s_nodes(cluster, k8s_masters, k8s_nodes)
 
             # 保存instance信息到数据库
-            instance_bm_list = self.convert_instance_todb(cluster, k8s_nodes)
-            InstanceSQL.create_instance_list(instance_bm_list)
+            instance_db_list, instance_bm_list = self.convert_instance_todb(cluster, k8s_nodes)
+            InstanceSQL.create_instance_list(instance_db_list)
             # 创建terraform变量
             tfvars = ClusterTFVarsObject(
                 id = cluster_info_db.id,
@@ -587,7 +587,7 @@ class ClusterService:
 
         # Convert the list of dictionaries to a JSON string
         instance_list_json = json.dumps(instance_list_dict)
-        return instance_list_json
+        return instance_db_list, instance_list_json
     
 
     def get_create_params(self):
