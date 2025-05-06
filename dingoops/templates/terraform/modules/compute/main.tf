@@ -38,12 +38,9 @@ resource "openstack_compute_keypair_v2" "key_pair" {
   public_key = var.public_key_path != "" ? chomp(file(var.public_key_path)) : ""
 }
 
-resource "openstack_compute_flavor_v2" "k8s_control" {
-  name  = "k8s_control_plan"
-  ram   = "8096"
-  vcpus = "4"
-  disk  = "100"
-  is_public = true
+# Check if flavor exists
+data "openstack_compute_flavor_v2" "k8s_control" {
+  name = "k8s_control_plan"  # 替换为你的 Flavor 名称
 }
 
 resource "openstack_networking_secgroup_v2" "secgroup" {
@@ -113,7 +110,7 @@ locals {
 # Image uuid
   image_to_use_node = var.image_uuid != "" ? var.image_uuid : data.openstack_images_image_v2.vm_image[0].id
   image_to_use_master = var.image_master_uuid != "" ? var.image_master_uuid : var.image_uuid != "" ? var.image_uuid : data.openstack_images_image_v2.image_master[0].id
-
+  master_flavor = data.openstack_compute_flavor_v2.k8s_control.id
   nodes_settings = {
     for name, node in var.nodes :
       name => {
@@ -204,7 +201,7 @@ resource "openstack_compute_instance_v2" "k8s-master" {
   count             = var.number_of_k8s_masters
   availability_zone = "nova"
   image_id          = local.image_to_use_master
-  flavor_id         = openstack_compute_flavor_v2.k8s_control.id
+  flavor_id         = local.master_flavor
   key_pair          = openstack_compute_keypair_v2.key_pair.name
   user_data         = data.cloudinit_config.cloudinit.rendered
   security_groups = [openstack_networking_secgroup_v2.secgroup.name]
@@ -293,7 +290,7 @@ resource "openstack_networking_floatingip_associate_v2" "master" {
 
 resource "openstack_compute_instance_v2" "nodes" {
   for_each          = var.number_of_nodes == 0 && var.number_of_nodes_no_floating_ip == 0 ? var.nodes : {}
-  name              = "${var.cluster_name}-k8s-${each.key}"
+  name              = "${var.cluster_name}-${each.key}"
   availability_zone = each.value.az
   image_id          = local.nodes_settings[each.key].use_local_disk ? local.nodes_settings[each.key].image_id : null
   flavor_id         = each.value.flavor
@@ -329,7 +326,7 @@ resource "openstack_compute_instance_v2" "nodes" {
   #  openstack_networking_trunk_v2.trunk_nodes
   #]
   provisioner "local-exec" {
-    command = "%{if each.value.floating_ip} %{if var.password == ""}sed -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element([for key, value in var.k8s_master_fips : value.address], 0)}/ ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element([for key, value in var.k8s_master_fips : value.address], 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}%{else}true%{endif}"
+    command = "%{if each.value.floating_ip} %{if var.password == ""}sed -e s/USER/${var.ssh_user}/ -e s/PRAVATE_KEY_FILE/${var.private_key_path} -e s/BASTION_ADDRESS/${element([for key, value in var.k8s_master_fips : value.address], 0)}/ ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element([for key, value in var.k8s_master_fips : value.address], 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}%{else}true%{endif}"
   }
 }
 # resource "openstack_networking_floatingip_associate_v2" "masters" {

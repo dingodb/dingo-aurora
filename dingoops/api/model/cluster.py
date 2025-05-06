@@ -7,7 +7,9 @@ from dingoops.api.model.base import DingoopsObject
 
 class NetworkConfigObject(BaseModel):
     admin_subnet_id: Optional[str] = Field(None, description="管理网id")
+    admin_network_name: Optional[str] = Field(None, description="管理网络id")
     bus_subnet_id: Optional[str] = Field(None, description="业务子网id")
+    bus_network_name: Optional[str] = Field(None, description="管理网络名称")
     admin_cidr: Optional[str] = Field(None, description="管理网cidr")
     bus_cidr: Optional[str] = Field(None, description="业务网cidr")
     admin_network_id: Optional[str] = Field(None, description="管理网络id")
@@ -15,15 +17,6 @@ class NetworkConfigObject(BaseModel):
     vip: Optional[str] = Field(None, description="管理网访问地址")
     floating_ip: Optional[bool] = Field(None, description="是否启用浮动ip")
 
-class NetworkInfo(BaseModel):
-    admin_subnet_id: Optional[str] = Field(None, description="管理网id")
-    bus_subnet_id: Optional[str] = Field(None, description="业务子网id")
-    admin_network_id: Optional[str] = Field(None, description="管理网络id")
-    admin_network_name: Optional[str] = Field(None, description="管理网络id")
-    bus_network_id: Optional[str] = Field(None, description="业务网络id")
-    bus_network_name: Optional[str] = Field(None, description="管理网络名称")
-    vip: Optional[str] = Field(None, description="管理网访问地址")
-    floating_ip: Optional[bool] = Field(None, description="是否启用浮动ip")
     
     
 class NodeConfigObject(BaseModel):
@@ -64,29 +57,12 @@ class ClusterObject(DingoopsObject):
     user_id: Optional[str] = Field(None, description="用户id")
     labels: Optional[str] = Field(None, description="集群标签")
     region_name: Optional[str] = Field(None, description="region名称")
-    #network_config: Optional[NetworkConfigObject] = Field(None, description="网络配置")
+    network_config: Optional[NetworkConfigObject] = Field(None, description="网络配置")
     node_config: Optional[List[NodeConfigObject]] = Field(None, description="节点配置")
     type: Optional[str] = Field(None, description="集群类型")
     security_group: Optional[str] = Field(None, description="安全组名称")
     kube_info: Optional[KubeClusterObject] = Field(None, description="k8s信息")
     
-    
-
-class ClusterInfo(DingoopsObject):
-    project_id: Optional[str] = Field(None, description="项目id")
-    project_name: Optional[str] = Field(None, description="项目名称")
-    user_id: Optional[str] = Field(None, description="用户id")
-    labels: Optional[str] = Field(None, description="集群标签")
-    region_name: Optional[str] = Field(None, description="region名称")
-    network_config: Optional[NetworkInfo] = Field(None, description="网络配置")
-    #node_config: Optional[List[NodeConfigObject]] = Field(None, description="节点配置")
-    runtime: Optional[str] = Field(None, description="运行时类型")
-    type: Optional[str] = Field(None, description="集群类型")
-    version: Optional[str] = Field(None, description="k8s版本")
-    kube_config: Optional[str] = Field(None, description="cni插件")
-    loadbalancer_enabled: Optional[bool] = Field(None, description="是否启用负载均衡器")
-
-
 
 class NodeObject(DingoopsObject):
     project_id: Optional[str] = Field(None, description="项目id")

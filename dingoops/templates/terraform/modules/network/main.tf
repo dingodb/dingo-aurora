@@ -15,7 +15,11 @@ resource "openstack_networking_network_v2" "cluster" {
   count                 = var.use_neutron
   dns_domain            = var.network_dns_domain != null ? var.network_dns_domain : null
   admin_state_up        = "true"
-  port_security_enabled = var.port_security_enabled
+  #port_security_enabled = var.port_security_enabled
+  segments {
+    network_type    = "vlan"
+    physical_network = "physnet1"
+  }
 }
 
 resource "openstack_networking_subnet_v2" "cluster" {

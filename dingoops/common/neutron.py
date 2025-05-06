@@ -61,4 +61,50 @@ class API:
         networks = neutron_client.list_networks(**{'router:external': True})
         
         return networks.get('networks', [])
+    def get_network_by_id(self, network_id: str, neutron_client: neutron_client.Client = None, **kwargs) -> Dict[str, Any]:
+        """
+        根据网络ID查询网络信息
+        
+        参数:
+            network_id: 网络ID
+            neutron_client: Neutron客户端实例，如果未提供则自动创建
+            **kwargs: 传递给get_neutron_client的参数
+        
+        返回:
+            Dict[str, Any]: 网络信息，如果网络不存在则返回空字典
+        """
+        if neutron_client is None:
+            neutron_client = self.get_neutron_client(CONF)
+        
+        try:
+            # 根据ID查询网络
+            network = neutron_client.show_network(network_id)
+            return network.get('network', {})
+        except Exception as e:
+            # 处理网络不存在或其他错误的情况
+            print(f"获取网络信息失败: {str(e)}")
+            return {}
+    def get_subnet_by_id(self, subnet_id: str, neutron_client: neutron_client.Client = None, **kwargs) -> Dict[str, Any]:
+        """
+        根据子网ID查询子网信息
+        
+        参数:
+            subnet_id: 子网ID
+            neutron_client: Neutron客户端实例，如果未提供则自动创建
+            **kwargs: 传递给get_neutron_client的参数
+        
+        返回:
+            Dict[str, Any]: 子网信息，如果子网不存在则返回空字典
+        """
+        if neutron_client is None:
+            neutron_client = self.get_neutron_client(CONF)
+        
+        try:
+            # 根据ID查询子网
+            subnet = neutron_client.show_subnet(subnet_id)
+            return subnet.get('subnet', {})
+        except Exception as e:
+            # 处理子网不存在或其他错误的情况
+            print(f"获取子网信息失败: {str(e)}")
+            return {}
 
