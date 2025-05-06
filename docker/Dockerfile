@@ -33,4 +33,4 @@ WORKDIR /opt/dingo-aurora
 
 EXPOSE 8887
 
-CMD ["start_service.sh"]
+CMD ["/bin/bash", "/usr/local/bin/start_service.sh"]
