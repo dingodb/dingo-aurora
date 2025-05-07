@@ -64,6 +64,7 @@ class ClusterService:
         master_index = 1
         for idx, node in enumerate(cluster.node_config):
             if node.role == "master" and node.type == "vm":
+                cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
                 for i in range(node.count):
                     k8s_masters[f"master-{int(master_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
@@ -86,10 +87,10 @@ class ClusterService:
                     instance_db.server_id = ""
                     instance_db.openstack_id = ""
                     instance_db.operation_system = ""
-                    instance_db.cpu = ""
-                    instance_db.gpu = ""
-                    instance_db.mem = ""
-                    instance_db.disk = ""
+                    instance_db.cpu = cpu
+                    instance_db.gpu = gpu
+                    instance_db.mem = mem
+                    instance_db.disk = disk
                     instance_db.ip_address = ""
                     instance_db.name = cluster.name + f"master-{int(master_index)}"
                     instance_db.floating_ip = ""
@@ -114,12 +115,13 @@ class ClusterService:
                     node_db.flavor_id = node.flavor_id
                     node_db.status = "creating"
                     node_db.admin_address = ""
-                    node_db.name = cluster.name + f"master-{int(master_index)}"
+                    node_db.name = cluster.name + f"-master-{int(master_index)}"
                     node_db.bus_address = ""
                     node_db.create_time = datetime.now()
                     node_db_list.append(node_db)
                     master_index=master_index+1
             if node.role == "worker" and node.type == "vm":
+                cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
                 for i in range(node.count):
                     k8s_nodes[f"node-{int(node_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
@@ -142,12 +144,12 @@ class ClusterService:
                     instance_db.server_id = ""
                     instance_db.openstack_id = ""
                     instance_db.operation_system = ""
-                    instance_db.cpu = ""
-                    instance_db.gpu = ""
-                    instance_db.mem = ""
-                    instance_db.disk = ""
+                    instance_db.cpu = cpu
+                    instance_db.gpu = gpu
+                    instance_db.mem = mem
+                    instance_db.disk = disk
                     instance_db.ip_address = ""
-                    instance_db.name = cluster.name + f"node-{int(node_index)}"
+                    instance_db.name = cluster.name + f"-node-{int(node_index)}"
                     instance_db.floating_ip = ""
                     instance_db.create_time = datetime.now()
                     instance_db_list.append(instance_db)
@@ -170,12 +172,13 @@ class ClusterService:
                     node_db.flavor_id = node.flavor_id
                     node_db.status = "creating"
                     node_db.admin_address = ""
-                    node_db.name = cluster.name + f"node-{int(node_index)}"
+                    node_db.name = cluster.name + f"-node-{int(node_index)}"
                     node_db.bus_address = ""
                     node_db.create_time = datetime.now()
                     node_db_list.append(node_db)
                     node_index=node_index+1
             if node.role == "worker" and node.type == "baremental":
+                cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
                 for i in range(node.count):
                     k8s_nodes[f"node-{int(node_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
@@ -198,12 +201,12 @@ class ClusterService:
                     instance_db.server_id = ""
                     instance_db.openstack_id = ""
                     instance_db.operation_system = ""
-                    instance_db.cpu = ""
-                    instance_db.gpu = ""
-                    instance_db.mem = ""
-                    instance_db.disk = ""
+                    instance_db.cpu = cpu
+                    instance_db.gpu = gpu
+                    instance_db.mem = mem
+                    instance_db.disk = disk
                     instance_db.ip_address = ""
-                    instance_db.name = cluster.name + f"node-{int(node_index)}"
+                    instance_db.name = cluster.name + f"-node-{int(node_index)}"
                     instance_db.floating_ip = ""
                     instance_db.create_time = datetime.now()
                     instance_db_list.append(instance_db)
@@ -226,7 +229,7 @@ class ClusterService:
                     node_db.flavor_id = node.flavor_id
                     node_db.status = "creating"
                     node_db.admin_address = ""
-                    node_db.name = cluster.name + f"node-{int(node_index)}"
+                    node_db.name = cluster.name + f"-node-{int(node_index)}"
                     node_db.bus_address = ""
                     node_db.create_time = datetime.now()
                     node_db_list.append(node_db)
@@ -304,7 +307,6 @@ class ClusterService:
             import traceback
             traceback.print_exc()
             return None
-        
     
     def get_cluster(self, cluster_id):
         if not cluster_id:
@@ -377,8 +379,7 @@ class ClusterService:
         if res.get("total") > 0:
             raise Fail("集群名称已存在")
         return True
-    
-    
+
     def create_cluster(self, cluster: ClusterObject):
         # 数据校验 todo
         self.check_cluster_param(cluster)
@@ -438,9 +439,6 @@ class ClusterService:
             
         except Fail as e:
             raise e
-
-
-    
 
     def delete_cluster(self, cluster_id):
         if not cluster_id:
@@ -612,13 +610,28 @@ class ClusterService:
         # Convert the list of dictionaries to a JSON string
         instance_list_json = json.dumps(instance_list_dict)
         return instance_db_list, instance_list_json
-    
 
     def get_create_params(self):
         res = ParamSQL.list()
         return res[1]
 
-        
+    def get_flavor_info(self, flavor_id):
+        flavor = nova_client.nova_get_flavor(flavor_id)
+        cpu = 0
+        gpu = 0
+        mem = 0
+        disk = 0
+        if flavor is not None:
+            cpu = flavor['vcpus']
+            mem = flavor['ram']
+            disk = flavor['disk']
+            if "extra_specs" in flavor and "pci_passthrough:alias" in flavor["extra_specs"]:
+                pci_alias = flavor['extra_specs']['pci_passthrough:alias']
+                if ':' in pci_alias:
+                    gpu = pci_alias.split(':')[1]
+        return int(cpu), int(gpu), int(mem), int(disk)
+
+
 class TaskService:
     
     class TaskMessage(Enum):
