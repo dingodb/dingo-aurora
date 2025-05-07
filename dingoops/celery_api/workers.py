@@ -79,6 +79,7 @@ class ClusterTFVarsObject(BaseModel):
     number_of_k8s_nodes_no_floating_ip: Optional[int] = Field(0, description="无浮动IP的K8s worker节点数量")
     k8s_master_loadbalancer_enabled: Optional[bool] = Field(False, description="是否启用负载均衡器")
     private_key_path: Optional[str] = Field(None, description="私钥路径")
+    public_key_path: Optional[str] = Field(None, description="公钥路径")
     
 def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, region_name:str = "regionOne"):
     """使用Terraform创建基础设施"""
@@ -114,6 +115,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, regio
                 print(f"Terraform error: {res.stderr}")
                 return False
             cluster.private_key_path = os.path.join(cluster_dir, "id_rsa")
+            cluster.public_key_path = os.path.join(cluster_dir, "id_rsa.pub")
         
         
         cluster.group_vars_path = os.path.join(cluster_dir, "group_vars")          
@@ -276,13 +278,13 @@ def deploy_kubernetes(cluster:ClusterObject,lb_ip:str, task_id:str = None):
         TaskSQL.insert(etcd_task)
         ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
         os.chdir(ansible_dir)
-        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), str(cluster.id),"id_rsa")
-        
+        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "hosts")
         playbook_file  = os.path.join(WORK_DIR, "ansible-deploy", "cluster.yml")
-
-        key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory","")
-        cmdline_args=['--private-key=' + key_file_path]
-        thread,runner = run_playbook(playbook_file, host_file, ansible_dir, cmdline_args=cmdline_args)
+        key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory",str(cluster.id), "id_rsa")
+        with open(key_file_path, 'r') as key_file:
+            private_key_content = key_file.read()
+        
+        thread,runner = run_playbook(playbook_file, host_file, ansible_dir, ssh_key=private_key_content)
         # 处理并打印事件日志
         while runner.status not in ['canceled', 'successful', 'timeout', 'failed']:
             # 处理事件日志
@@ -333,7 +335,7 @@ def deploy_kubernetes(cluster:ClusterObject,lb_ip:str, task_id:str = None):
             # 更新数据库的状态为failed
             task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
             task_info.state = "failed"
-            task_info.detail = event['event_data'].get('res').get('msg')
+            task_info.detail = "ansible deploy kubernetes error"
             update_task_state(task_info)
             raise Exception(f"Playbook execution failed: {runner.rc}")
 
@@ -341,6 +343,7 @@ def deploy_kubernetes(cluster:ClusterObject,lb_ip:str, task_id:str = None):
         task_info.state = "success"
         task_info.detail = TaskService.TaskDetail.component_deploy.value
         update_task_state(task_info)
+        return True
     
     except subprocess.CalledProcessError as e:
         print(f"Ansible error: {e}")
@@ -377,47 +380,53 @@ def scale_kubernetes(cluster: ClusterObject):
         return False
 
     
-def get_cluster_kubeconfig(cluster, lb_ip):
+def get_cluster_kubeconfig(cluster:ClusterTFVarsObject, lb_ip,master_ip, float_ip):
     """获取集群的kubeconfig配置"""
+
+    print(f"lb_ip: {lb_ip}, master_ip: {master_ip}, float_ip: {float_ip}")
     try:
-        # 切换到terraform工作目录
-        os.chdir(TERRAFORM_DIR)
-        
-        # 获取master节点IP
-        result = subprocess.run(
-            ["terraform", "output", "master_ip"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        master_ip = result.stdout.strip()
-        
+
+        kubeconfig = ""
         # SSH连接到master节点获取kubeconfig
-        result = subprocess.run(
-            [
-                "ssh",
-                "-i", f"{TERRAFORM_DIR}/ssh_key",  # SSH私钥路径
-                f"ubuntu@{master_ip}",
-                "sudo cat /etc/kubernetes/admin.conf"
-            ],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        
-        kubeconfig = result.stdout
+        if cluster.password != "":
+            
+            result = subprocess.run(
+                [
+                    "ssh",
+                    f"{cluster.ssh_user}@{float_ip}",
+                    "sudo cat /etc/kubernetes/admin.conf"
+                ],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            kubeconfig = result.stdout
+        else:
+            key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory",str(cluster.id), "id_rsa")
+            result = subprocess.run(
+                [
+                    "ssh",
+                    "-i", key_file_path,  # SSH私钥路径
+                    f"{cluster.ssh_user}@{float_ip}",
+                    "sudo cat /etc/kubernetes/admin.conf"
+                ],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            kubeconfig = result.stdout
         
         # 替换server地址为外部IP
+        ip = "127.0.0.1"
+        if lb_ip != "":
+            ip = lb_ip
+        elif master_ip != "":
+            ip = master_ip
+        
         kubeconfig = kubeconfig.replace(
             "server: https://127.0.0.1:6443",
-            f"server: https://{lb_ip}:6443"
+            f"server: https://{ip}:6443"
         )
-        get_engine()
-        # 保存kubeconfig到数据库
-        with Session(get_engine()) as session:
-            db_cluster = session.get(Cluster, cluster.id)
-            db_cluster.kube_config = kubeconfig
-            session.commit()
             
         return kubeconfig
         
@@ -542,9 +551,9 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         # 如果是密码登录与master节点1做免密
         hosts_data = json.loads(hosts)
         # 从_meta.hostvars中获取master节点的IP
-        master_node_name = cluster_tfvars.cluster_name+"-k8s-master1"
-        master_ip = hosts_data["_meta"]["hostvars"][master_node_name]["access_ip_v4"]
-
+        master_node_name = cluster_tfvars.cluster_name+"-k8s-master-1"
+        master_ip = hosts_data["_meta"]["hostvars"][master_node_name]["ip"]
+        float_ip = hosts_data["_meta"]["hostvars"][master_node_name]["access_ip_v4"]
 
         # 2. 使用Ansible部署K8s集群
         cluster.id = cluster_tf_dict["id"]
@@ -555,22 +564,14 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             ansible_result = deploy_kubernetes(cluster,lb_ip,task_id)
 
         #阻塞线程，直到ansible_client.get_playbook_result()返回结果
-
-        if not ansible_result:
-            # 更新数据库的状态为failed
-            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp()), # 当前时间
-            task_info.state = "failed"
-            task_info.detail = ""
-            update_task_state(task_info)
-            raise Exception("Ansible kubernetes deployment failed")
         # 获取集群的kube_config
-        kube_config = get_cluster_kubeconfig(cluster)
+        kube_config = get_cluster_kubeconfig(cluster,lb_ip,master_ip,float_ip)
         # 更新集群状态为running
-        with Session(get_engine()) as session:
-            db_cluster = session.get(cluster, cluster.id)
-            db_cluster.status = 'running'
-            db_cluster.kube_config = kube_config
-            session.commit()
+        count, db_cluster = ClusterSQL.list_cluster(cluster_dict["id"])
+        db_cluster.kube_config = kube_config
+        db_cluster.status = 'error'
+        db_cluster.error_message = str(e.__str__())
+        ClusterSQL.update_cluster(db_cluster)
 
         # 更新集群node的状态为running
         session = get_session()
@@ -609,10 +610,10 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
     except Exception as e:
         # 发生错误时更新集群状态为"失败"
           # 发生错误时更新集群状态为failed
-        db_cluster = ClusterSQL.list_cluster(cluster_dict["id"])
-        db_cluster.status = 'failed'
+        count, db_cluster = ClusterSQL.list_cluster(cluster_dict["id"])
+        db_cluster.state = 'error'
         db_cluster.error_message = str(e.__str__())
-        ClusterSQL.update_cluster(cluster_dict["id"])
+        ClusterSQL.update_cluster(db_cluster)
         raise
 
 def get_ips(cluster_tfvars, task_info, host_file):
@@ -625,8 +626,6 @@ def get_ips(cluster_tfvars, task_info, host_file):
         update_task_state(task_info)
         raise Exception("Error generating Ansible inventory")
     hosts = res.stdout
-        # todo 添加节点时，需要将节点信息写入到inventory/inventory.yaml文件中
-        # 如果是密码登录与master节点1做免密
     hosts_data = json.loads(hosts)
         # 从_meta.hostvars中获取master节点的IP
     master_node_name = cluster_tfvars.cluster_name+"-k8s-master-1"
@@ -636,13 +635,16 @@ def get_ips(cluster_tfvars, task_info, host_file):
 
 
 @celery_app.task(bind=True)
-def delete_cluster(self, cluster_id):
+def delete_cluster(self, cluster_id, region_name):
     #进入到terraform目录
     cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_id)
     terraform_dir = os.path.join(cluster_dir, "terraform")
+    print(f"Terraform dir: {terraform_dir}")
+    print(f"Terraform dir: {region_name}")
+    
     os.chdir(terraform_dir)
     # 删除集群
-    os.environ['OS_CLOUD']="shangdi"
+    os.environ['OS_CLOUD']=region_name
     res = subprocess.run(["terraform", "destroy", "-auto-approve","-var-file=output.tfvars.json"], capture_output=True)
     if res.returncode != 0:
         # 发生错误时更新任务状态为"失败"
@@ -653,7 +655,6 @@ def delete_cluster(self, cluster_id):
         # 更新任务状态为"成功"
 
         print("Terraform destroy succeeded")
-    pass
     
 @celery_app.task(bind=True)
 def delete_node(self, cluster_id, node_list, instance_list_db, extravars):

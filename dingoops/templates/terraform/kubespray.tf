@@ -61,6 +61,7 @@ module "compute" {
   master_volume_type                           = var.master_volume_type
   node_volume_type                             = var.node_volume_type
   public_key_path                              = var.public_key_path
+  private_key_path                             = var.private_key_path
   image                                        = var.image
   image_uuid                                   = var.image_uuid
   image_gfs                                    = var.image_gfs

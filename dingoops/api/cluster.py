@@ -106,7 +106,7 @@ async def get_cluster(cluster_id:str):
 async def delete_cluster(cluster_id:str):
     try:
         # 集群信息存入数据库
-        result = cluster_service.get_cluster(cluster_id)
+        result = cluster_service.delete_cluster(cluster_id)
         # 操作日志
         #SystemService.create_system_log(OperateLogApiModel(operate_type="create", resource_type="flow", resource_id=result, resource_name=cluster_object.name, operate_flag=True))
         return result

@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 ---
 # geneve or vlan
 network_type: vlan
@@ -6,13 +5,4 @@ vlan_interface_name: "{{ bus_interface }}"
 
 pod_cidr: "{{ bus_cidr }}"
 gateway: "{{ bus_gateway }}"
-=======
----
-# geneve or vlan
-network_type: vlan
-vlan_interface_name: "{{ bus_interface }}"
-
-pod_cidr: "{{ bus_cidr }}"
-gateway: "{{ bus_gateway }}"
->>>>>>> 4d76e7c (modify directory structure)
 exclude_ips: ""
