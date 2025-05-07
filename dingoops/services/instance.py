@@ -30,6 +30,7 @@ from dingoops.services.cluster import ClusterService
 
 from dingoops.services.custom_exception import Fail
 from dingoops.services.system import SystemService
+from dingoops.common.nova_client import nova_client
 
 
 
@@ -132,6 +133,19 @@ class InstanceService:
 
     def convert_instance_todb(self, instance_info):
         instance_info_db_list = []
+        flavor = nova_client.nova_get_flavor(instance_info.flavor_id)
+        cpu = 0
+        gpu = 0
+        mem = 0
+        disk = 0
+        if flavor is not None:
+            cpu = flavor['vcpus']
+            mem = flavor['ram']
+            disk = flavor['disk']
+            if "extra_specs" in flavor and "pci_passthrough:alias" in flavor["extra_specs"]:
+                pci_alias = flavor['extra_specs']['pci_passthrough:alias']
+                if ':' in pci_alias:
+                    gpu = pci_alias.split(':')[1]
         if instance_info.numbers == 1:
             instance_info_db = InstanceDB()
             instance_info_db.id = str(uuid.uuid4())
@@ -143,10 +157,10 @@ class InstanceService:
             instance_info_db.operation_system = ""
             instance_info_db.user = instance_info.user
             instance_info_db.password = instance_info.password
-            instance_info_db.cpu = ""
-            instance_info_db.gpu = ""
-            instance_info_db.mem = ""
-            instance_info_db.disk = ""
+            instance_info_db.cpu = int(cpu)
+            instance_info_db.gpu = int(gpu)
+            instance_info_db.mem = int(mem)
+            instance_info_db.disk = int(disk)
             instance_info_db.node_type = instance_info.node_type
             instance_info_db.flavor_id = instance_info.flavor_id
             instance_info_db.image_id = instance_info.image_id
@@ -171,10 +185,10 @@ class InstanceService:
                 instance_info_db.operation_system = ""
                 instance_info_db.user = instance_info.user
                 instance_info_db.password = instance_info.password
-                instance_info_db.cpu = ""
-                instance_info_db.gpu = ""
-                instance_info_db.mem = ""
-                instance_info_db.disk = ""
+                instance_info_db.cpu = int(cpu)
+                instance_info_db.gpu = int(gpu)
+                instance_info_db.mem = int(mem)
+                instance_info_db.disk = int(disk)
                 instance_info_db.node_type = instance_info.node_type
                 instance_info_db.flavor_id = instance_info.flavor_id
                 instance_info_db.image_id = instance_info.image_id
