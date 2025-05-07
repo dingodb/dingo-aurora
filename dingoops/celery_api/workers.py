@@ -198,8 +198,8 @@ def create_cluster(self, cluster_tf:ClusterTFVarsObject,cluster:ClusterObject, i
         hosts_data = json.loads(hosts)
         session = get_session()
         # 更新集群instance的状态为running
-        for instance in instance_list:
-            with session.begin():
+        with session.begin():
+            for instance in instance_list:
                 db_instance = session.get(Instance, instance.get("id"))
                 for k, v in hosts_data["_meta"]["hostvars"].items():
                     # 需要添加节点的ip地址等信息
@@ -429,7 +429,7 @@ def delete_vm_instance(conn, instance_list):
     # 在这里使用openstack的api接口，直接删除vm或bm
     server_list = []
     for instance in instance_list:
-        server = conn.compute.find_server(instance.id)
+        server = conn.compute.find_server(instance.get("id"))
         conn.compute.delete_server(server)
         conn.compute.wait_for_delete(server, wait=TIMEOUT)
         server_list.append(server.id)
@@ -487,12 +487,12 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         TaskSQL.insert(task_info)
 
         terraform_result = create_infrastructure(cluster_tfvars,task_info, cluster.region_name)
-        
+
         if not terraform_result:
             raise Exception("Terraform infrastructure creation failed")
         # 打印日志
         print("Terraform infrastructure creation succeeded")
-        
+
         # 根据生成inventory
         # 复制script下面的host文件到WORK_DIR/cluster.id目录下
         #执行python3 host --list，将生成的内容转换为yaml格式写入到inventory/inventory.yaml文件中
@@ -510,10 +510,10 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             "-i", host_file,
             "-m", "ping",
             "all"
-        ], capture_output=True)   
+        ], capture_output=True)
         master_ip, lb_ip = get_ips(cluster_tfvars, task_info, host_file)
         result = subprocess.run("", shell=True, capture_output=True)
-        
+
         if cluster_tfvars.password != "":
             cmd = f'ssh-keygen -f "/root/.ssh/known_hosts" -R "{master_ip}" && sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no {cluster_tfvars.ssh_user}@{master_ip}'
             result = subprocess.run(cmd, shell=True, capture_output=True)
@@ -544,7 +544,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         # 从_meta.hostvars中获取master节点的IP
         master_node_name = cluster_tfvars.cluster_name+"-k8s-master1"
         master_ip = hosts_data["_meta"]["hostvars"][master_node_name]["access_ip_v4"]
-        
+
 
         # 2. 使用Ansible部署K8s集群
         cluster.id = cluster_tf_dict["id"]
@@ -574,8 +574,8 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
 
         # 更新集群node的状态为running
         session = get_session()
-        for node in node_list:
-            with session.begin():
+        with session.begin():
+            for node in node_list:
                 db_node = session.get(NodeInfo, node.get("id"))
                 for k,v in hosts_data["_meta"]["hostvars"].items():
                     if db_node.name == k:
@@ -589,8 +589,9 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                                 break
 
         # 更新集群instance的状态为running
-        for instance in instance_list:
-            with session.begin():
+
+        with session.begin():
+            for instance in instance_list:
                 db_instance = session.get(Instance, instance.get("id"))
                 for k,v in hosts_data["_meta"]["hostvars"].items():
                     # 需要添加节点的ip地址等信息
@@ -663,6 +664,8 @@ def delete_node(self, cluster_id, node_list, instance_list_db, extravars):
         host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), "hosts")
         playbook_file = os.path.join(WORK_DIR, "ansible-deploy", "remove-node.yml")
         run_playbook(playbook_file, host_file, ansible_dir, extravars)
+        node_list = json.loads(node_list)
+        instance_list = json.loads(instance_list_db)
 
         # # 2、执行完删除k8s这些节点之后，再执行terraform销毁这些节点（这里是单独修改output.json文件还是需要通过之前生成的output.json文件生成）
         # output_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id),
@@ -696,8 +699,18 @@ def delete_node(self, cluster_id, node_list, instance_list_db, extravars):
         with session.begin():
             db_cluster = session.get(Cluster, cluster_id)
             db_cluster.status = 'running'
-        NodeSQL.delete_node_list(node_list)
-        InstanceSQL.delete_instance_list(instance_list_db)
+            # 根据 node.id 删除节点
+            for node in node_list:
+                node = session.get(NodeSQL, node.get("id"))  # 假设 NodeSQL 是 ORM 模型类
+                if node:
+                    session.delete(node)
+
+            # 根据 instance.id 删除实例
+            for instance in instance_list:
+                instance = session.get(InstanceSQL, instance.get("id"))  # 假设 InstanceSQL 是 ORM 模型类
+                instance.status = "running"
+                instance.cluster_id = ""
+                instance.cluster_name = ""
 
     except subprocess.CalledProcessError as e:
         print(f"Ansible error: {e}")
@@ -763,8 +776,8 @@ def delete_instance(self, openstack_info, instance_list):
         # 2、将instance的信息在数据库中的表中删除
         server_list = delete_vm_instance(conn, instance_list)
         session = get_session()
-        for server in server_list:
-            with session.begin():
+        with session.begin():
+            for server in server_list:
                 db_instance = session.get(Instance, server)
                 session.delete(db_instance)
     except subprocess.CalledProcessError as e:

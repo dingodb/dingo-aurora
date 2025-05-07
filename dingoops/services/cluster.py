@@ -533,7 +533,7 @@ class ClusterService:
 
     def convert_instance_todb(self, cluster:ClusterObject, k8s_nodes):
         if cluster.type != "baremental":
-            return []
+            return [], []
         instance_db_list = []
         node_index = 1
         for idx, node in enumerate(cluster.node_config):
