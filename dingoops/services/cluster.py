@@ -396,6 +396,7 @@ class ClusterService:
            
 
             #组装cluster信息为ClusterTFVarsObject格式
+            cluster.id = cluster_info_db.id
             k8s_masters = {}
             k8s_nodes = {}
             node_list, instance_list = self.generate_k8s_nodes(cluster, k8s_masters, k8s_nodes)
@@ -459,17 +460,40 @@ class ClusterService:
             cluster.status = "deleting"
             # 保存对象到数据库
             res = ClusterSQL.update_cluster(cluster)
+            region = cluster.region_name
             # 调用celery_app项目下的work.py中的delete_cluster方法
-            result = celery_app.send_task("dingoops.celery_api.workers.delete_cluster", args=[cluster_id])
-            if result.get():
-                # 删除成功，更新数据库状态
-                cluster.status = "deleted"
-                res = ClusterSQL.update_cluster(cluster)
-            else:
-                # 删除失败，更新数据库状态
-                cluster.status = "delete_failed"
-                res = ClusterSQL.update_cluster(cluster)
-            return res.get("data")[0]
+            # 更新node表和instance表中的状态为删除中
+            node_query_params = {"cluster_id": cluster_id}
+            node_res = NodeSQL.list_nodes(node_query_params, 1, -1, None, None)
+            if node_res and node_res[0] > 0:
+                nodes = node_res[1]
+                node_list_db = []
+                for node in nodes:
+                    node.status = "deleting"
+                    node.update_time = datetime.now()
+                    node_list_db.append(node)
+                NodeSQL.update_node_list(node_list_db)
+                
+            instance_query_params = {"cluster_id": cluster_id}
+            instance_res = InstanceSQL.list_instances(instance_query_params, 1, -1, None, None)
+            if instance_res and instance_res[0] > 0:
+                instances = instance_res[1]
+                instance_list_db = []
+                for instance in instances:
+                    instance.status = "deleting"
+                    instance.update_time = datetime.now()
+                    instance_list_db.append(instance)
+                InstanceSQL.update_instance_list(instance_list_db)
+            result = celery_app.send_task("dingoops.celery_api.workers.delete_cluster", args=[cluster_id, region])
+            # if result.get():
+            #     # 删除成功，更新数据库状态
+            #     cluster.status = "deleted"'
+            #     res = ClusterSQL.update_cluster(cluster)
+            # else:
+            #     # 删除失败，更新数据库状态
+            #     cluster.status = "delete_failed"
+            #     res = ClusterSQL.update_cluster(cluster)
+            return cluster
         except Exception as e:
             import traceback
             traceback.print_exc()

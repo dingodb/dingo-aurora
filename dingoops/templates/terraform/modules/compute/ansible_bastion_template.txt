@@ -1,1 +1,1 @@
-ansible_ssh_common_args: "-o ProxyCommand='ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p -q USER@BASTION_ADDRESS -i PRAVATE_KEY_FILE'"
+ansible_ssh_common_args: "-o ProxyCommand='ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p -q USER@BASTION_ADDRESS -i PRIVATE_KEY_FILE'"

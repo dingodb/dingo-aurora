@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 ---
 - name: Converge
   hosts: all
@@ -8,14 +7,3 @@
   roles:
     - role: kubespray-defaults
     - role: container-engine/containerd
-=======
----
-- name: Converge
-  hosts: all
-  become: true
-  vars:
-    container_manager: containerd
-  roles:
-    - role: kubespray-defaults
-    - role: container-engine/containerd
->>>>>>> 4d76e7c (modify directory structure)

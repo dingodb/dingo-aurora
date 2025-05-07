@@ -1,15 +1,6 @@
-<<<<<<< HEAD
 ---
 dependencies:
   - role: container-engine/containerd-common
   - role: container-engine/runc
   - role: container-engine/crictl
   - role: container-engine/nerdctl
-=======
----
-dependencies:
-  - role: container-engine/containerd-common
-  - role: container-engine/runc
-  - role: container-engine/crictl
-  - role: container-engine/nerdctl
->>>>>>> 4d76e7c (modify directory structure)

@@ -1,5 +1,5 @@
 
-#!/usr/bin/env bash
+#!/usr/bin/bash
 set -ex
 
 # kolla_set_configs
