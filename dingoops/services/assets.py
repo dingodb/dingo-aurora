@@ -147,6 +147,10 @@ class AssetsService:
                 temp_resource_info['resource_project_id'] = r.resource_project_id
                 temp_resource_info['resource_project_name'] = r.resource_project_name
                 temp['resource_info'] = temp_resource_info
+                if r.resource_id is not None:
+                    temp['asset_relation_resource_flag'] = True
+                else:
+                    temp['asset_relation_resource_flag'] = False
                 # 加入列表
                 ret.append(temp)
 
@@ -872,6 +876,7 @@ class AssetsService:
             return None
         # 生成不同资产类型的文件
         try:
+            print(f"current_template_file:{current_template_file}, result_file_path:{result_file_path}")
             # 复制模板文件到临时目录
             shutil.copy2(current_template_file, result_file_path)
             # 服务器类型的文件

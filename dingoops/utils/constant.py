@@ -4,11 +4,11 @@ import uuid
 # excel的目录文件
 EXCEL_TEMP_DIR = "/home/dingoops/temp_excel/"
 # 资产-服务器模板文件
-ASSET_SERVER_TEMPLATE_FILE_DIR = "/api/template/server_template.xlsx"
+ASSET_SERVER_TEMPLATE_FILE_DIR = "/dingoops/api/template/server_template.xlsx"
 # 资产-网络模板文件
-ASSET_NETWORK_TEMPLATE_FILE_DIR = "/api/template/network_template.xlsx"
+ASSET_NETWORK_TEMPLATE_FILE_DIR = "/dingoops/api/template/network_template.xlsx"
 # 资产-网络流入流出模板文件
-ASSET_NETWORK_FLOW_TEMPLATE_FILE_DIR = "/api/template/network_flow_template.xlsx"
+ASSET_NETWORK_FLOW_TEMPLATE_FILE_DIR = "/dingoops/api/template/network_flow_template.xlsx"
 # 导入的资产设备类型
 ASSET_TEMPLATE_ASSET_TYPE = ("server", "network", "network_flow")
 # 资产设备sheet页名称

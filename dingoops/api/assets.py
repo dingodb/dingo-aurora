@@ -540,9 +540,9 @@ async def update_assets_status(asset:List[AssetUpdateStatusApiModel]):
 @router.get("/assets/templates/{template_id}", summary="下载模板", description="根据模板的id下载对应的模板文件")
 async def download_asset_template_xlsx(template_id:str):
     # 当前目录
-    print(os.getcwd())
+    print("当前目录路径：" + os.getcwd())
     # 模板文件目录绝对路径
-    file_dir_path = os.getcwd() + "/api/template/"
+    file_dir_path = os.getcwd() + "/dingoops/api/template/"
     # 模板文件路径
     file_path = file_dir_path + template_id + ".xlsx"
     if os.path.exists(file_path):
