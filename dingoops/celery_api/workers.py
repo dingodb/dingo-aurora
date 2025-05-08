@@ -133,13 +133,24 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, regio
             "-auto-approve",
             "-var-file=output.tfvars.json"
         ], capture_output=True, text=True) 
-        count, data = ClusterSQL.list_cluster(cluster.id)
+        
+        key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory",str(cluster.id), "id_rsa")
+        with open(key_file_path, 'r') as key_file:
+            private_key_content = key_file.read()
+        query_params = {}
+        query_params["id"] = cluster.id
+        count, data = ClusterSQL.list_cluster(query_params)
         if count > 0:
-            db_cluster = data[0]          
-            db_cluster.admin_network_id = cluster.admin_network_id
-            db_cluster.admin_subnet_id = cluster.admin_subnet_id
-            db_cluster.bus_network_id = cluster.bus_network_id
-            db_cluster.bus_subnet_id = cluster.bus_subnet_id
+            db_cluster = data[0]
+            host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory",cluster.id, "hosts")
+             # Give execute permissions to the host file
+            os.chmod(host_file, 0o755) 
+            network_id,bus_network_id, subnet_id,bussubnet_id = get_networks(cluster, task_info, host_file)
+            db_cluster.admin_network_id = network_id
+            db_cluster.admin_subnet_id = subnet_id
+            db_cluster.bus_network_id = bus_network_id
+            db_cluster.bus_subnet_id = bussubnet_id
+            db_cluster.private_key = private_key_content
             ClusterSQL.update_cluster(db_cluster)
         if res.returncode != 0:
             # 发生错误时更新任务状态为"失败"
@@ -168,14 +179,17 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, regio
         return False
     
 @celery_app.task(bind=True)
-def create_cluster(self, cluster_tf:ClusterTFVarsObject,cluster:ClusterObject, instance_bm_list):
+def create_cluster(self, cluster_tf:ClusterTFVarsObject,cluster_dict:ClusterObject, instance_bm_list):
     try:
         task_id = self.request.id.__str__()
-        instance_list = json.loads(instance_bm_list)
-        instructure_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress", start_time=datetime.fromtimestamp(datetime.now().timestamp()),msg=TaskService.TaskMessage.instructure_create.name)
-        TaskSQL.insert(instructure_task)
+        print(f"Task ID: {task_id}")
         cluster_tfvars = ClusterTFVarsObject(**cluster_tf)
-        cluster_dict = ClusterTFVarsObject(**cluster)
+        cluster = ClusterObject(**cluster_dict)
+        
+        instance_list = json.loads(instance_bm_list)
+        instructure_task = Taskinfo(task_id=task_id, cluster_id=cluster_tf["id"], state="progress", start_time=datetime.fromtimestamp(datetime.now().timestamp()),msg=TaskService.TaskMessage.instructure_create.name)
+        TaskSQL.insert(instructure_task)
+        
         terraform_result = create_infrastructure(cluster_tfvars,instructure_task, cluster.region_name)
         
         if not terraform_result:
@@ -211,16 +225,21 @@ def create_cluster(self, cluster_tf:ClusterTFVarsObject,cluster:ClusterObject, i
                         db_instance.status = "running"
                         db_instance.ip_address = v.get("ip")
                         db_instance.floating_ip = v.get("public_ipv4")
-
-        db_cluster = ClusterSQL.list_cluster(cluster_dict["id"])
-        db_cluster.status = 'failed'
-        db_cluster.error_message = str(e.__str__())
+        query_params = {}
+        query_params["id"] = cluster_tf["id"]
+        count,db_clusters = ClusterSQL.list_cluster(query_params)
+        db_cluster = db_clusters[0]
+        db_cluster.status = 'success'
+        db_cluster.status_msg = ""
         ClusterSQL.update_cluster(db_cluster)
     except Exception as e:
         # 发生错误时更新集群状态为"失败"
-        db_cluster = ClusterSQL.list_cluster(cluster_dict["id"])[0]
+        query_params = {}
+        query_params["id"] = cluster_tf["id"]
+        count,db_clusters = ClusterSQL.list_cluster(query_params)
+        db_cluster = db_clusters[0]
         db_cluster.status = 'failed'
-        db_cluster.error_message = str(e.__str__())
+        db_cluster.status_msg = str(e.__str__())
         ClusterSQL.update_cluster(db_cluster)
         raise
         
@@ -284,6 +303,7 @@ def deploy_kubernetes(cluster:ClusterObject,lb_ip:str, task_id:str = None):
         key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory",str(cluster.id), "id_rsa")
         with open(key_file_path, 'r') as key_file:
             private_key_content = key_file.read()
+        
         
         thread,runner = run_playbook(playbook_file, host_file, ansible_dir, ssh_key=private_key_content)
         # 处理并打印事件日志
@@ -485,13 +505,11 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
 
     try:
         task_id = self.request.id.__str__()
-        #task_id = "da"
         print(f"Task ID: {task_id}")
         cluster_tfvars = ClusterTFVarsObject(**cluster_tf_dict)
         cluster = ClusterObject(**cluster_dict)
         node_list = json.loads(node_list)
         instance_list = json.loads(instance_list)
-        # 1. 使用Terraform创建基础设施
          # 将task_info存入数据库
         task_info = Taskinfo(task_id=task_id, cluster_id=cluster_tf_dict["id"], state="progress", start_time=datetime.fromtimestamp(datetime.now().timestamp()),msg=TaskService.TaskMessage.instructure_create.name)
         TaskSQL.insert(task_info)
@@ -563,7 +581,8 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             ansible_result = scale_kubernetes(cluster)
         else:
             ansible_result = deploy_kubernetes(cluster,lb_ip,task_id)
-
+        if not ansible_result:
+            raise Exception("Ansible kubernetes deployment failed")
         #阻塞线程，直到ansible_client.get_playbook_result()返回结果
         # 获取集群的kube_config
         kube_config = get_cluster_kubeconfig(cluster,lb_ip,master_ip,float_ip)
@@ -611,10 +630,11 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
     except Exception as e:
         # 发生错误时更新集群状态为"失败"
           # 发生错误时更新集群状态为failed
-        count, db_cluster = ClusterSQL.list_cluster(cluster_dict["id"])
-        db_cluster.state = 'error'
-        db_cluster.error_message = str(e.__str__())
-        ClusterSQL.update_cluster(db_cluster)
+        count, db_clusters = ClusterSQL.list_cluster(cluster_dict["id"])
+        c = db_clusters[0]
+        c.state = 'error'
+        c.error_message = str(e.__str__())
+        ClusterSQL.update_cluster(c)
         raise
 
 def get_ips(cluster_tfvars, task_info, host_file):
@@ -634,6 +654,27 @@ def get_ips(cluster_tfvars, task_info, host_file):
     lb_ip = hosts_data["_meta"]["hostvars"][master_node_name]["lb_ip"]
     return master_ip,lb_ip
 
+def get_networks(cluster_tfvars, task_info, host_file):
+    res = subprocess.run(["python3", host_file, "--list"], capture_output=True, text=True)
+    if res.returncode != 0:
+            #更新数据库的状态为failed
+        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+        task_info.state = "failed"
+        task_info.detail = str(res.stderr)
+        update_task_state(task_info)
+        raise Exception("Error generating Ansible inventory")
+    hosts = res.stdout
+    hosts_data = json.loads(hosts)
+        # 从_meta.hostvars中获取master节点的IP
+    master_node_name = cluster_tfvars.cluster_name+"-k8s-master-1"
+    bus_network_id = ""
+    network_id = hosts_data["_meta"]["hostvars"][master_node_name]["network"][0]['uuid']
+    if  hosts_data["_meta"]["hostvars"][master_node_name]["network"].__len__() > 1:       
+        bus_network_id = hosts_data["_meta"]["hostvars"][master_node_name]["network"][1]['uuid']
+    subnet_id = hosts_data["_meta"]["hostvars"][master_node_name]["subnet_id"]
+    bussubnet_id = hosts_data["_meta"]["hostvars"][master_node_name]["bussubnet_id"]
+    return network_id,bus_network_id, subnet_id,bussubnet_id
+
 
 @celery_app.task(bind=True)
 def delete_cluster(self, cluster_id, region_name):
@@ -651,10 +692,19 @@ def delete_cluster(self, cluster_id, region_name):
         # 发生错误时更新任务状态为"失败"
 
         print(f"Terraform error: {res.stderr}")
+        count, db_clusters = ClusterSQL.list_cluster(cluster_id)
+        c = db_clusters[0]
+        c.state = 'delete_error'
+        c.error_message = "delete cluster error"
+        ClusterSQL.update_cluster(c)
         return False
     else:
         # 更新任务状态为"成功"
-
+        count, db_clusters = ClusterSQL.list_cluster(cluster_id)
+        c = db_clusters[0]
+        c.state = 'deleted'
+        c.error_message = ""
+        ClusterSQL.update_cluster(c)
         print("Terraform destroy succeeded")
     
 @celery_app.task(bind=True)

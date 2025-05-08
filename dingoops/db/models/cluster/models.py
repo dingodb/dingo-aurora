@@ -33,6 +33,7 @@ class Cluster(Base):
     gpu =  Column(Integer, nullable=True)
     gpu_mem =  Column(Integer, nullable=True)
     extra = Column(Text, nullable=True)
+    private_key = Column(Text, nullable=True)
 
 class Cluster_Params(Base):
     __tablename__ = "ops_cluster_params"

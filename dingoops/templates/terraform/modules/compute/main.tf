@@ -231,7 +231,7 @@ resource "openstack_compute_instance_v2" "k8s-master" {
   #  openstack_networking_trunk_v2.trunk_masters
   #]
   provisioner "local-exec" {
-    command = "%{if var.password == ""}sed -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}/ ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}"
+    command = "%{if var.password == ""}sed -e s#USER#${var.ssh_user}# -e s#PRIVATE_KEY_FILE#${var.private_key_path}# -e s#BASTION_ADDRESS#${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}# ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}"
   }
 }
 
@@ -326,7 +326,7 @@ resource "openstack_compute_instance_v2" "nodes" {
   #  openstack_networking_trunk_v2.trunk_nodes
   #]
   provisioner "local-exec" {
-    command = "%{if each.value.floating_ip} %{if var.password == ""}sed -e s/USER/${var.ssh_user}/ -e s/PRIVATE_KEY_FILE/${var.private_key_path} -e s/BASTION_ADDRESS/${element([for key, value in var.k8s_master_fips : value.address], 0)}/ ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element([for key, value in var.k8s_master_fips : value.address], 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}%{else}true%{endif}"
+    command = "%{if each.value.floating_ip} %{if var.password == ""}sed -e s#USER#${var.ssh_user}# -e s#PRIVATE_KEY_FILE#${var.private_key_path}# -e s#BASTION_ADDRESS#${element([for key, value in var.k8s_master_fips : value.address], 0)}# ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element([for key, value in var.k8s_master_fips : value.address], 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}%{else}true%{endif}"
   }
 }
 # resource "openstack_networking_floatingip_associate_v2" "masters" {

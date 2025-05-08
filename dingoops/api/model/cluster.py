@@ -24,13 +24,15 @@ class NodeConfigObject(BaseModel):
     image: Optional[str] = Field(None, description="用户id")
     flavor_id: Optional[str] = Field(None, description="节点规格")
     key_id: Optional[str] = Field(None, description="node在openstack中的id")
-    private_key: Optional[str] = Field(None, description="node在openstack中的id")
+    #private_key: Optional[str] = Field(None, description="node在openstack中的id")
     user: Optional[str] = Field(None, description="node在openstack中的id")
     password: Optional[str] = Field(None, description="node在openstack中的id")
     auth_type: Optional[str] = Field(None, description="鉴权方式")
     role: Optional[str] = Field(None, description="节点角色")
     type: Optional[str] = Field(None, description="节点类型vm/metal")
     security_group: Optional[str] = Field(None, description="安全组名称")
+    status: Optional[str] = Field(None, description="状态")
+    instance_id: Optional[str] = Field(None, description="实例id")
     
 class NodeGroup(BaseModel):
     az: Optional[str] = Field(None, description="可用域")
