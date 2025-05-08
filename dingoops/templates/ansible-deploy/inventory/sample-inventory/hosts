@@ -130,6 +130,21 @@ def iterlbips(resources):
         if resource_type == 'openstack_networking_floatingip_associate_v2' and 'public_ip.0' == name:
             raw_attrs = resource['primary']['attributes']
             return raw_attrs['floating_ip']
+        
+def itersubnets(resources):
+    '''yield ip tuples of (port_id, ip)'''
+    adminsubnet = ""
+    bussububnet = ""
+    for module_name, key, resource in resources:
+        resource_type, name = key.split('.', 1)
+        if resource_type == 'openstack_networking_subnet_v2' and 'cluster.0' == name:
+            
+            raw_attrs = resource['primary']['attributes']
+            adminsubnet = raw_attrs['id']
+        if resource_type == 'openstack_networking_subnet_v2' and 'bus_subnet.0' == name:
+            raw_attrs = resource['primary']['attributes']
+            bussububnet = raw_attrs['id']
+    return adminsubnet, bussububnet
 
 def parses(prefix):
     def inner(func):
@@ -365,7 +380,7 @@ def openstack_host(resource, module_name):
     return name, attrs, groups
 
 
-def iter_host_ips(hosts, ips,ip_lb):
+def iter_host_ips(hosts, ips,ip_lb, adminsubnet, bussububnet):
     '''Update hosts that have an entry in the floating IP list'''
     for host in hosts:
         port_id = host[1]['port_id']
@@ -379,6 +394,8 @@ def iter_host_ips(hosts, ips,ip_lb):
                 'public_ipv4': ip,
                 'ansible_host': ip,
                 'lb_ip': ip_lb,
+                'subnet_id': adminsubnet,
+                'bussubnet_id': bussububnet,
             })
 
         if 'use_access_ip' in host[1]['metadata'] and host[1]['metadata']['use_access_ip'] == "0" and 'access_ip' in host[1]:
@@ -463,9 +480,9 @@ def main():
     # Perform a second pass on the file to pick up floating_ip entries to update the ip address of referenced hosts
     ips = dict(iterips(iterresources(tfstates(args.root))))
     lb_ip = iterlbips(iterresources(tfstates(args.root)))
-    
+    adminsubnet, bussububnet = itersubnets(iterresources(tfstates(args.root)))
     if ips:
-        hosts = iter_host_ips(hosts, ips,lb_ip)
+        hosts = iter_host_ips(hosts, ips, lb_ip, adminsubnet, bussububnet)
 
     if args.list:
         output = query_list(hosts)

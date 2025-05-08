@@ -23,7 +23,7 @@ from dingoops.db.models.instance.sql import InstanceSQL
 from math import ceil
 from oslo_log import log
 
-from dingoops.api.model.cluster import ClusterTFVarsObject, NodeGroup, ClusterObject, KubeClusterObject, NetworkConfigObject
+from dingoops.api.model.cluster import ClusterTFVarsObject, NodeGroup, ClusterObject, KubeClusterObject, NetworkConfigObject,NodeConfigObject
 from dingoops.api.model.instance import InstanceConfigObject
 
 from dingoops.db.models.cluster.models import Cluster as ClusterDB
@@ -361,6 +361,17 @@ class ClusterService:
                 bus_subnet = neutron_api.get_subnet_by_id(cluster.bus_subnet_id)
                 res_cluster.network_config.bus_cidr = bus_subnet.get("cidr")
             # 空
+            # 查询节点信息
+            node_query_params = {"cluster_id": cluster_id}
+            node_res = NodeSQL.list_nodes(node_query_params, 1, -1, None, None)
+            nodeinfos = []
+            if node_res and node_res[0] > 0:
+                for n in node_res:
+                    node_info = NodeConfigObject()
+                    node_info.auth_type = n.auth_type
+                    node_info.status = n.status
+                    node_info.instance_id = n.instance_id   
+                
             if not res or not res.get("data"):
                 return None
             # 返回第一条数据
@@ -391,7 +402,7 @@ class ClusterService:
             external_net = neutron_api.list_external_networks()
 
             lb_enbale = False
-            if cluster.kube_info.number_master>1:
+            if cluster.kube_info.number_master>1 and cluster.type == "kubernetes":
                 lb_enbale = cluster.kube_info.loadbalancer_enabled
            
 
@@ -405,6 +416,7 @@ class ClusterService:
             instance_db_list, instance_bm_list = self.convert_instance_todb(cluster, k8s_nodes)
             InstanceSQL.create_instance_list(instance_db_list)
             # 创建terraform变量
+            
             tfvars = ClusterTFVarsObject(
                 id = cluster_info_db.id,
                 cluster_name=cluster.name,
@@ -424,6 +436,7 @@ class ClusterService:
                 tfvars.password = ""
             #组装cluster信息为ClusterTFVarsObject格式
             if cluster.type == "baremental":
+                tfvars.number_of_k8s_masters = 0
                 result = celery_app.send_task("dingoops.celery_api.workers.create_cluster",
                                           args=[tfvars.dict(), cluster.dict(), instance_bm_list ])
             elif cluster.type == "kubernetes":

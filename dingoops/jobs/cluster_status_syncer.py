@@ -8,7 +8,10 @@ from dingoops.services.bigscreenshovel import BigScreenShovelService
 from dingoops.jobs import CONF
 from datetime import datetime, timedelta
 import time
-
+import os
+import tempfile
+from kubernetes import client, config
+from kubernetes.client.rest import ApiException
 from dingoops.services.syn_bigscreens import BigScreenSyncService
 from dingoops.services.websocket_service import websocket_service
 from dingoops.db.models.cluster.sql import ClusterSQL
@@ -31,7 +34,7 @@ def start():
     scheduler.add_job(check_k8s_cluster_status, 'interval', seconds=60, next_run_time=datetime.now())
     scheduler.start()
 
-def check_k8s_cluster_status():
+def check_cluster_status():
     """
     定期检查k8s集群状态并更新数据库
     """
@@ -51,7 +54,11 @@ def check_k8s_cluster_status():
                 # 检查集群类型是否为 kubernetes
                 if cluster.type != "kubernetes":
                     continue
-                
+                else:
+                    # 检查API服务器状态
+                    api_server_status = False
+                    if hasattr(cluster, 'kubeconfig') and cluster.kubeconfig:
+                        api_server_status = check_api_server_status(cluster.kubeconfig)
                 # 检查节点状态
                 node_query = {"cluster_id": cluster.id}
                 nodes = NodeSQL.list_node_direct(node_query)
@@ -63,6 +70,8 @@ def check_k8s_cluster_status():
                 # 计算节点和实例状态
                 node_statuses = [node.status for node in nodes if node]
                 instance_statuses = [instance.status for instance in instances if instance]
+                
+                
                 
                 # 确定集群的新状态
                 new_status = determine_cluster_status(node_statuses, instance_statuses, cluster.status)
@@ -80,7 +89,40 @@ def check_k8s_cluster_status():
                 
     except Exception as e:
         LOG.error(f"Error in check_k8s_cluster_status: {str(e)}")
-
+        
+def check_api_server_status(kubeconfig_content):
+    """
+    通过kubeconfig检查Kubernetes API服务器状态
+    
+    :param kubeconfig_content: kubeconfig文件内容
+    :return: True表示API服务器正常运行，False表示无法连接或异常
+    """
+    if not kubeconfig_content:
+        return False
+        
+    try:
+        # 创建临时kubeconfig文件
+        with tempfile.NamedTemporaryFile(delete=False) as temp:
+            temp_path = temp.name
+            temp.write(kubeconfig_content.encode())
+        
+        # 加载kubeconfig并初始化客户端
+        config.load_kube_config(config_file=temp_path)
+        v1 = client.CoreV1Api()
+        
+        # 尝试获取节点列表以测试连接
+        v1.list_node(_request_timeout=10)
+        
+        # 清理临时文件
+        os.unlink(temp_path)
+        return True
+    except ApiException as e:
+        LOG.error(f"API服务器连接错误: {e}")
+        return False
+    except Exception as e:
+        LOG.error(f"检查API服务器时发生错误: {e}")
+        return False
+    
 def determine_cluster_status(node_statuses, instance_statuses, current_status):
     """
     根据节点和实例的状态确定集群的状态
