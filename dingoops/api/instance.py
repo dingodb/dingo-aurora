@@ -13,7 +13,7 @@ router = APIRouter()
 instance_service = InstanceService()
 
 @router.get("/instance/list", summary="instance列表", description="instance列表")
-async def list_nodes(cluster_id:str = Query(None, description="集群id"),
+async def list_instances(cluster_id:str = Query(None, description="集群id"),
         cluster_name:str = Query(None, description="集群名称"),
         type:str = Query(None, description="instance类型"),
         page: int = Query(1, description="页码"),
@@ -33,7 +33,9 @@ async def list_nodes(cluster_id:str = Query(None, description="集群id"),
         result = instance_service.list_instances(query_params, page,page_size, sort_keys, sort_dirs)
         return result
     except Exception as e:
-        return None
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail="list instances error")
 
 @router.get("/instance/{instance_id}", summary="获取instance详情", description="获取instance详情")
 async def get_instance(instance_id:str):
@@ -47,7 +49,7 @@ async def get_instance(instance_id:str):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail="get cluster error")
+        raise HTTPException(status_code=400, detail="get instance error")
 
 @router.post("/instance", summary="创建instance", description="创建instance")
 async def create_instance(instance: InstanceCreateObject):
@@ -60,7 +62,7 @@ async def create_instance(instance: InstanceCreateObject):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail="get cluster error")
+        raise HTTPException(status_code=400, detail="create instance error")
 
 @router.delete("/instance", summary="删除instance", description="删除instance")
 async def delete_instance(instance_list_info: InstanceRemoveObject):
@@ -73,4 +75,4 @@ async def delete_instance(instance_list_info: InstanceRemoveObject):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail="get cluster error")
+        raise HTTPException(status_code=400, detail="delete instance error")

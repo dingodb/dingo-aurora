@@ -80,9 +80,9 @@ class InstanceService:
             res = self.list_instances(query_params, 1, 10, None, None)
             # 空
             if not res or not res.get("data"):
-                return BaseResponse(data=None)
+                return {"data": None}
             # 返回第一条数据
-            return BaseResponse(data=res.get("data")[0])
+            return {"data": res.get("data")[0]}
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -125,7 +125,7 @@ class InstanceService:
             # 调用celery_app项目下的work.py中的delete_instance方法
             result = celery_app.send_task("dingoops.celery_api.workers.delete_instance",
                                           args=[openstack_info.dict(), instance_list_json])
-            return result
+            return BaseResponse(data=result.id)
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -165,7 +165,7 @@ class InstanceService:
             instance_info_db.flavor_id = instance_info.flavor_id
             instance_info_db.image_id = instance_info.image_id
             instance_info_db.network_id = instance_info.network_id
-            instance_info_db.subnet_id = instance_info.subnet_id
+            # instance_info_db.subnet_id = instance_info.subnet_id
             instance_info_db.cluster_id = instance_info.cluster_id
             instance_info_db.cluster_name = instance_info.cluster_name
             instance_info_db.project_id = instance_info.openstack_info.project_id
@@ -193,7 +193,7 @@ class InstanceService:
                 instance_info_db.flavor_id = instance_info.flavor_id
                 instance_info_db.image_id = instance_info.image_id
                 instance_info_db.network_id = instance_info.network_id
-                instance_info_db.subnet_id = instance_info.subnet_id
+                # instance_info_db.subnet_id = instance_info.subnet_id
                 instance_info_db.cluster_id = instance_info.cluster_id
                 instance_info_db.cluster_name = instance_info.cluster_name
                 instance_info_db.project_id = instance_info.openstack_info.project_id
@@ -231,6 +231,7 @@ class InstanceService:
             instance_info_db = InstanceDB()
             instance_info_db.id = instance.id
             instance_info_db.status = "deleting"
+            instance_info_db.server_id = instance.server_id
             instance_info_db.update_time = datetime.now()
             instance_list_db.append(instance_info_db)
         instance_list_dict = []
@@ -239,7 +240,8 @@ class InstanceService:
             instance_dict = {
                 "id": instance.id,
                 "status": instance.status,
-                "update_time": instance.update_time
+                "server_id": instance.server_id,
+                "update_time": instance.update_time.isoformat() if instance.update_time else None
             }
             instance_list_dict.append(instance_dict)
 

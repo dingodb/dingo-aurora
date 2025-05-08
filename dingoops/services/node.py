@@ -82,9 +82,9 @@ class NodeService:
             res = self.list_nodes(query_params, 1, 10, None, None)
             # 空
             if not res or not res.get("data"):
-                return None
+                return {"data": None}
             # 返回第一条数据
-            return res.get("data")[0]
+            return {"data": res.get("data")[0]}
         except Exception as e:
             import traceback
             traceback.print_exc()

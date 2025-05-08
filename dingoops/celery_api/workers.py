@@ -29,6 +29,7 @@ from dingoops.db.models.cluster.sql import ClusterSQL, TaskSQL
 
 from dingoops.db.models.node.sql import NodeSQL
 from dingoops.db.models.instance.sql import InstanceSQL
+from dingoops.api.model.instance import OpenStackConfigObject
 from ansible.executor.playbook_executor import PlaybookExecutor
 
 # 用于导入资产文件
@@ -438,10 +439,10 @@ def delete_vm_instance(conn, instance_list):
     # 在这里使用openstack的api接口，直接删除vm或bm
     server_list = []
     for instance in instance_list:
-        server = conn.compute.find_server(instance.get("id"))
+        server = conn.compute.find_server(instance.get("server_id"))
         conn.compute.delete_server(server)
         conn.compute.wait_for_delete(server, wait=TIMEOUT)
-        server_list.append(server.id)
+        server_list.append(instance.get("id"))
     return server_list
 
 def create_vm_instance(conn, instance_info: InstanceCreateObject, instance_list):
@@ -449,7 +450,7 @@ def create_vm_instance(conn, instance_info: InstanceCreateObject, instance_list)
     server_list = []
     for ins in instance_list:
         server = conn.create_server(
-            name=ins.name,
+            name=ins.get("name"),
             image=instance_info.image_id,
             flavor=instance_info.flavor_id,
             network=instance_info.network_id,
@@ -464,7 +465,7 @@ def create_bm_instance(conn, instance_info: InstanceCreateObject, instance_list)
     server_list = []
     for ins in instance_list:
         server = conn.create_server(
-            name=ins.name,
+            name=ins.get("name"),
             image=instance_info.image_id,
             flavor=instance_info.flavor_id,
             network=instance_info.network_id,
@@ -718,8 +719,9 @@ def delete_node(self, cluster_id, node_list, instance_list_db, extravars):
         return False
 
 @celery_app.task(bind=True)
-def create_instance(self, instance: InstanceCreateObject, instance_list):
+def create_instance(self, instance, instance_list):
     try:
+        instance = InstanceCreateObject(**instance)
         instance_list = json.loads(instance_list)
         # 1、拿到openstack的信息，就可以执行创建instance的流程，需要分别处理类型是vm还是裸金属的
         conn = openstack.connect(
@@ -747,13 +749,12 @@ def create_instance(self, instance: InstanceCreateObject, instance_list):
                 if server.status == "ACTIVE":
                     # 写入数据库中
                     for instance in instance_list:
-                        if instance.name == server.name:
+                        if instance.get("name") == server.name:
                             with session.begin():
-                                db_instance = session.get(Instance, instance.id)
+                                db_instance = session.get(Instance, instance.get("id"))
                                 db_instance.server_id = server.id
                                 db_instance.status = server.status
-                                db_instance.ip_address = server.private_v4
-                                db_instance.floating_ip = server.public_v4
+                                db_instance.ip_address = server.interface_ip
                     server_id_active.append(server_id)
             time.sleep(5)
     except Exception as e:
@@ -764,6 +765,7 @@ def create_instance(self, instance: InstanceCreateObject, instance_list):
 def delete_instance(self, openstack_info, instance_list):
     try:
         instance_list = json.loads(instance_list)
+        openstack_info = OpenStackConfigObject(**openstack_info)
         # 1、拿到openstack的信息，就可以执行删除instance的流程，需要分别处理类型是vm还是裸金属的
         conn = openstack.connect(
             auth_url=openstack_info.openstack_auth_url,
