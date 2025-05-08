@@ -15,8 +15,8 @@ RUN wget -O - https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/sha
 COPY . /opt/dingo-aurora
 
 
-ENV https_proxy=172.20.3.88:1088
-ENV http_proxy=172.20.3.88:1088
+#ENV https_proxy=172.20.3.88:1088
+#ENV http_proxy=172.20.3.88:1088
 
 RUN pip install -r /opt/dingo-aurora/requirements.txt
 

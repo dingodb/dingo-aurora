@@ -11,7 +11,7 @@ pip install -e .
 # start celery worker
 #celery -A dingoops.celery_api.workers worker --loglevel=info
 
-alembic -c ./db/alembic/alembic.ini upgrade head
+alembic -c ./dingoops/db/alembic/alembic.ini upgrade head
 
 echo "Running command: ${CMD[*]}"
 exec "${CMD[@]}"
