@@ -26,9 +26,9 @@ RUN apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /etc/dingo-command /var/log/dingo-command /var/lib/dingo-command
 
-COPY ./etc/gunicorn.py /etc/dingoops/gunicorn.py
-COPY ./etc/dingoops.conf /etc/dingoops/dingoops.conf
-COPY ./etc/supervisord.conf /etc/dingoops/supervisord.conf
+COPY ./etc/gunicorn.py /etc/dingo-command/gunicorn.py
+COPY ./etc/dingo-command.conf /etc/dingo-command/dingo-command.conf
+COPY ./etc/supervisord.conf /etc/dingo-command/supervisord.conf
 COPY ./docker/start_service.sh /usr/local/bin/start_service.sh
 RUN chmod +x /usr/local/bin/start_service.sh
 
