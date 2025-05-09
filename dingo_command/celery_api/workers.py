@@ -454,8 +454,35 @@ def delete_vm_instance(conn, instance_list):
         server_list.append(instance.get("id"))
     return server_list
 
+def get_user_data(user, password):
+    user_data = f"""Content-Type: multipart/mixed; boundary="===============2309984059743762475=="
+MIME-Version: 1.0
+
+--===============2309984059743762475==
+Content-Type: text/cloud-config; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment; filename="ssh-pwauth-script.txt"
+
+#cloud-config
+disable_root: false
+ssh_pwauth: true
+
+--===============2309984059743762475==
+Content-Type: text/x-shellscript; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment; filename="passwd-script.txt"
+
+#!/bin/sh
+echo '{user}:{password}' | chpasswd
+
+--===============2309984059743762475==--"""
+    return user_data
+
 def create_vm_instance(conn, instance_info: InstanceCreateObject, instance_list):
     # 在这里使用openstack的api接口，直接创建vm
+    user_data = get_user_data(instance_info.user, instance_info.password)
     server_list = []
     for ins in instance_list:
         server = conn.create_server(
@@ -464,6 +491,8 @@ def create_vm_instance(conn, instance_info: InstanceCreateObject, instance_list)
             flavor=instance_info.flavor_id,
             network=instance_info.network_id,
             key_name=instance_info.sshkey_name,
+            userdata=user_data,
+            security_groups=instance_info.security_group,
             wait=False
         )
         server_list.append(server.id)
@@ -471,6 +500,7 @@ def create_vm_instance(conn, instance_info: InstanceCreateObject, instance_list)
 
 def create_bm_instance(conn, instance_info: InstanceCreateObject, instance_list):
     # 在这里使用openstack的api接口，直接创建bm
+    user_data = get_user_data(instance_info.user, instance_info.password)
     server_list = []
     for ins in instance_list:
         server = conn.create_server(
@@ -479,6 +509,8 @@ def create_bm_instance(conn, instance_info: InstanceCreateObject, instance_list)
             flavor=instance_info.flavor_id,
             network=instance_info.network_id,
             key_name=instance_info.sshkey_name,
+            userdata=user_data,
+            security_groups=instance_info.security_group,
             config_drive=True,
             meta={
                 "baremetal": "true",

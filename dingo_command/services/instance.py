@@ -120,6 +120,15 @@ class InstanceService:
     def convert_instance_todb(self, instance_info):
         instance_info_db_list = []
         flavor = nova_client.nova_get_flavor(instance_info.flavor_id)
+        operation_system = ""
+        image = nova_client.glance_get_image(instance_info.image_id)
+        if image is not None:
+            if image.get("os_version"):
+                operation_system = image.get("os_version")
+            elif image.get("os_distro"):
+                operation_system = image.get("os_distro")
+            else:
+                operation_system = image.get("name")
         cpu = 0
         gpu = 0
         mem = 0
@@ -140,7 +149,7 @@ class InstanceService:
             instance_info_db.server_id = ""
             instance_info_db.openstack_id = ""
             instance_info_db.ip_address = ""
-            instance_info_db.operation_system = ""
+            instance_info_db.operation_system = operation_system
             instance_info_db.user = instance_info.user
             instance_info_db.password = instance_info.password
             instance_info_db.cpu = int(cpu)
@@ -151,7 +160,7 @@ class InstanceService:
             instance_info_db.flavor_id = instance_info.flavor_id
             instance_info_db.image_id = instance_info.image_id
             instance_info_db.network_id = instance_info.network_id
-            # instance_info_db.subnet_id = instance_info.subnet_id
+            instance_info_db.create_time = datetime.now()
             instance_info_db.cluster_id = instance_info.cluster_id
             instance_info_db.cluster_name = instance_info.cluster_name
             instance_info_db.project_id = instance_info.openstack_info.project_id
@@ -168,7 +177,7 @@ class InstanceService:
                 instance_info_db.server_id = ""
                 instance_info_db.openstack_id = ""
                 instance_info_db.ip_address = ""
-                instance_info_db.operation_system = ""
+                instance_info_db.operation_system = operation_system
                 instance_info_db.user = instance_info.user
                 instance_info_db.password = instance_info.password
                 instance_info_db.cpu = int(cpu)
@@ -179,7 +188,7 @@ class InstanceService:
                 instance_info_db.flavor_id = instance_info.flavor_id
                 instance_info_db.image_id = instance_info.image_id
                 instance_info_db.network_id = instance_info.network_id
-                # instance_info_db.subnet_id = instance_info.subnet_id
+                instance_info_db.create_time = datetime.now()
                 instance_info_db.cluster_id = instance_info.cluster_id
                 instance_info_db.cluster_name = instance_info.cluster_name
                 instance_info_db.project_id = instance_info.openstack_info.project_id

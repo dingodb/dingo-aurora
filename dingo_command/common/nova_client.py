@@ -92,5 +92,13 @@ class NovaClient:
             raise Exception(f"nova规格请求失败: {response.text}")
         return response.json()['flavor']
 
+    # 根据image_id查询规格
+    def glance_get_image(self, image_id):
+        endpoint = self.get_service_endpoint('image')
+        response = self.session.get(f"{endpoint}/v2/images/"+ image_id)
+        if response.status_code != 200:
+            raise Exception(f"nova规格请求失败: {response.text}")
+        return response.json()
+
 # 声明nova的client
 nova_client = NovaClient()

@@ -55,6 +55,7 @@ class ClusterService:
         for idx, node in enumerate(cluster.node_config):
             if node.role == "master" and node.type == "vm":
                 cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
+                operation_system = self.get_image_info(node.image)
                 for i in range(node.count):
                     k8s_masters[f"master-{int(master_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
@@ -76,7 +77,7 @@ class ClusterService:
                     instance_db.project_id = ""
                     instance_db.server_id = ""
                     instance_db.openstack_id = ""
-                    instance_db.operation_system = ""
+                    instance_db.operation_system = operation_system
                     instance_db.cpu = cpu
                     instance_db.gpu = gpu
                     instance_db.mem = mem
@@ -112,6 +113,7 @@ class ClusterService:
                     master_index=master_index+1
             if node.role == "worker" and node.type == "vm":
                 cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
+                operation_system = self.get_image_info(node.image)
                 for i in range(node.count):
                     k8s_nodes[f"node-{int(node_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
@@ -133,7 +135,7 @@ class ClusterService:
                     instance_db.project_id = ""
                     instance_db.server_id = ""
                     instance_db.openstack_id = ""
-                    instance_db.operation_system = ""
+                    instance_db.operation_system = operation_system
                     instance_db.cpu = cpu
                     instance_db.gpu = gpu
                     instance_db.mem = mem
@@ -169,6 +171,7 @@ class ClusterService:
                     node_index=node_index+1
             if node.role == "worker" and node.type == "baremental":
                 cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
+                operation_system = self.get_image_info(node.image)
                 for i in range(node.count):
                     k8s_nodes[f"node-{int(node_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
@@ -190,7 +193,7 @@ class ClusterService:
                     instance_db.project_id = ""
                     instance_db.server_id = ""
                     instance_db.openstack_id = ""
-                    instance_db.operation_system = ""
+                    instance_db.operation_system = operation_system
                     instance_db.cpu = cpu
                     instance_db.gpu = gpu
                     instance_db.mem = mem
@@ -657,6 +660,18 @@ class ClusterService:
                 if ':' in pci_alias:
                     gpu = pci_alias.split(':')[1]
         return int(cpu), int(gpu), int(mem), int(disk)
+
+    def get_image_info(self, image_id):
+        operation_system = ""
+        image = nova_client.glance_get_image(image_id)
+        if image is not None:
+            if image.get("os_version"):
+                operation_system = image.get("os_version")
+            elif image.get("os_distro"):
+                operation_system = image.get("os_distro")
+            else:
+                operation_system = image.get("name")
+        return operation_system
 
 
 class TaskService:
