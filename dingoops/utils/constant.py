@@ -59,3 +59,9 @@ websocket_channels = ["dingoOps:big_screen_websocket_channel"]
 websocket_type_channels = {"big_screen":"dingoOps:big_screen_websocket_channel"}
 asset_part_type_dict = ["cpu","cpu_cores","data_disk","disk","gpu","ib_card","memory","module","nic","part_update"]
 
+# mq的配置信息
+MQ_MANAGE_PORT = "15672"
+MQ_SHOVEL_ADD_URL = "/api/parameters/shovel/%2F/"
+# rabbitmq的所有shovel和queue的关系
+RABBITMQ_SHOVEL_QUEUE = {"dingo_command_external_message_shovel":"dingo_command_external_message_queue"}
+RABBITMQ_EXTERNAL_MESSAGE_QUEUE = "dingo_command_external_message_queue"
