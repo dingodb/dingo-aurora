@@ -4,7 +4,7 @@ harbor_url=${1:-"docker.io/dongshany"}
 node_port=${2:-"8887"}
 
 image_version=${4:-"latest"}
-module_name=${5:-"dingoops"}
+module_name=${5:-"dingo-command"}
 
 
 echo "===========harbor_url: ${harbor_url}"
@@ -27,12 +27,12 @@ if [[ -n "$(docker ps -a -f "name=${module_name}$"  -q )" ]]; then
   docker rm $module_name
 fi
 
-# 判断是否存在 /etc/kolla/dingoops 目录，没有则创建
-if [[ ! -d "/etc/kolla/dingoops" ]]; then
-  mkdir -p /etc/kolla/dingoops
+# 判断是否存在 /etc/kolla/dingo-command 目录，没有则创建
+if [[ ! -d "/etc/kolla/dingo-command" ]]; then
+  mkdir -p /etc/kolla/dingo-command
 fi
 
-docker_command="docker run -d -p ${node_port}:${node_port} -v /etc/kolla/dingoops:/etc/dingoops"
+docker_command="docker run -d -p ${node_port}:${node_port} -v /etc/kolla/dingo-command:/etc/dingo-command"
 docker_command="${docker_command} -e TZ=Asia/Shanghai"
 docker_command="${docker_command} --name ${module_name} ${harbor_url}/${module_name}:${image_version}"
 

@@ -3,15 +3,15 @@
 set -ex
 
 # kolla_set_configs
-echo "/usr/bin/supervisord -c /etc/dingoops/supervisord.conf" >/run_command
+echo "/usr/bin/supervisord -c /etc/dingo-command/supervisord.conf" >/run_command
 
 mapfile -t CMD < <(tail /run_command | xargs -n 1)
 # kolla_extend_start
 pip install -e .
 # start celery worker
-#celery -A dingoops.celery_api.workers worker --loglevel=info
+#celery -A dingo_command.celery_api.workers worker --loglevel=info
 
-alembic -c ./dingoops/db/alembic/alembic.ini upgrade head
+alembic -c ./dingo_command/db/alembic/alembic.ini upgrade head
 
 echo "Running command: ${CMD[*]}"
 exec "${CMD[@]}"

@@ -20,7 +20,7 @@ worker_class = "uvicorn.workers.UvicornWorker"
 timeout = 300
 keepalive = 5
 reuse_port = True
-proc_name = "dingoops"
+proc_name = "dingo-command"
 
 logconfig_dict = {
     "version": 1,
@@ -44,12 +44,12 @@ logconfig_dict = {
         "error_file": {
             "class": "logging.handlers.RotatingFileHandler",
             "formatter": "generic",
-            "filename": "/var/log/dingoops/dingoops-error.log",
+            "filename": "/var/log/dingo-command/dingo-command-error.log",
         },
         "access_file": {
             "class": "logging.handlers.RotatingFileHandler",
             "formatter": "generic",
-            "filename": "/var/log/dingoops/dingoops-access.log",
+            "filename": "/var/log/dingo-command/dingo-command-access.log",
         },
         "console": {
             "class": "logging.StreamHandler",

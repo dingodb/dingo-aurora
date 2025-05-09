@@ -1,0 +1,8 @@
+---
+# geneve or vlan
+network_type: vlan
+vlan_interface_name: "{{ bus_interface }}"
+
+pod_cidr: "{{ bus_cidr }}"
+gateway: "{{ bus_gateway }}"
+exclude_ips: ""

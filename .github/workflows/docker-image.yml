@@ -9,7 +9,7 @@ on:
 
 jobs:
   release:
-    if: ( github.event.pull_request.merged == true && github.repository == 'dongshanyi/dingoOps' ) || github.event_name == 'push' 
+    if: ( github.event.pull_request.merged == true && github.repository == 'dongshanyi/dingo-command' ) || github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -35,7 +35,7 @@ jobs:
           context: .
           file: ./docker/Dockerfile
           # Note: tags has to be all lower-case
-          tags: dingodatabase/dingoops:latest
+          tags: dingodatabase/dingo-command:latest
           # build on feature branches, push only on develop branch
           push: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' }}
 

@@ -24,7 +24,7 @@ RUN pip install -r /opt/dingo-aurora/requirements.txt
 RUN apt-get clean \
     && rm -rf ~/.cache/pip \
     && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /etc/dingoops /var/log/dingoops /var/lib/dingoops
+    && mkdir -p /etc/dingo-command /var/log/dingo-command /var/lib/dingo-command
 
 COPY ./etc/gunicorn.py /etc/dingoops/gunicorn.py
 COPY ./etc/dingoops.conf /etc/dingoops/dingoops.conf
