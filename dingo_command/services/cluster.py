@@ -99,7 +99,6 @@ class ClusterService:
                     node_db.password = node.password
                     node_db.image = node.image
                     node_db.instance_id = instance_db.id
-                    node_db.private_key = node.private_key
                     node_db.project_id = cluster.project_id
                     node_db.auth_type = node.auth_type
                     node_db.security_group = node.security_group
@@ -157,7 +156,6 @@ class ClusterService:
                     node_db.password = node.password
                     node_db.image = node.image
                     node_db.instance_id = instance_db.id
-                    node_db.private_key = node.private_key
                     node_db.project_id = cluster.project_id
                     node_db.auth_type = node.auth_type
                     node_db.security_group = node.security_group
@@ -215,7 +213,6 @@ class ClusterService:
                     node_db.password = node.password
                     node_db.image = node.image
                     node_db.instance_id = instance_db.id
-                    node_db.private_key = node.private_key
                     node_db.project_id = cluster.project_id
                     node_db.auth_type = node.auth_type
                     node_db.security_group = node.security_group
@@ -433,8 +430,6 @@ class ClusterService:
                 result = celery_app.send_task("dingo_command.celery_api.workers.create_cluster",
                                           args=[tfvars.dict(), cluster.dict(), instance_bm_list ])
             elif cluster.type == "kubernetes":
-                print(tfvars.dict())
-                print(cluster.dict())
                 result = celery_app.send_task("dingo_command.celery_api.workers.create_k8s_cluster",
                                           args=[tfvars.dict(), cluster.dict(), node_list, instance_list ])
             elif cluster.type == "slurm":
@@ -661,16 +656,18 @@ class ClusterService:
                     gpu = pci_alias.split(':')[1]
         return int(cpu), int(gpu), int(mem), int(disk)
 
-    def get_image_info(self, image_id):
+    def get_image_info(self, image_name):
         operation_system = ""
-        image = nova_client.glance_get_image(image_id)
-        if image is not None:
-            if image.get("os_version"):
-                operation_system = image.get("os_version")
-            elif image.get("os_distro"):
-                operation_system = image.get("os_distro")
-            else:
-                operation_system = image.get("name")
+        image = nova_client.get_image(image_name)
+        if image is not None and image.get("images") and len(image.get("images")) > 0:
+            image = nova_client.glance_get_image(image["images"][0].get("id"))
+            if image is not None:
+                if image.get("os_version"):
+                    operation_system = image.get("os_version")
+                elif image.get("os_distro"):
+                    operation_system = image.get("os_distro")
+                else:
+                    operation_system = image.get("name")
         return operation_system
 
 
