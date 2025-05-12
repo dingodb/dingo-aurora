@@ -625,13 +625,9 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                         db_node.status = "running"
                         db_node.admin_address = v.get("ip")
                         db_node.floating_ip = v.get("public_ipv4")
-                        for instance in instance_list:
-                            if db_node.name == instance.name:
-                                db_node.instance_id = instance.id
-                                break
+                        break
 
         # 更新集群instance的状态为running
-
         with session.begin():
             for instance in instance_list:
                 db_instance = session.get(Instance, instance.get("id"))
@@ -642,6 +638,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                         db_instance.status = "running"
                         db_instance.ip_address = v.get("ip")
                         db_instance.floating_ip = v.get("public_ipv4")
+                        break
 
         # 更新数据库的状态为success
         task_info.end_time = time.time()
@@ -650,7 +647,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         update_task_state(task_info)
     except Exception as e:
         # 发生错误时更新集群状态为"失败"
-          # 发生错误时更新集群状态为failed
+        # 发生错误时更新集群状态为failed
         count, db_clusters = ClusterSQL.list_cluster(cluster_dict["id"])
         c = db_clusters[0]
         c.state = 'error'
