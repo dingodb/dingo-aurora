@@ -61,7 +61,21 @@ asset_part_type_dict = ["cpu","cpu_cores","data_disk","disk","gpu","ib_card","me
 
 # mq的配置信息
 MQ_MANAGE_PORT = "15672"
+MQ_PORT = 5672
 MQ_SHOVEL_ADD_URL = "/api/parameters/shovel/%2F/"
 # rabbitmq的所有shovel和queue的关系
 RABBITMQ_SHOVEL_QUEUE = {"dingo_command_external_message_shovel":"dingo_command_external_message_queue"}
 RABBITMQ_EXTERNAL_MESSAGE_QUEUE = "dingo_command_external_message_queue"
+# message类型和dingodb表的对应关系
+MESSAGE_TYPE_TABLE = {
+    "Report_Storage": "bsm_dws_storage_capacity_consume_info",
+    "Report_Share_Bandwidth": "bsm_dws_share_bandwidth_consume_info",
+    "Report_Exclusive_Bandwidth": "bsm_dws_exclusive_bandwidth_consume_info",
+    "Report_Gpu_Card_Allocate_Detail": "bsm_dwd_gpu_card_allocate_detail_info",
+    "Report_Gpu_Card_Allocate": "bsm_dws_gpu_card_allocate_info",
+    "Report_Gpu_Consume_Category_Detail": "bsm_dwd_gpu_consume_category_detail_info",
+    "Report_Gpu_Consume_Card_Detail": "bsm_dwd_gpu_consume_card_detail_info",
+    "Report_Gpu_Consume": "bsm_dws_gpu_consume_info",
+    "Report_Gpu_Avg_Allocate": "bsm_dws_gpu_avg_allocate_info",
+    "Report_Gpu_Avg_Consume": "bsm_dws_gpu_avg_consume_info",
+}

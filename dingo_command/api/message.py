@@ -16,7 +16,7 @@ async def create_external_message(message: dict):
     try:
         # 接收到的数据
         LOG.info("接收到的数据: %s", message)
-        result = message_service.create_external_message(message)
+        result = message_service.send_message_to_queue(message)
         return result
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)

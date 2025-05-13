@@ -1,9 +1,10 @@
 # rabbit的shovel类, 启动的时候自动add shovel，先删除，再add
 # 每个mq的pod都需要shovel
+import pika
 import requests
 from oslo_config import cfg
 
-from dingo_command.utils.constant import MQ_MANAGE_PORT, MQ_SHOVEL_ADD_URL, RABBITMQ_SHOVEL_QUEUE
+from dingo_command.utils.constant import MQ_MANAGE_PORT, MQ_SHOVEL_ADD_URL, RABBITMQ_SHOVEL_QUEUE, MQ_PORT
 
 # 默认文件配置
 CONF = cfg.CONF
@@ -132,3 +133,35 @@ class RabbitMqConfigService:
                 break
         # 返回数据
         return user_name, password, src_mq_url
+
+    # 发布消息到指定的queue
+    def publish_message_to_queue(self, queue, message):
+        # 连接到当前节点的RabbitMQ的服务器
+        username, password, _ = self.get_current_mq_config_info()
+        credentials = pika.PlainCredentials(username, password)
+        parameters = pika.ConnectionParameters(MY_IP, MQ_PORT, '/', credentials)
+        connection = pika.BlockingConnection(parameters)
+        channel = connection.channel()
+        # 声明队列
+        channel.queue_declare(queue=queue, durable=True)
+        # 发送数据到队列中
+        channel.basic_publish(exchange='', routing_key=queue, body=message, properties=pika.BasicProperties(delivery_mode=2,))
+        print("send mq message success")
+        print(f"message: {message}")
+        # 关闭连接
+        connection.close()
+
+    # 消费当前mq的队列的消息
+    def consume_queue_message(self, queue, callback):
+        # 连接到当前节点的RabbitMQ的服务器
+        username, password, _ = self.get_current_mq_config_info()
+        credentials = pika.PlainCredentials(username, password)
+        parameters = pika.ConnectionParameters(MY_IP, MQ_PORT, '/', credentials)
+        connection = pika.BlockingConnection(parameters)
+        channel = connection.channel()
+        # 声明队列
+        channel.queue_declare(queue=queue, durable=True)
+        # 订阅队列并设置回调函数
+        channel.basic_consume(queue=queue, on_message_callback=callback, auto_ack=True)
+        print(f'Waiting for {queue} queue json messages.')
+        channel.start_consuming()

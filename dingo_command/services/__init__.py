@@ -27,12 +27,25 @@ redis_opts = [
     cfg.StrOpt('redis_password', default=None, help='the redis password'),
 ]
 
+# aliyun的dingodb数据
+aliyun_dingodb_group = cfg.OptGroup(name='aliyun_dingodb', title='aliyun dingodb conf data')
+aliyun_dingodb_opts = [
+    cfg.StrOpt('host', default=None, help='the aliyun dingodb host'),
+    cfg.IntOpt('port', default=9921, help='the aliyun dingodb port'),
+    cfg.StrOpt('user', default=None, help='the aliyun dingodb user'),
+    cfg.StrOpt('password', default=None, help='the aliyun dingodb password'),
+    cfg.StrOpt('report_database', default=None, help='the aliyun dingodb report database'),
+]
+
 # 注册默认配置
 CONF.register_group(default_group)
 CONF.register_opts(default_opts, default_group)
 # 注册redis配置
 CONF.register_group(redis_group)
 CONF.register_opts(redis_opts, redis_group)
+# 注册aliyun的dingodb配置
+CONF.register_group(aliyun_dingodb_group)
+CONF.register_opts(aliyun_dingodb_opts, aliyun_dingodb_group)
 
 # redis数据
 

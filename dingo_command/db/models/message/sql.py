@@ -47,6 +47,9 @@ class MessageSQL:
             # 类型以某个参数开头
             if "message_type_start" in query_params and query_params["message_type_start"]:
                 query = query.filter(ExternalMessage.message_type.like(query_params["message_type_start"] + '%'))
+            # 某个指定的类型
+            if "message_type" in query_params and query_params["message_type"]:
+                query = query.filter(ExternalMessage.message_type == query_params["message_type"])
             # 总数
             count = query.count()
             # 排序
