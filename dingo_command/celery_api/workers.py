@@ -346,7 +346,7 @@ def deploy_kubernetes(cluster:ClusterObject,lb_ip:str, task_id:str = None):
         print("err: {}".format(runner.stderr.read()))
         print(runner.stdout)
         with open("ansible_debug.log", "a") as log_file:
-            log_file.write(runner.stdout)
+            log_file.write(print(runner.stdout))
         thread.join()
         # 检查最终状态
         if runner.rc != 0:

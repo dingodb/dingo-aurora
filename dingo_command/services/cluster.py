@@ -353,12 +353,11 @@ class ClusterService:
             # 空
             # 查询节点信息
             node_query_params = {"cluster_id": cluster_id}
-            node_res = NodeSQL.list_nodes(node_query_params, 1, -1, None, None)
+            count, node_res = NodeSQL.list_nodes(node_query_params, 1, -1, None, None)
             nodeinfos = []
-            if node_res and node_res[0] > 0:
+            if count > 0:
                 for n in node_res:
                     node_info = NodeConfigObject()
-                    node_info.auth_type = n.auth_type
                     node_info.status = n.status
                     node_info.instance_id = n.instance_id   
                 
@@ -418,7 +417,8 @@ class ClusterService:
                 use_existing_network=False,
                 ssh_user=cluster.node_config[0].user,
                 k8s_master_loadbalancer_enabled=lb_enbale,
-                number_of_k8s_masters = cluster.kube_info.number_master
+                number_of_k8s_masters = 1,
+                number_of_k8s_masters_no_floating_ip = cluster.kube_info.number_master - 1
                 )
             if cluster.node_config[0].auth_type == "password":
                 tfvars.password = cluster.node_config[0].password
