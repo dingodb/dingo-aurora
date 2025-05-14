@@ -1,7 +1,6 @@
 # 消息的service层
 import uuid
 import json
-import pika
 
 from oslo_log import log
 from oslo_config import cfg
@@ -12,8 +11,8 @@ from dingo_command.db.models.message.sql import MessageSQL
 from dingo_command.services.aliyundingodb import aliyun_dingodb_utils
 from dingo_command.services.custom_exception import Fail
 from dingo_command.services.rabbitmqconfig import RabbitMqConfigService
+from dingo_command.services.redis_connection import redis_connection, RedisLock
 from dingo_command.utils.constant import RABBITMQ_EXTERNAL_MESSAGE_QUEUE, MESSAGE_TYPE_TABLE
-from dingo_command.utils.mysql import MySqlUtils
 
 LOG = log.getLogger(__name__)
 
@@ -146,42 +145,48 @@ class MessageService:
             print("current region is not center region, no need to send message to dingodb")
             return
         try:
-            # 遍历message_type_table 按照类型进行插入数据
-            for message_type_key, message_dingo_table in MESSAGE_TYPE_TABLE.items():
-                # 每次读取1000条
-                query_params = {"message_type":message_type_key}
-                _, message_list = MessageSQL.list_external_message(query_params, 1, 1000, None, None)
-                # 判空 进入下一种类型
-                if not message_list:
-                    print(f"{message_type_key} message type no message to send")
-                    continue
-                # 遍历消息列表
-                for temp_message in message_list:
-                    # 判断message是否合规
-                    if not temp_message.message_data:
-                        print(f"message is not valid: {temp_message}")
-                        continue
-                    # message_data转化为json对象
-                    message_data_json = self.load_message_data_json(temp_message)
-                    # 判空
-                    if not message_data_json:
-                        print(f"message_data_json is not valid: {temp_message}")
-                        continue
-                    # 组装sql
-                    insert_dingodb_sql = self.create_dingodb_insert_sql(message_data_json, message_dingo_table)
-                    insert_dingodb_values = tuple(message_data_json.values())
-                    # 执行sql
-                    try:
-                        self.insert_one_into_dingodb(insert_dingodb_sql, insert_dingodb_values)
-                        # 成功之后删除掉当前数据
-                        MessageSQL.delete_external_message(temp_message.id)
-                        # 成功记录成功的操作日志
-                        print(f"success insert message to dingodb: {temp_message}")
-                    except Exception as e:
-                        import traceback
-                        traceback.print_exc()
-                        # 记录错误日志信息
-                        self.update_external_message_4error(temp_message, traceback.format_exc())
+            # 获取redis的锁，自动释放时间是60s
+            with RedisLock(redis_connection.redis_connection, "dingo_command_report_message_lock", expire_time=60) as lock:
+                if lock:
+                    print("get dingo_command_report_message_lock redis lock success")
+                    # 遍历message_type_table 按照类型进行插入数据
+                    for message_type_key, message_dingo_table in MESSAGE_TYPE_TABLE.items():
+                        # 每次读取1000条
+                        query_params = {"message_type":message_type_key}
+                        _, message_list = MessageSQL.list_external_message(query_params, 1, 1000, None, None)
+                        # 判空 进入下一种类型
+                        if not message_list:
+                            print(f"{message_type_key} message type no message to send")
+                            continue
+                        # 遍历消息列表
+                        for temp_message in message_list:
+                            # 判断message是否合规
+                            if not temp_message.message_data:
+                                print(f"message is not valid: {temp_message}")
+                                continue
+                            # message_data转化为json对象
+                            message_data_json = self.load_message_data_json(temp_message)
+                            # 判空
+                            if not message_data_json:
+                                print(f"message_data_json is not valid: {temp_message}")
+                                continue
+                            # 组装sql
+                            insert_dingodb_sql = self.create_dingodb_insert_sql(message_data_json, message_dingo_table)
+                            insert_dingodb_values = tuple(message_data_json.values())
+                            # 执行sql
+                            try:
+                                self.insert_one_into_dingodb(insert_dingodb_sql, insert_dingodb_values)
+                                # 成功之后删除掉当前数据
+                                MessageSQL.delete_external_message(temp_message.id)
+                                # 成功记录成功的操作日志
+                                print(f"success insert message to dingodb: {temp_message}")
+                            except Exception as e:
+                                import traceback
+                                traceback.print_exc()
+                                # 记录错误日志信息
+                                self.update_external_message_4error(temp_message, traceback.format_exc())
+                else:
+                    print("get dingo_command_report_message_lock redis lock failed")
         except Fail as e:
             raise e
         except Exception as e:
