@@ -64,7 +64,7 @@ class ClusterObject(DingoopsObject):
     type: Optional[str] = Field(None, description="集群类型")
     security_group: Optional[str] = Field(None, description="安全组名称")
     kube_info: Optional[KubeClusterObject] = Field(None, description="k8s信息")
-    
+    status: Optional[str] = Field(None, description="集群状态")
 
 class NodeObject(DingoopsObject):
     project_id: Optional[str] = Field(None, description="项目id")

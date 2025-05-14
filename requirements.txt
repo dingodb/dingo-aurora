@@ -4,7 +4,7 @@ aiosqlite==0.17.0
 alembic==1.14.0
 amqp==5.3.1
 annotated-types==0.7.0
-ansible==8.7.0
+ansible==9.10.0
 ansible-core==2.15.13
 ansible-runner==2.4.1
 anyio==4.5.2

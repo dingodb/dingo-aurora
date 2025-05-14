@@ -234,7 +234,93 @@ resource "openstack_compute_instance_v2" "k8s-master" {
     command = "%{if var.password == ""}sed -e s#USER#${var.ssh_user}# -e s#PRIVATE_KEY_FILE#${var.private_key_path}# -e s#BASTION_ADDRESS#${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}# ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}"
   }
 }
+##########################################################################################################
+resource "openstack_networking_port_v2" "admin_master_no_float_port" {
+  count                 = var.number_of_k8s_masters_no_floating_ip
+  name                  = "${var.cluster_name}-master-admin-${count.index + var.number_of_k8s_masters}"
+  network_id            = var.use_existing_network ? data.openstack_networking_network_v2.admin_network[0].id : var.admin_network_id
+  admin_state_up        = "true"
+  dynamic "fixed_ip" {
+    for_each = var.private_subnet_id == "" ? [] : [true]
+    content {
+      subnet_id = var.private_subnet_id
+    }
+  }
 
+  lifecycle {
+    ignore_changes = [ allowed_address_pairs ]
+  }
+
+  depends_on = [
+    var.network_router_id
+  ]
+  
+}
+
+#resource "openstack_networking_port_v2" "business_master_port" {
+#  count                 = var.number_of_k8s_masters
+#  name                  = "${var.cluster_name}-master-bus-${count.index + 1}"
+#  network_id            = var.use_existing_network ? data.openstack_networking_network_v2.bus_network[0].id : var.bus_network_id
+#  admin_state_up        = "true"
+#  port_security_enabled = false
+#  #no_fixed_ip           = true#
+
+# lifecycle {
+#    ignore_changes = [ allowed_address_pairs ]
+#  }
+#
+#  depends_on = [
+#    var.network_router_id
+#  ]
+#}
+
+# resource "openstack_networking_trunk_v2" "trunk_master" {
+#   name           = "${var.cluster_name}-${count.index + 1}"
+#   count          = var.number_of_k8s_masters
+#   admin_state_up = "true"
+#   port_id        = element(openstack_networking_port_v2.business_master_port.*.id, count.index)
+# }
+
+resource "openstack_compute_instance_v2" "k8s-master-no-floatip" {
+  name              = "${var.cluster_name}-k8s-master-${count.index + var.number_of_k8s_masters+1}"
+  count             = var.number_of_k8s_masters_no_floating_ip
+  availability_zone = "nova"
+  image_id          = local.image_to_use_master
+  flavor_id         = local.master_flavor
+  key_pair          = openstack_compute_keypair_v2.key_pair.name
+  user_data         = data.cloudinit_config.cloudinit.rendered
+  security_groups = [openstack_networking_secgroup_v2.secgroup.name]
+  dynamic "block_device" {
+    for_each = var.master_root_volume_size_in_gb > 0 ? [local.image_to_use_master] : []
+    content {
+      uuid                  = local.image_to_use_master
+      source_type           = "image"
+      volume_size           = var.master_root_volume_size_in_gb
+      volume_type           = var.master_volume_type
+      boot_index            = 0
+      destination_type      = "volume"
+      delete_on_termination = true
+    }
+  }
+  network {
+    port = element(openstack_networking_port_v2.admin_master_no_float_port.*.id, count.index)
+  }
+
+  metadata = {
+    ssh_user         = var.ssh_user
+    kubespray_groups = "etcd,kube_control_plane,${var.supplementary_master_groups},cluster,no_floating"
+    depends_on       = var.network_router_id
+    use_access_ip    = var.use_access_ip
+  }
+  #depends_on = [
+  #  openstack_networking_trunk_v2.trunk_masters
+  #]
+  provisioner "local-exec" {
+    command = "%{if var.password == ""}sed -e s#USER#${var.ssh_user}# -e s#PRIVATE_KEY_FILE#${var.private_key_path}# -e s#BASTION_ADDRESS#${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}# ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}"
+  }
+}
+###############################################worker node################################################
+###############################################worker node################################################
 resource "openstack_networking_port_v2" "nodes_port" {
   for_each              = var.number_of_nodes == 0 && var.number_of_nodes_no_floating_ip == 0 ? var.nodes : {}
   name                  = "${var.cluster_name}-node-${each.key}"
@@ -258,10 +344,16 @@ resource "openstack_networking_port_v2" "nodes_port" {
   ]
 }
 
+#resource "openstack_networking_floatingip_associate_v2" "master" {
+#  count                 = var.number_of_k8s_masters
+#  floating_ip           = var.k8s_master_fips[count.index]
+#  port_id               = element(openstack_networking_port_v2.admin_master_port.*.id, count.index)
+#}
+
 resource "openstack_networking_floatingip_associate_v2" "master" {
-  count                 = var.number_of_k8s_masters
-  floating_ip           = var.k8s_master_fips[count.index]
-  port_id               = element(openstack_networking_port_v2.admin_master_port.*.id, count.index)
+  count                 = 1
+  floating_ip           = var.k8s_master_fips[0]
+  port_id               = element(openstack_networking_port_v2.admin_master_port.*.id, 0)
 }
 
 # resource "openstack_networking_floatingip_associate_v2" "masters" {

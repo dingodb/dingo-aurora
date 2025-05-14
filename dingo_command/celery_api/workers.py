@@ -82,7 +82,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, regio
         subprocess.run(["cp", "-r", str(TERRAFORM_DIR), str(cluster_dir)], capture_output=True)
         os.chdir(os.path.join(cluster_dir, "terraform"))
         # 初始化terraform
-        os.environ['https_proxy']="172.20.3.88:1088"
+        #os.environ['https_proxy']="10.220.70.88:1088"
         os.environ['CURRENT_CLUSTER_DIR']=cluster_dir
         res = subprocess.run(["terraform", "init"], capture_output=True)
         if res.returncode != 0:
@@ -91,7 +91,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, regio
             task_info.state = "failed"
             task_info.detail = res.stderr
             update_task_state(task_info)
-            print(f"Terraform error: {res.stderr}")
+            print(f"Terraform init error: {res.stderr}")
             return False
         
         if cluster.password == "":
@@ -102,7 +102,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, regio
                 task_info.state = "failed"
                 task_info.detail = res.stderr
                 update_task_state(task_info)
-                print(f"Terraform error: {res.stderr}")
+                print(f"ssh-keygen error: {res.stderr}")
                 return False
             cluster.private_key_path = os.path.join(cluster_dir, "id_rsa")
             cluster.public_key_path = os.path.join(cluster_dir, "id_rsa.pub")
@@ -122,7 +122,14 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, regio
             "-auto-approve",
             "-var-file=output.tfvars.json"
         ], capture_output=True, text=True) 
-        
+        if res.returncode != 0:
+            # 发生错误时更新任务状态为"失败"
+            task_info.end_time =datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "failed"
+            task_info.detail = res.stderr
+            update_task_state(task_info)
+            print(f"Terraform apply error: {res.stderr}")
+            return False
         key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory",str(cluster.id), "id_rsa")
         with open(key_file_path, 'r') as key_file:
             private_key_content = key_file.read()
@@ -133,7 +140,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, regio
             db_cluster = data[0]
             host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory",cluster.id, "hosts")
              # Give execute permissions to the host file
-            os.chmod(host_file, 0o755) 
+            os.chmod(host_file, 0o600) 
             network_id,bus_network_id, subnet_id,bussubnet_id = get_networks(cluster, task_info, host_file)
             db_cluster.admin_network_id = network_id
             db_cluster.admin_subnet_id = subnet_id
@@ -171,7 +178,8 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, regio
 def create_cluster(self, cluster_tf:ClusterTFVarsObject,cluster_dict:ClusterObject, instance_bm_list):
     try:
         task_id = self.request.id.__str__()
-        print(f"Task ID: {task_id}")
+        cluster_id = cluster_tf["id"]
+        print(f"Task ID: {task_id}, Cluster ID: {cluster_id}")
         cluster_tfvars = ClusterTFVarsObject(**cluster_tf)
         cluster = ClusterObject(**cluster_dict)
         
@@ -287,13 +295,14 @@ def deploy_kubernetes(cluster:ClusterObject,lb_ip:str, task_id:str = None):
         TaskSQL.insert(etcd_task)
         ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
         os.chdir(ansible_dir)
+        
         host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "hosts")
         playbook_file  = os.path.join(WORK_DIR, "ansible-deploy", "cluster.yml")
         key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory",str(cluster.id), "id_rsa")
         with open(key_file_path, 'r') as key_file:
             private_key_content = key_file.read()
         
-        
+        print(f"start deploy kubernetes cluster: {ansible_dir}")
         thread,runner = run_playbook(playbook_file, host_file, ansible_dir, ssh_key=private_key_content)
         # 处理并打印事件日志
         while runner.status not in ['canceled', 'successful', 'timeout', 'failed']:
@@ -330,15 +339,14 @@ def deploy_kubernetes(cluster:ClusterObject,lb_ip:str, task_id:str = None):
                         update_task_state(task_info)   
                         task_info = component_task
                         TaskSQL.insert(component_task)
-                        
-                    #将结果输出到文件中
-                    with open("ansible_debug.log", "a") as log_file:
-                        log_file.write(f"Task: {task_name}, Status: {task_status}, host:  {host}\n")
+                    
             time.sleep(0.01)
             continue
         print("out: {}".format(runner.stdout.read()))
         print("err: {}".format(runner.stderr.read()))
         print(runner.stdout)
+        with open("ansible_debug.log", "a") as log_file:
+            log_file.write(runner.stdout)
         thread.join()
         # 检查最终状态
         if runner.rc != 0:
@@ -553,18 +561,13 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         # Give execute permissions to the host file
         os.chmod(host_file, 0o755)  # rwxr-xr-x permission
 
-        # 执行ansible命令验证是否能够连接到所有节点
-        res = subprocess.run([
-            "ansible",
-            "-i", host_file,
-            "-m", "ping",
-            "all"
-        ], capture_output=True)
-        master_ip, lb_ip = get_ips(cluster_tfvars, task_info, host_file)
-        result = subprocess.run("", shell=True, capture_output=True)
-
-        if cluster_tfvars.password != "":
-            cmd = f'ssh-keygen -f "/root/.ssh/known_hosts" -R "{master_ip}" && sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no {cluster_tfvars.ssh_user}@{master_ip}'
+        print(f"config ssh no pass {task_id}")
+        master_ip, lb_ip, hosts_data= get_ips(cluster_tfvars, task_info, host_file)
+        for i in range(1, cluster_tfvars.number_of_k8s_masters + 1):
+            print(f"delete host from know_hosts  {task_id}")
+            master_node_name = f"{cluster_tfvars.cluster_name}-k8s-master-{i}"
+            tmp_ip = hosts_data["_meta"]["hostvars"][master_node_name]["access_ip_v4"]
+            cmd = f'ssh-keygen -f "/root/.ssh/known_hosts" -R "{tmp_ip}"'
             result = subprocess.run(cmd, shell=True, capture_output=True)
             if result.returncode != 0:
                 task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
@@ -572,6 +575,29 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                 task_info.detail = str(result.stderr)
                 update_task_state(task_info)
                 raise Exception("Ansible kubernetes deployment failed")
+        if cluster_tfvars.password != "":
+                cmd = f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no {cluster_tfvars.ssh_user}@{master_ip}'
+                result = subprocess.run(cmd, shell=True, capture_output=True)
+                if result.returncode != 0:
+                    task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                    task_info.state = "failed"
+                    task_info.detail = str(result.stderr)
+                    update_task_state(task_info)
+                    raise Exception("Ansible kubernetes deployment failed")
+                
+        # 执行ansible命令验证是否能够连接到所有节点
+        print(f"check all node status {task_id}")
+        ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
+        os.chdir(ansible_dir)
+        key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory",str(cluster.id), "id_rsa")
+        res = subprocess.run([
+            "ansible",
+            "-i", host_file,
+            "-m", "ping",
+            "all",
+            "--private-key",key_file_path
+        ], capture_output=True)
+        #result = subprocess.run("", shell=True, capture_output=True)
 
         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
         task_info.state = "success"
@@ -599,8 +625,10 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         cluster.id = cluster_tf_dict["id"]
 
         if scale:
+            print(f"start scale kubernetes cluster: {ansible_dir}")
             ansible_result = scale_kubernetes(cluster)
         else:
+            print(f"start deploy kubernetes cluster: {ansible_dir}")
             ansible_result = deploy_kubernetes(cluster,lb_ip,task_id)
         if not ansible_result:
             raise Exception("Ansible kubernetes deployment failed")
@@ -647,11 +675,11 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         update_task_state(task_info)
     except Exception as e:
         # 发生错误时更新集群状态为"失败"
-        # 发生错误时更新集群状态为failed
+        print(f"deploy k8s cluster error")
         count, db_clusters = ClusterSQL.list_cluster(cluster_dict["id"])
         c = db_clusters[0]
-        c.state = 'error'
-        c.error_message = str(e.__str__())
+        c.status = 'error'
+        c.status_msg = str(e.__str__())
         ClusterSQL.update_cluster(c)
         raise
 
@@ -670,7 +698,7 @@ def get_ips(cluster_tfvars, task_info, host_file):
     master_node_name = cluster_tfvars.cluster_name+"-k8s-master-1"
     master_ip = hosts_data["_meta"]["hostvars"][master_node_name]["access_ip_v4"]
     lb_ip = hosts_data["_meta"]["hostvars"][master_node_name]["lb_ip"]
-    return master_ip,lb_ip
+    return master_ip,lb_ip,hosts_data
 
 def get_networks(cluster_tfvars, task_info, host_file):
     res = subprocess.run(["python3", host_file, "--list"], capture_output=True, text=True)
@@ -712,16 +740,16 @@ def delete_cluster(self, cluster_id, region_name):
         print(f"Terraform error: {res.stderr}")
         count, db_clusters = ClusterSQL.list_cluster(cluster_id)
         c = db_clusters[0]
-        c.state = 'delete_error'
-        c.error_message = "delete cluster error"
+        c.status = 'delete_error'
+        c.status_msg = "delete cluster error"
         ClusterSQL.update_cluster(c)
         return False
     else:
         # 更新任务状态为"成功"
         count, db_clusters = ClusterSQL.list_cluster(cluster_id)
         c = db_clusters[0]
-        c.state = 'deleted'
-        c.error_message = ""
+        c.status = 'deleted'
+        c.status_msg = ""
         ClusterSQL.update_cluster(c)
         print("Terraform destroy succeeded")
     

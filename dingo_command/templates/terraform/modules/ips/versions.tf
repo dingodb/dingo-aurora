@@ -1,10 +1,10 @@
 terraform {
   required_providers {
     null = {
-      source = "hashicorp/null"
+      source = "dingo.com/hashicorp/null"
     }
     openstack = {
-      source = "terraform-provider-openstack/openstack"
+      source = "dingo.com/terraform-provider-openstack/openstack"
     }
   }
   required_version = ">= 0.12.26"

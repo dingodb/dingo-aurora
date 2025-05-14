@@ -76,13 +76,42 @@
     daemon_reload: true
   when: ('etcd' in group_names)
 
+- name: Configure | Check peer connectivity to all etcd nodes (port 2380) using telnet
+  command: >
+    timeout 5 telnet {{ hostvars[item]['ip'] | default(hostvars[item]['ansible_default_ipv4']['address']) }} 2380
+  args:
+    warn: false
+  register: telnet_result
+  failed_when: telnet_result.rc != 0 and telnet_result.rc != 124
+  changed_when: false
+  loop: "{{ groups['etcd'] }}"
+  retries: 10
+  delay: 5
+  when:
+    - ('etcd' in group_names)
+    - etcd_cluster_setup
+    - inventory_hostname != item  # 不检查自己到自己的连接
+    
+- name: 检查 telnet 结果并在失败时报错
+  fail:
+    msg: "无法连接到节点 {{ item.item }} 的 2380 端口，检查网络连通性和防火墙设置。错误码：{{ item.rc }}"
+  when:
+    - ('etcd' in group_names)
+    - etcd_cluster_setup
+    - item.rc != 0 and item.rc != 124
+  loop: "{{ telnet_result.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
 # when scaling new etcd will fail to start
 - name: Configure | Ensure etcd is running
   service:
     name: etcd
     state: started
     enabled: true
-  ignore_errors: "{{ etcd_cluster_is_healthy.rc == 0 }}"  # noqa ignore-errors
+  retries: 5
+  delay: 5
+  #ignore_errors: "{{ etcd_cluster_is_healthy.rc == 0 }}"  # noqa ignore-errors
   when:
     - ('etcd' in group_names)
     - etcd_cluster_setup

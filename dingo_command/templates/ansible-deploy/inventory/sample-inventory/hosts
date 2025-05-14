@@ -77,6 +77,7 @@ def iterresources(filenames):
                 # each instance inside the resource branch.
                 for resource in state['resources']:
                     name = resource['provider'].split('.')[-1]
+                    # print(name)
                     for instance in resource['instances']:
                         key = "{}.{}".format(resource['type'], resource['name'])
                         if 'index_key' in instance:
@@ -89,6 +90,7 @@ def iterresources(filenames):
                         if 'id' in instance['attributes']:
                            data['primary']['id'] = instance['attributes']['id']
                         data['primary']['meta'] = instance['attributes'].get('meta',{})
+                        
                         yield name, key, data
             else:
                 raise KeyError('tfstate version %d not supported' % tf_version)
@@ -384,7 +386,8 @@ def iter_host_ips(hosts, ips,ip_lb, adminsubnet, bussububnet):
     '''Update hosts that have an entry in the floating IP list'''
     for host in hosts:
         port_id = host[1]['port_id']
-
+        # print("adminsubnet: ", adminsubnet)
+        # print("bussububnet: ", bussububnet)
         if port_id in ips:
             ip = ips[port_id]
 
@@ -392,12 +395,11 @@ def iter_host_ips(hosts, ips,ip_lb, adminsubnet, bussububnet):
                 'access_ip_v4': ip,
                 'access_ip': ip,
                 'public_ipv4': ip,
-                'ansible_host': ip,
-                'lb_ip': ip_lb,
-                'subnet_id': adminsubnet,
-                'bussubnet_id': bussububnet,
+                'ansible_host': ip
             })
-
+        host[1]['subnet_id'] = adminsubnet
+        host[1]['bussubnet_id'] = bussububnet
+        host[1]['lb_ip'] = ip_lb
         if 'use_access_ip' in host[1]['metadata'] and host[1]['metadata']['use_access_ip'] == "0" and 'access_ip' in host[1]:
                 host[1].pop('access_ip')
 
@@ -481,6 +483,7 @@ def main():
     ips = dict(iterips(iterresources(tfstates(args.root))))
     lb_ip = iterlbips(iterresources(tfstates(args.root)))
     adminsubnet, bussububnet = itersubnets(iterresources(tfstates(args.root)))
+    
     if ips:
         hosts = iter_host_ips(hosts, ips, lb_ip, adminsubnet, bussububnet)
 

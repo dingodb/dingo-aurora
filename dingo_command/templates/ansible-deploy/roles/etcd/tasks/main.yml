@@ -1,4 +1,12 @@
 ---
+- name: Get all environment variables
+  shell: env
+  register: all_env_vars
+
+- name: Display all environment variables
+  debug:
+    var: all_env_vars.stdout_lines
+    
 - name: Check etcd certs
   include_tasks: check_certs.yml
   when: cert_management == "script"
