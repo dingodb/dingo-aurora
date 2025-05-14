@@ -43,6 +43,7 @@ class AssetBasicInfo(Base):
     asset_number = Column(String(length=128), nullable=True)
     asset_status = Column(String(length=40), nullable=True)
     asset_status_description = Column(Text)
+    asset_relation_resource_flag = Column(Boolean, nullable=True, default=False)
     extra = Column(Text)
     extend_column_extra = Column(Text)
     create_date = Column(DateTime, nullable=True)

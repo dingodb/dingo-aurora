@@ -118,8 +118,16 @@ class AssetsService:
                 temp_cutomer["customer_id"] = r.customer_customer_id
                 temp_cutomer["customer_name"] = r.customer_customer_name
                 temp_cutomer["rental_duration"] = r.customer_rental_duration
-                temp_cutomer["start_date"] = None if r.customer_start_date is None else r.customer_start_date.timestamp() * 1000
-                temp_cutomer["end_date"] = None if r.customer_end_date is None else r.customer_end_date.timestamp() * 1000
+                try:
+                    temp_cutomer["start_date"] = None if r.customer_start_date is None else r.customer_start_date.timestamp() * 1000
+                except Exception as e:
+                    print(f"资产[{r.id}]转化start_date失败, customer_start_date:{r.customer_start_date}, {e}")
+                    temp_cutomer["start_date"] = None
+                try:
+                    temp_cutomer["end_date"] = None if r.customer_end_date is None else r.customer_end_date.timestamp() * 1000
+                except Exception as e:
+                    print(f"资产[{r.id}]转化end_date失败, customer_end_date:{r.customer_end_date}, {e}")
+                    temp_cutomer["end_date"] = None
                 temp_cutomer["vlan_id"] = r.customer_vlan_id
                 temp_cutomer["float_ip"] = r.customer_float_ip
                 temp_cutomer["band_width"] = r.customer_band_width

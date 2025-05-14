@@ -7,6 +7,7 @@ from dingo_command.common.ironic_client import ironic_client
 from dingo_command.common.nova_client import nova_client
 from dingo_command.db.models.asset_resoure_relation.models import AssetResourceRelationInfo
 from dingo_command.db.models.asset_resoure_relation.sql import AssetResourceRelationSQL
+from dingo_command.db.models.asset.sql import AssetSQL
 from dingo_command.services.assets import AssetsService
 from dingo_command.services.bigscreens import BigScreensService
 from dingo_command.services.resources import ResourcesService
@@ -31,6 +32,7 @@ def fetch_relation_info():
         print(f"裸金属列表数据: {node_list}")
         # 2、读取所有的资产数据
         asset_list = get_all_asset_list()
+        print(f"资产数据数目：{len(asset_list)}, 裸机节点数目：{len(node_list)}")
         # 3、查询所有虚拟机
         # server_list = nova_client.nova_list_servers()
         # print(f"虚拟机列表数据: {server_list}")
@@ -48,8 +50,11 @@ def fetch_relation_info():
             #print(f"裸金属列表数据:{temp_node.get('uuid')}")
             server_detail = None
             if temp_node.get('instance_uuid'):
-                server_detail = nova_client.nova_get_server_detail(temp_node.get('instance_uuid'))
-                print(f"虚拟机详情数据: {server_detail}")
+                try:
+                    server_detail = nova_client.nova_get_server_detail(temp_node.get('instance_uuid'))
+                    print(f"虚拟机详情数据: {server_detail}")
+                except Exception as e:
+                    print(f"虚拟机[{temp_node.get('instance_uuid')}]详情数据失败: {e}")
             # 裸金属的ipmi的ip地址
             ipmi_address = temp_node.get('driver_info').get('ipmi_address') if temp_node.get('driver_info') else None
             # 与裸机对应的资产的id
@@ -90,6 +95,9 @@ def fetch_relation_info():
                 if temp_db_relation.resource_id not in resource_id_list:
                     # 数据删除
                     AssetResourceRelationSQL.delete_asset_resource_relation_by_resource_id(temp_db_relation.resource_id)
+
+        # 处理资产表中未关联资源的数据的标识状态
+        handle_asset_table_relation_resource_flag()
     except Exception as e:
         print(f"同步资源与资产关系失败: {e}")
     print(f"同步资源与资产的关联关系结束时间: {datatime_util.get_now_time_in_timestamp_format()}")
@@ -210,6 +218,14 @@ def fetch_resource_metrics_info():
                     promql = temp_config.query.format(**data)
                     print(f"查询promql语句是{promql}")
                     metrics_json = BigScreensService.fetch_metrics_with_promql(promql)
+                    # if temp_config.name == "gpu_count":
+                    #     metrics_json = {"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1747031802.721,"8"]}],"analysis":{}}}
+                    # elif temp_config.name == "cpu_usage":
+                    #     metrics_json = {"status":"success","data":{"resultType":"vector","result":[{"metric":{"instance":"10.201.49.1:9100"},"value":[1747031746.604,"1.6218749999663329"]}],"analysis":{}}}
+                    # elif temp_config.name == "memory_usage":
+                    #     metrics_json = {"status":"success","data":{"resultType":"vector","result":[{"metric":{"hostname":"hd03-gpu2-0001","ib_addr":"192.168.1.1","instance":"10.201.49.1:9100","job":"consul","node_role":"k8s","region":"hd-03"},"value":[1747031684.197,"27.14990270986004"]}],"analysis":{}}}
+                    # elif temp_config.name == "gpu_power":
+                    #     metrics_json = {"status":"success","data":{"resultType":"vector","result":[{"metric":{"hostname":"hd03-gpu2-0001","ib_addr":"192.168.1.1","instance":"10.201.49.1:9100","job":"consul","node_role":"k8s","region":"hd-03"},"value":[1747031684.197,"27.14990270986004"]}],"analysis":{}}}
                     print(f"监控项：{temp_config.name}数据:{metrics_json}")
                     metrics_value = handle_metrics_json(metrics_json)
                     temp_resource_metrics_dict[temp_config.name] = metrics_value
@@ -245,8 +261,49 @@ def handle_metrics_json(metrics_json):
                 json_data_result = json_data['result']
                 # 读取数据结果中的value数值
                 if json_data_result:
+                    # "value":[1747031802.721,"8"], 其中第一个数据1747031802.721为时间戳，第二个数据"8"为需要的数据
                     return json_data_result[0]['value'][1]
     except Exception as e:
         print(f"解析监控数据项失败: {e}")
     # 返回None
     return None
+
+
+def handle_asset_table_relation_resource_flag():
+    relation_resources = AssetResourceRelationSQL.get_asset_id_not_empty_list()
+    asset_id_list_in_relation_resource = None
+    if relation_resources is not None:
+        asset_id_list_in_relation_resource = [getattr(r, "asset_id") for r in relation_resources]
+
+    print(f"资源关联资产表中资产ID集合: {asset_id_list_in_relation_resource}")
+    if asset_id_list_in_relation_resource is None:
+        # 修改所有资产关联资源标识为True的数据为false
+        set_all_asset_relation_resource_flag_to_false()
+    else:
+        for asset_id_in_relation_resource in asset_id_list_in_relation_resource:
+            # 设置资源关联资产标识为True
+            set_single_asset_relation_resource_flag_to_true(asset_id_in_relation_resource)
+
+        # 设置资源关联资产外的资产关联标识为true->false
+        not_relation_resource_asset_info = AssetSQL.get_all_asset_basic_info_with_relation_resource_excluding_ids(
+            asset_id_list_in_relation_resource)
+        if not_relation_resource_asset_info is not None:
+            for asset_info_db in not_relation_resource_asset_info:
+                asset_info_db.asset_relation_resource_flag = False
+                AssetSQL.update_asset(asset_info_db, None, None, None, None, None, None, None,
+                                      None)
+
+def set_all_asset_relation_resource_flag_to_false():
+    asset_basic_info_with_relation_resource = AssetSQL.get_all_asset_basic_info_with_relation_resource()
+    if asset_basic_info_with_relation_resource is not None:
+        for asset_basic_info in asset_basic_info_with_relation_resource:
+            asset_basic_info.asset_relation_resource_flag = False
+            AssetSQL.update_asset(asset_basic_info, None, None, None, None, None, None, None,
+                                  None)
+
+def set_single_asset_relation_resource_flag_to_true(asset_id):
+    if asset_id is not None:
+        asset_basic_info = AssetSQL.get_asset_basic_info_by_id(asset_id)
+        if asset_basic_info is not None and asset_basic_info.asset_relation_resource_flag is False:
+            asset_basic_info.asset_relation_resource_flag = True
+            AssetSQL.update_asset(asset_basic_info, None, None, None, None, None, None, None, None)

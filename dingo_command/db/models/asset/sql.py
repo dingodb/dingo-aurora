@@ -19,7 +19,8 @@ from dingo_command.utils.constant import asset_part_type_dict
 asset_dir_dic= {"asset_type":AssetBasicInfo.asset_type, "frame_position":AssetPositionsInfo.frame_position, "u_position":AssetPositionsInfo.u_position, "cabinet_position":AssetPositionsInfo.cabinet_position,
                 "asset_status":AssetBasicInfo.asset_status, "asset_name":AssetBasicInfo.name, "id": AssetBasicInfo.id, "equipment_number":AssetBasicInfo.equipment_number, "asset_number":AssetBasicInfo.asset_number,
                 "sn_number":AssetBasicInfo.asset_number, "department_name":AssetBelongsInfo.department_name, "user_name":AssetBelongsInfo.user_name, "manufacturer_name":AssetManufacturesInfo.name,
-                "resource_name":AssetResourceRelationInfo.resource_name, "resource_status":AssetResourceRelationInfo.resource_status, "resource_user_name": AssetResourceRelationInfo.resource_user_name, "resource_project_name":AssetResourceRelationInfo.resource_project_name}
+                "resource_name":AssetResourceRelationInfo.resource_name, "resource_status":AssetResourceRelationInfo.resource_status, "resource_user_name": AssetResourceRelationInfo.resource_user_name,
+                "resource_project_name":AssetResourceRelationInfo.resource_project_name, "asset_relation_resource_flag": AssetBasicInfo.asset_relation_resource_flag}
 # 配件的所有列
 part_columns = [getattr(AssetPartsInfo, column.name).label(column.name) for column in AssetPartsInfo.__table__.columns]
 # 流的所有列
@@ -91,6 +92,7 @@ class AssetSQL:
                                   AssetResourceRelationInfo.resource_user_name.label("resource_user_name"),
                                   AssetResourceRelationInfo.resource_project_id.label("resource_project_id"),
                                   AssetResourceRelationInfo.resource_project_name.label("resource_project_name"),
+                                  AssetBasicInfo.asset_relation_resource_flag.label("asset_relation_resource_flag")
                                   )
             # 外连接
             query = query.outerjoin(AssetManufactureRelationInfo, AssetManufactureRelationInfo.asset_id == AssetBasicInfo.id). \
@@ -174,15 +176,17 @@ class AssetSQL:
             # 描述模糊查询，存储的json字段，需要解然后模糊查询
             if "asset_description" in query_params and query_params["asset_description"]:
                 query = query.filter(AssetBasicInfo.description.like('%' + query_params["asset_description"] + '%'))
-            # 资源相关
-            if "resource_name" in query_params and query_params["resource_name"]:
-                query = query.filter(AssetResourceRelationInfo.resource_name.like('%' + query_params["resource_name"] + '%'))
-            if "resource_status" in query_params and query_params["resource_status"]:
-                query = query.filter(AssetResourceRelationInfo.resource_status == query_params["resource_status"])
-            if "resource_user_name" in query_params and query_params["resource_user_name"]:
-                query = query.filter(AssetResourceRelationInfo.resource_user_name.like('%' + query_params["resource_user_name"] + '%'))
-            if "resource_project_name" in query_params and query_params["resource_project_name"]:
-                query = query.filter(AssetResourceRelationInfo.resource_project_name.like('%' + query_params["resource_project_name"] + '%'))
+            # # 资源相关
+            # if "resource_name" in query_params and query_params["resource_name"]:
+            #     query = query.filter(AssetResourceRelationInfo.resource_name.like('%' + query_params["resource_name"] + '%'))
+            # if "resource_status" in query_params and query_params["resource_status"]:
+            #     query = query.filter(AssetResourceRelationInfo.resource_status == query_params["resource_status"])
+            # if "resource_user_name" in query_params and query_params["resource_user_name"]:
+            #     query = query.filter(AssetResourceRelationInfo.resource_user_name.like('%' + query_params["resource_user_name"] + '%'))
+            # if "resource_project_name" in query_params and query_params["resource_project_name"]:
+            #     query = query.filter(AssetResourceRelationInfo.resource_project_name.like('%' + query_params["resource_project_name"] + '%'))
+            if "asset_relation_resource_flag" in query_params:
+                query = query.filter(AssetBasicInfo.asset_relation_resource_flag == query_params["asset_relation_resource_flag"])
             # 总数
             count = query.count()
             # 排序
@@ -241,6 +245,22 @@ class AssetSQL:
         session = get_session()
         with session.begin():
             return session.query(AssetBasicInfo).filter(AssetBasicInfo.id == id).first()
+
+
+    @classmethod
+    def get_all_asset_basic_info_with_relation_resource(cls):
+        session = get_session()
+        with session.begin():
+            return session.query(AssetBasicInfo).filter(AssetBasicInfo.asset_relation_resource_flag == True). \
+                filter(AssetBasicInfo.asset_category == "SERVER").all()
+
+    @classmethod
+    def get_all_asset_basic_info_with_relation_resource_excluding_ids(cls, asset_ids):
+        session = get_session()
+        with (session.begin()):
+            return session.query(AssetBasicInfo).filter(AssetBasicInfo.id.not_in(asset_ids)). \
+                filter(AssetBasicInfo.asset_relation_resource_flag == True). \
+                filter(AssetBasicInfo.asset_category == "SERVER").all()
 
     @classmethod
     def get_asset_basic_info_by_catalog_name(cls, catalog, name):

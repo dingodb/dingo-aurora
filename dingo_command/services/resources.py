@@ -117,7 +117,10 @@ class ResourcesService:
                     resource_status_info_temp = {}
                     resource_status_info_temp['resource_id'] = resource_status_info.resource_id
                     resource_status_info_temp['resource_name'] = resource_status_info.resource_name
-                    resource_status_info_temp['resource_status'] = resource_status_info.resource_status
+                    if resource_status_info.resource_status == "active":
+                        resource_status_info_temp['resource_status'] = resource_status_info.resource_status
+                    else:
+                        resource_status_info_temp['resource_status'] = "inactive"
                     # 追加数据
                     resource_status_info_ret.append(resource_status_info_temp)
 

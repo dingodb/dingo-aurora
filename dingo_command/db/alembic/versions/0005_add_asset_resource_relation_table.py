@@ -41,8 +41,29 @@ def upgrade() -> None:
         comment='资源与资产关联信息表'
     )
 
+    # 插入asset_relation_resource_flag字段
+    op.bulk_insert("ops_assets_extends_columns_info",
+                   [
+                       # 服务器默认配置
+                       {'id': '00000000-0a26-11f0-8eb6-b083fee10000', 'asset_type': 'SERVER', 'role_type': None,
+                        'column_key': 'asset_relation_resource_flag', 'column_name': '是否关联资源',
+                        'column_type': 'str',
+                        'required_flag': 0, 'default_flag': 1, 'hidden_flag': 0, 'queue': 30, 'description': None
+                        }, ]
+                   )
+
+    # 为ops_assets_parts_info表：增加型号：part_model字段
+    op.add_column('ops_assets_basic_info',
+                  sa.Column('asset_relation_resource_flag', sa.Boolean, nullable=True, default=0))
+
 
 def downgrade() -> None:
     # 删除表：ops_assets_resources_relations_info
     op.drop_table('ops_assets_resources_relations_info')
+
+    # 移除asset_relation_resource_flag数据
+    op.execute("DELETE FROM ops_assets_extends_columns_info WHERE column_key='asset_relation_resource_flag';")
+
+    # 移除字段：asset_relation_resource_flag
+    op.drop_column('ops_assets_basic_info', 'asset_relation_resource_flag')
 

@@ -178,6 +178,13 @@ class AssetResourceRelationSQL:
                 filter(AssetResourceRelationInfo.resource_project_id.isnot(None)).count()
 
     @classmethod
+    def get_asset_id_not_empty_list(cls):
+        session = get_session()
+        with session.begin():
+            return session.query(AssetResourceRelationInfo). \
+                filter(AssetResourceRelationInfo.asset_id.isnot(None)).all()
+
+    @classmethod
     def get_vpc_resource_relation_asset_failure_count(cls):
         session = get_session()
         with session.begin():
