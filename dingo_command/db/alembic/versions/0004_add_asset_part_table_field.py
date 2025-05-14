@@ -26,7 +26,7 @@ def upgrade() -> None:
     # 为ops_assets_parts_info表：增加位置：position字段
     op.add_column('ops_assets_parts_info', sa.Column('position', sa.Text(), nullable=True))
     # 为ops_assets_parts_info表：增加是否固定资产：fixed_flag字段
-    op.add_column('ops_assets_parts_info', sa.Column('fixed_flag', sa.Boolean(), nullable=True, default=0))
+    op.add_column('ops_assets_parts_info', sa.Column('fixed_flag', sa.Boolean(), nullable=True, server_default=sa.text('0')))
 
     # 增加资产配件关联信息表
     op.create_table(

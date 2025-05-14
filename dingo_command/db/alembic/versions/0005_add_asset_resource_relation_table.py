@@ -42,19 +42,14 @@ def upgrade() -> None:
     )
 
     # 插入asset_relation_resource_flag字段
-    op.bulk_insert("ops_assets_extends_columns_info",
-                   [
-                       # 服务器默认配置
-                       {'id': '00000000-0a26-11f0-8eb6-b083fee10000', 'asset_type': 'SERVER', 'role_type': None,
-                        'column_key': 'asset_relation_resource_flag', 'column_name': '是否关联资源',
-                        'column_type': 'str',
-                        'required_flag': 0, 'default_flag': 1, 'hidden_flag': 0, 'queue': 30, 'description': None
-                        }, ]
-                   )
+    op.execute("""
+        INSERT INTO dingoops.ops_assets_extends_columns_info (id, asset_type, role_type, column_key, column_name, column_type, required_flag, default_flag, hidden_flag, queue, description)
+        VALUES('00000000-0a26-11f0-8eb6-b083fee10000', 'SERVER', NULL, 'asset_relation_resource_flag', '是否关联资源', 'str', 0, 1, 0, 29, NULL);
+    """)
 
     # 为ops_assets_parts_info表：增加型号：part_model字段
     op.add_column('ops_assets_basic_info',
-                  sa.Column('asset_relation_resource_flag', sa.Boolean, nullable=True, default=0))
+                  sa.Column('asset_relation_resource_flag', sa.Boolean(), nullable=True,  server_default=sa.text('0')))
 
 
 def downgrade() -> None:
