@@ -25,6 +25,7 @@ from dingo_command.db.models.node.models import NodeInfo as NodeDB
 from dingo_command.db.models.instance.models import Instance as InstanceDB
 from dingo_command.common import neutron
 from dingo_command.services.cluster import ClusterService
+from dingo_command.db.engines.mysql import get_engine, get_session
 
 from dingo_command.services.custom_exception import Fail
 from dingo_command.services.system import SystemService
@@ -90,55 +91,63 @@ class NodeService:
             traceback.print_exc()
             raise e
 
-    def convert_clusterinfo_todb(self, cluster: ClusterObject):
-        cluster_info_db = ClusterDB()
-        cluster_info_db.id = cluster.id
-        cluster_info_db.status = "scaling"
-        cluster_info_db.update_time = datetime.now()
-        return cluster_info_db
+    def convert_clusterinfo_todb(self, cluster_id, cluster_name):
+        session = get_session()
+        db_cluster = session.get(ClusterDB, (cluster_id, cluster_name))
+        db_cluster.status = "scaling"
+        db_cluster.update_time = datetime.now()
+        return db_cluster
 
-    def update_clusterinfo_todb(self, cluster_id, node_list):
-        cluster_info_db = ClusterDB()
-        cluster_info_db.id = cluster_id
-        cluster_info_db.status = "removing"
-        cluster_info_db.update_time = datetime.now()
-        return cluster_info_db
+    def update_clusterinfo_todb(self, cluster_id, cluster_name):
+        session = get_session()
+        db_cluster = session.get(ClusterDB, (cluster_id, cluster_name))
+        db_cluster.status = "removing"
+        db_cluster.update_time = datetime.now()
+        return db_cluster
 
-    def update_nodes_todb(self, node_list):
-        node_list_db = []
-        for node in node_list:
-            node_info_db = NodeDB()
-            node_info_db.id = node.id
-            node_info_db.status = "deleting"
-            node_info_db.update_time = datetime.now()
-            node_list_db.append(node_info_db)
-        return node_list_db
+    def update_nodes_todb(self, node):
+        node.status = "deleting"
+        node.update_time = datetime.now()
+        node_dict = {
+            "id": node.id,
+            "name": node.name,
+            "cluster_id": node.cluster_id,
+            "cluster_name": node.cluster_name,
+            "instance_id": node.instance_id,
+            "server_id": node.server_id,
+            "admin_address": node.admin_address,
+            "role": node.role,
+            "node_type": node.node_type,
+            "auth_type": node.auth_type,
+            "user": node.user,
+            "password": node.password,
+        }
+        return node, node_dict
 
-    def update_instances_todb(self, node_list):
-        instance_list_db = []
-        for node in node_list:
-            instance_info_db = InstanceDB()
-            instance_info_db.id = node.instance_id
-            instance_info_db.status = "deleting"
-            instance_info_db.update_time = datetime.now()
-            instance_list_db.append(instance_info_db)
-        instance_list_dict = []
-        for instance in instance_list_db:
-            # Create a serializable dictionary from the instanceDB object
-            instance_dict = {
-                "id": instance.id,
-            }
-            instance_list_dict.append(instance_dict)
-
-        # Convert the list of dictionaries to a JSON string
-        instance_list_json = json.dumps(instance_list_dict)
-        return instance_list_db, instance_list_json
+    def update_instances_todb(self, node):
+        session = get_session()
+        print("333333 node.instance_id is:", node.instance_id)
+        db_instance = session.get(InstanceDB, node.instance_id)
+        db_instance.status = "deleting"
+        db_instance.update_time = datetime.now()
+        instance_dict = {
+            "id": db_instance.id,
+            "name": db_instance.name,
+            "cluster_id": db_instance.cluster_id,
+            "cluster_name": db_instance.cluster_name,
+            "server_id": db_instance.server_id,
+            "ip_address": db_instance.ip_address,
+            "node_type": db_instance.node_type,
+            "region": db_instance.region,
+            "user": db_instance.user,
+            "password": db_instance.password,
+        }
+        return db_instance, instance_dict
 
     def generate_k8s_nodes(self, cluster, k8s_nodes, k8s_scale_nodes):
-        node_count = len(k8s_nodes)
         node_index = len(k8s_nodes) + 1
         for idx, node in enumerate(cluster.node_config):
-            if node.get("role") == "worker" and node.type == "vm":
+            if node.role == "worker" and node.type == "vm":
                 for i in range(node.count):
                     k8s_nodes[f"node-{node_index}"] = NodeGroup(
                         az=self.get_az_value(node.type),
@@ -153,7 +162,7 @@ class NodeService:
                         etcd=False
                     )
                     node_index += 1
-            if node.get("role") == "worker" and node.type == "baremental":
+            if node.role == "worker" and node.type == "baremental":
                 for i in range(node.count):
                     k8s_nodes[f"node-{node_index}"] = NodeGroup(
                         az=self.get_az_value(node.type),
@@ -170,10 +179,10 @@ class NodeService:
                     node_index += 1
 
         # 保存node信息到数据库
-        node_db_list, node_list = self.convert_nodeinfo_todb(cluster, k8s_scale_nodes)
+        node_db_list, node_list, instance_db_list, instance_list = self.convert_nodeinfo_todb(cluster, k8s_scale_nodes)
         NodeSQL.create_node_list(node_db_list)
         # 保存instance信息到数据库
-        instance_db_list, instance_list = self.convert_instance_todb(cluster, k8s_scale_nodes)
+        # instance_db_list, instance_list = self.convert_instance_todb(cluster, k8s_scale_nodes)
         InstanceSQL.create_instance_list(instance_db_list)
         return node_list, instance_list
 
@@ -186,8 +195,8 @@ class NodeService:
                 if conf.role == "master":
                     raise ValueError("The expanded node cannot be the master node.")
             # 从集群数据库里获取这个集群的集群信息，然后拼接出一个扩容的信息，或者从output.tfvars.json信息里获取
-            cluster_service = ClusterService()
-            clust_dbinfo = cluster_service.get_cluster(cluster.id)
+            # cluster_service = ClusterService()
+            # clust_dbinfo = cluster_service.get_cluster(cluster.id)
 
             output_file = os.path.join(BASE_DIR, "dingo_command", "ansible-deploy", "inventory", str(cluster.id),
                                        "terraform", "output.tfvars.json")
@@ -201,7 +210,7 @@ class NodeService:
             if cluster.kube_info.number_master > 1:
                 lb_enbale = cluster.kube_info.loadbalancer_enabled
 
-            cluster_info_db = self.convert_clusterinfo_todb(cluster)
+            cluster_info_db = self.convert_clusterinfo_todb(cluster.id, cluster.name)
             ClusterSQL.update_cluster(cluster_info_db)
             k8s_nodes = content["nodes"]
             k8s_scale_nodes = {}
@@ -228,7 +237,7 @@ class NodeService:
             # 调用celery_app项目下的work.py中的create_cluster方法
             result = celery_app.send_task("dingo_command.celery_api.workers.create_k8s_cluster",
                                           args=[tfvars.dict(), cluster.dict(), node_list, instance_list, scale])
-            return result
+            return result.id
         except Fail as e:
             raise e
         except Exception as e:
@@ -236,33 +245,32 @@ class NodeService:
             traceback.print_exc()
             raise e
 
-    def delete_node(self, node_list_info):
-        if not node_list_info:
+    def delete_node(self, node):
+        if not node:
             return None
         # 详情
         try:
-            cluster_id = node_list_info.cluter_id
-            node_list = node_list_info.node_list
+            cluster_id = node.cluster_id
+            cluster_name = node.cluster_name
             extravars = {}
-            for node in node_list:
-                extravars[node.name] = node.admin_address
-                if node.role == "master":
-                    raise ValueError("node’s role is not master")
+            extravars["node"] = node.name
+            if node.role == "master":
+                raise ValueError("node’s role is not master")
 
             # 写入集群的状态为正在缩容的状态，防止其他缩容的动作重复执行
-            cluster_info_db = self.update_clusterinfo_todb(cluster_id, node_list)
+            cluster_info_db = self.update_clusterinfo_todb(cluster_id, cluster_name)
             ClusterSQL.update_cluster(cluster_info_db)
             # 写入节点的状态为正在deleting的状态
-            nodes_info_db = self.update_nodes_todb(node_list)
-            NodeSQL.update_node_list(nodes_info_db)
+            node_info_db, node_dict = self.update_nodes_todb(node)
+            NodeSQL.update_node(node_info_db)
             # 写入instance的状态为正在deleting的状态
-            instance_list_db, instance_list = self.update_instances_todb(node_list)
-            InstanceSQL.update_instance_list(instance_list_db)
+            instance_info_db, instance_dict = self.update_instances_todb(node)
+            InstanceSQL.update_instance(instance_info_db)
 
             # 调用celery_app项目下的work.py中的delete_cluster方法
             result = celery_app.send_task("dingo_command.celery_api.workers.delete_node",
-                                          args=[cluster_id, node_list.dict(), instance_list, extravars])
-            return result
+                                          args=[cluster_id, cluster_name, node_dict, instance_dict, extravars])
+            return result.id
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -270,6 +278,7 @@ class NodeService:
 
     def convert_nodeinfo_todb(self, cluster: ClusterObject, k8s_scale_nodes):
         nodeinfo_list = []
+        instance_list = []
 
         if not cluster or not hasattr(cluster, 'node_config') or not cluster.node_config:
             return [], []
@@ -287,12 +296,37 @@ class NodeService:
                 worker_usr = node_conf.user
                 worker_password = node_conf.password
                 worker_image = node_conf.image
-                worker_private_key = node_conf.private_key
                 worker_auth_type = node_conf.auth_type
                 worker_security_group = node_conf.security_group
                 worker_flavor_id = node_conf.flavor_id
 
         for worker_node in k8s_scale_nodes:
+            instance_db = InstanceDB()
+            instance_db.id = str(uuid.uuid4())
+            instance_db.node_type = worker_type
+            instance_db.cluster_id = cluster.id
+            instance_db.cluster_name = cluster.name
+            instance_db.project_id = cluster.project_id
+            instance_db.server_id = ""
+            instance_db.operation_system = ""
+            instance_db.cpu = 0
+            instance_db.gpu = 0
+            instance_db.mem = 0
+            instance_db.disk = 0
+            instance_db.region = cluster.region_name
+            instance_db.user = worker_usr
+            instance_db.password = worker_password
+            instance_db.image_id = worker_image
+            instance_db.openstack_id = worker_openstack_id
+            instance_db.security_group = worker_security_group
+            instance_db.flavor_id = worker_flavor_id
+            instance_db.status = "creating"
+            instance_db.ip_address = ""
+            instance_db.name = cluster.name + "-" + worker_node
+            instance_db.floating_ip = ""
+            instance_db.create_time = datetime.now()
+            instance_list.append(instance_db)
+
             node_db = NodeDB()
             node_db.id = str(uuid.uuid4())
             node_db.node_type = worker_type
@@ -301,6 +335,7 @@ class NodeService:
             node_db.region = cluster.region_name
             node_db.role = "worker"
             node_db.user = worker_usr
+            node_db.instance_id = instance_db.id
             node_db.password = worker_password
             node_db.image = worker_image
             node_db.private_key = worker_private_key
@@ -313,6 +348,7 @@ class NodeService:
             node_db.bus_address = ""
             node_db.create_time = datetime.now()
             nodeinfo_list.append(node_db)
+
         node_list_dict = []
         for node in nodeinfo_list:
             # Create a serializable dictionary from the NodeDB object
@@ -337,9 +373,33 @@ class NodeService:
                 "create_time": node.create_time.isoformat() if node.create_time else None
             }
             node_list_dict.append(node_dict)
+
+        instance_list_dict = []
+        for instance in instance_list:
+            # Create a serializable dictionary from the instanceDB object
+            instance_dict = {
+                "id": instance.id,
+                "instance_type": instance.node_type,
+                "cluster_id": instance.cluster_id,
+                "cluster_name": instance.cluster_name,
+                "region": instance.region,
+                "user": instance.user,
+                "password": instance.password,
+                "image_id": instance.image_id,
+                "project_id": instance.project_id,
+                "security_group": instance.security_group,
+                "flavor_id": instance.flavor_id,
+                "status": instance.status,
+                "name": instance.name,
+                "create_time": instance.create_time.isoformat() if instance.create_time else None
+            }
+            instance_list_dict.append(instance_dict)
+
+        # Convert the list of dictionaries to a JSON string
+        instance_list_json = json.dumps(instance_list_dict)
         # Convert the list of dictionaries to a JSON string
         node_list_json = json.dumps(node_list_dict)
-        return nodeinfo_list, node_list_json
+        return nodeinfo_list, node_list_json, instance_list, instance_list_json
 
     def convert_instance_todb(self, cluster: ClusterObject, k8s_nodes):
         instance_list = []
@@ -371,10 +431,10 @@ class NodeService:
             instance_db.project_id = cluster.project_id
             instance_db.server_id = ""
             instance_db.operation_system = ""
-            instance_db.cpu = ""
-            instance_db.gpu = ""
-            instance_db.mem = ""
-            instance_db.disk = ""
+            instance_db.cpu = 0
+            instance_db.gpu = 0
+            instance_db.mem = 0
+            instance_db.disk = 0
             instance_db.region = cluster.region_name
             instance_db.user = worker_usr
             instance_db.password = worker_password

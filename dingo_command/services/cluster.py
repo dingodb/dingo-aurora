@@ -8,13 +8,14 @@ from openpyxl.styles import Border, Side
 
 from dingo_command.celery_api.celery_app import celery_app
 
-from dingo_command.db.models.cluster.sql import ClusterSQL,TaskSQL,ParamSQL
+from dingo_command.db.models.cluster.sql import ClusterSQL, TaskSQL, ParamSQL
 from dingo_command.db.models.node.sql import NodeSQL
 from dingo_command.db.models.instance.sql import InstanceSQL
 from math import ceil
 from oslo_log import log
 
-from dingo_command.api.model.cluster import ClusterTFVarsObject, NodeGroup, ClusterObject, KubeClusterObject, NetworkConfigObject,NodeConfigObject
+from dingo_command.api.model.cluster import ClusterTFVarsObject, NodeGroup, ClusterObject, KubeClusterObject, \
+    NetworkConfigObject, NodeConfigObject
 
 from dingo_command.db.models.cluster.models import Cluster as ClusterDB
 from dingo_command.db.models.node.models import NodeInfo as NodeDB
@@ -24,10 +25,7 @@ from dingo_command.common.nova_client import NovaClient, nova_client
 from dingo_command.services.custom_exception import Fail
 from dingo_command.services.system import SystemService
 
-
-
 LOG = log.getLogger(__name__)
-
 
 # 定义边框样式
 thin_border = Border(
@@ -39,13 +37,14 @@ thin_border = Border(
 
 system_service = SystemService()
 
+
 class ClusterService:
 
     def get_az_value(self, node_type):
         """根据节点类型返回az值"""
         return "nova" if node_type == "vm" else ""
 
-    def generate_k8s_nodes(self, cluster:ClusterObject, k8s_masters, k8s_nodes):
+    def generate_k8s_nodes(self, cluster: ClusterObject, k8s_masters, k8s_nodes):
         # 在这里要判断cluster的类型是不是k8s的类型，如果是才需要生成k8s_masters和k8s_nodes
         if cluster.type != "kubernetes":
             return [], []
@@ -109,7 +108,7 @@ class ClusterService:
                     node_db.bus_address = ""
                     node_db.create_time = datetime.now()
                     node_db_list.append(node_db)
-                    master_index=master_index+1
+                    master_index = master_index + 1
             if node.role == "worker" and node.type == "vm":
                 cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
                 operation_system = self.get_image_info(node.image)
@@ -166,7 +165,7 @@ class ClusterService:
                     node_db.bus_address = ""
                     node_db.create_time = datetime.now()
                     node_db_list.append(node_db)
-                    node_index=node_index+1
+                    node_index = node_index + 1
             if node.role == "worker" and node.type == "baremental":
                 cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
                 operation_system = self.get_image_info(node.image)
@@ -223,7 +222,7 @@ class ClusterService:
                     node_db.bus_address = ""
                     node_db.create_time = datetime.now()
                     node_db_list.append(node_db)
-                    node_index=node_index+1
+                    node_index = node_index + 1
         # 保存node信息到数据库
         NodeSQL.create_node_list(node_db_list)
         InstanceSQL.create_instance_list(instance_db_list)
@@ -297,7 +296,7 @@ class ClusterService:
             import traceback
             traceback.print_exc()
             return None
-    
+
     def get_cluster(self, cluster_id):
         if not cluster_id:
             return None
@@ -332,22 +331,22 @@ class ClusterService:
                 gpu=cluster.gpu,
                 cpu=cluster.cpu,
                 mem=cluster.mem,
-                gpu_mem = cluster.gpu_mem,
+                gpu_mem=cluster.gpu_mem,
                 network_config=network_config,
                 extra=cluster.extra
             )
-            #查询网络信息
+            # 查询网络信息
             neutron_api = neutron.API()  # 创建API类的实例
             if cluster.admin_network_id != "null":
                 admin_network = neutron_api.get_network_by_id(cluster.admin_network_id)
                 res_cluster.network_config.admin_network_name = admin_network.get("name")
-            if cluster.admin_subnet_id != "null":   
+            if cluster.admin_subnet_id != "null":
                 admin_subnet = neutron_api.get_subnet_by_id(cluster.admin_subnet_id)
                 res_cluster.network_config.admin_cidr = admin_subnet.get("cidr")
             if cluster.bus_network_id != "null":
                 bus_network = neutron_api.get_network_by_id(cluster.bus_network_id)
                 res_cluster.network_config.bus_network_name = bus_network.get("name")
-            if cluster.bus_subnet_id != "null":   
+            if cluster.bus_subnet_id != "null":
                 bus_subnet = neutron_api.get_subnet_by_id(cluster.bus_subnet_id)
                 res_cluster.network_config.bus_cidr = bus_subnet.get("cidr")
             # 空
@@ -360,8 +359,8 @@ class ClusterService:
                     node_info = NodeConfigObject()
                     node_info.auth_type = n.auth_type
                     node_info.status = n.status
-                    node_info.instance_id = n.instance_id   
-                
+                    node_info.instance_id = n.instance_id
+
             if not res or not res.get("data"):
                 return None
             # 返回第一条数据
@@ -392,11 +391,10 @@ class ClusterService:
             external_net = neutron_api.list_external_networks()
 
             lb_enbale = False
-            if cluster.kube_info.number_master>1 and cluster.type == "kubernetes":
+            if cluster.kube_info.number_master > 1 and cluster.type == "kubernetes":
                 lb_enbale = cluster.kube_info.loadbalancer_enabled
-           
 
-            #组装cluster信息为ClusterTFVarsObject格式
+            # 组装cluster信息为ClusterTFVarsObject格式
             cluster.id = cluster_info_db.id
             k8s_masters = {}
             k8s_nodes = {}
@@ -406,9 +404,9 @@ class ClusterService:
             instance_db_list, instance_bm_list = self.convert_instance_todb(cluster, k8s_nodes)
             InstanceSQL.create_instance_list(instance_db_list)
             # 创建terraform变量
-            
+
             tfvars = ClusterTFVarsObject(
-                id = cluster_info_db.id,
+                id=cluster_info_db.id,
                 cluster_name=cluster.name,
                 image=cluster.node_config[0].image,
                 nodes=k8s_nodes,
@@ -418,27 +416,27 @@ class ClusterService:
                 use_existing_network=False,
                 ssh_user=cluster.node_config[0].user,
                 k8s_master_loadbalancer_enabled=lb_enbale,
-                number_of_k8s_masters = cluster.kube_info.number_master
-                )
+                number_of_k8s_masters=cluster.kube_info.number_master
+            )
             if cluster.node_config[0].auth_type == "password":
                 tfvars.password = cluster.node_config[0].password
             elif cluster.node_config[0].auth_type == "keypair":
                 tfvars.password = ""
-            #组装cluster信息为ClusterTFVarsObject格式
+            # 组装cluster信息为ClusterTFVarsObject格式
             if cluster.type == "baremental":
                 tfvars.number_of_k8s_masters = 0
                 result = celery_app.send_task("dingo_command.celery_api.workers.create_cluster",
-                                          args=[tfvars.dict(), cluster.dict(), instance_bm_list ])
+                                              args=[tfvars.dict(), cluster.dict(), instance_bm_list])
             elif cluster.type == "kubernetes":
                 result = celery_app.send_task("dingo_command.celery_api.workers.create_k8s_cluster",
-                                          args=[tfvars.dict(), cluster.dict(), node_list, instance_list ])
+                                              args=[tfvars.dict(), cluster.dict(), node_list, instance_list])
             elif cluster.type == "slurm":
                 pass
             else:
                 pass
             # 成功返回资产id
             return cluster_info_db
-            
+
         except Fail as e:
             raise e
 
@@ -448,7 +446,7 @@ class ClusterService:
         # 详情
         try:
             # 更新集群状态为删除中
-            
+
             # 根据id查询
             query_params = {}
             query_params["id"] = cluster_id
@@ -474,7 +472,7 @@ class ClusterService:
                     node.update_time = datetime.now()
                     node_list_db.append(node)
                 NodeSQL.update_node_list(node_list_db)
-                
+
             instance_query_params = {"cluster_id": cluster_id}
             instance_res = InstanceSQL.list_instances(instance_query_params, 1, -1, None, None)
             if instance_res and instance_res[0] > 0:
@@ -499,8 +497,8 @@ class ClusterService:
             import traceback
             traceback.print_exc()
             raise e
-    
-    def convert_clusterinfo_todb(self, cluster:ClusterObject):
+
+    def convert_clusterinfo_todb(self, cluster: ClusterObject):
         cluster_info_db = ClusterDB()
 
         cluster_info_db.id = str(uuid.uuid4())
@@ -538,8 +536,8 @@ class ClusterService:
                         if ':' in pci_alias:
                             gpu_value = pci_alias.split(':')[1].strip("'")
                             gpu_total += int(gpu_value)
-                    #gpu_mem_total += flavor['extra_specs']['gpu_mem']
-                #查询flavor信息
+                    # gpu_mem_total += flavor['extra_specs']['gpu_mem']
+                # 查询flavor信息
             elif node.role == "worker" and node.type == "baremental":
                 flavor = nova_client.nova_get_flavor(node.flavor_id)
                 cpu_total += flavor['vcpus']
@@ -550,11 +548,11 @@ class ClusterService:
         cluster_info_db.gpu = gpu_total
         cluster_info_db.cpu = cpu_total
         cluster_info_db.mem = mem_total
-        #gpu_mem_total = gpu_mem_total
+        # gpu_mem_total = gpu_mem_total
 
         return cluster_info_db
 
-    def convert_instance_todb(self, cluster:ClusterObject, k8s_nodes):
+    def convert_instance_todb(self, cluster: ClusterObject, k8s_nodes):
         if cluster.type != "baremental":
             return [], []
         instance_db_list = []
@@ -672,7 +670,6 @@ class ClusterService:
 
 
 class TaskService:
-    
     class TaskMessage(Enum):
         instructure_check = "参数校验"
         instructure_create = "创建基础设施"
@@ -681,8 +678,7 @@ class TaskService:
         controler_deploy = "配置kubernetes控制面"
         worker_deploy = "配置kubernetes工作节点"
         component_deploy = "安装组件"
-        
-    
+
     class TaskDetail(Enum):
         instructure_check = "instructure check passed"
         instructure_create = "instructure create success"
@@ -691,7 +687,7 @@ class TaskService:
         controler_deploy = "control plane deploy success"
         worker_deploy = "worker node deploy success"
         component_deploy = "component deploy success"
-        
+
     def get_tasks(self, cluster_id):
         if not cluster_id:
             return None
@@ -702,7 +698,7 @@ class TaskService:
             query_params["cluster_id"] = cluster_id
             res = TaskSQL.list(query_params, None, None)
             # 空
-            if not res :
+            if not res:
                 return None
             # 返回第一条数据
             return res
