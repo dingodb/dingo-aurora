@@ -67,15 +67,22 @@ class RabbitMqConfigService:
             if not user_name or not password or not src_mq_url:
                 print("rabbit mq user name or password or src_mq_url is empty ")
                 return
+            # 与中心region的连接方式使用1对1的队列方式
+            center_transport_url_index = 0
             # 遍历需要创建的shovel的队列
             for shovel_name, queue_name in RABBITMQ_SHOVEL_QUEUE.items():
                 # 当前环境的mq管理地址RabbitMQ 管理 API 的 URL 和认证信息
                 shovel_url = "http://" + MY_IP + ":" + MQ_MANAGE_PORT + MQ_SHOVEL_ADD_URL + shovel_name + "_" +  MY_IP
                 print("shovel_url: " + shovel_url)
                 # 遍历中心region的mq的url
-                dest_mq_url_array = []
-                for temp_url in center_transport_url_array:
-                    dest_mq_url_array.append("amqp://" + temp_url)
+                # dest_mq_url_array = []
+                # for temp_url in center_transport_url_array:
+                #     dest_mq_url_array.append("amqp://" + temp_url)
+                # 根据中心region的url的长度取余
+                center_transport_url_index = center_transport_url_index % len(center_transport_url_array)
+                # 获取中心region的mq的url
+                dest_mq_url = "amqp://" + center_transport_url_array[center_transport_url_index]
+                center_transport_url_index += 1
                 # 默认用户名和密码
                 auth = (user_name, password)
                 # Shovel 配置
@@ -83,7 +90,7 @@ class RabbitMqConfigService:
                     "value": {
                         "src-uri": "amqp://" + src_mq_url,
                         "src-queue": queue_name,
-                        "dest-uri": dest_mq_url_array,
+                        "dest-uri": dest_mq_url,
                         "dest-queue": queue_name,
                         "ack-mode": "on-confirm",
                         "reconnect-delay": 5
