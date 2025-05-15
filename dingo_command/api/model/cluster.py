@@ -127,3 +127,6 @@ class NodeRemoveObject(BaseModel):
     cluster_id: Optional[str] = Field(None, description="集群id")
     node_list: Optional[List[NodeObject]] = Field(None, description="缩容节点列表")
 
+class ScaleNodeObject(BaseModel):
+    id: Optional[str] = Field(None, description="集群名称")
+    node_config: Optional[List[NodeConfigObject]] = Field(None, description="节点配置")
