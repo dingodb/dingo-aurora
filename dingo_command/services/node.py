@@ -330,7 +330,6 @@ class NodeService:
 
             output_file = os.path.join(BASE_DIR, "dingo_command", "ansible-deploy", "inventory", str(cluster.id),
                                        "terraform", "output.tfvars.json")
-            output_file = "/var/lib/dingo_command/ansible-deploy/inventory/a034253e-d725-42db-ae7b-082dfa35d918/terraform/output.tfvars.json"
             with open(output_file) as f:
                 content = json.loads(f.read())
 

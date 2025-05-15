@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Column, String, DateTime, Integer
+from sqlalchemy import Column, String, DateTime, Integer, Text
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -40,4 +40,4 @@ class Instance(Base):
     create_time = Column(DateTime, nullable=True)
     update_time = Column(DateTime, nullable=True)
     description = Column(String(length=255), nullable=True)
-    extra = Column(String(length=255), nullable=True)
+    extra = Column(Text, nullable=True)

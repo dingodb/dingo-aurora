@@ -26,6 +26,8 @@ class NodeSQL:
                 query = query.filter(NodeInfo.cluster_name.like('%' + query_params["cluster_name"] + '%'))
             if "cluster_id" in query_params and query_params["cluster_id"]:
                 query = query.filter(NodeInfo.cluster_id == query_params["cluster_id"])
+            if "status" in query_params and query_params["status"]:
+                query = query.filter(NodeInfo.status == query_params["status"])
             # 总数
             count = query.count()
             # 排序

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dingo_command.db.engines.mysql import get_session
 from dingo_command.db.models.instance.models import Instance
 
-instance_dir_dic= {"create_time":Instance.create_time, "name":Instance.name,"status":Instance.status,
+instance_dir_dic= {"create_time":Instance.create_time, "name":Instance.name, "status":Instance.status,
                   "region_name":Instance.region}
 
 class InstanceSQL:
@@ -26,6 +26,8 @@ class InstanceSQL:
                 query = query.filter(Instance.cluster_name.like('%' + query_params["cluster_name"] + '%'))
             if "cluster_id" in query_params and query_params["cluster_id"]:
                 query = query.filter(Instance.cluster_id == query_params["cluster_id"])
+            if "status" in query_params and query_params["status"]:
+                query = query.filter(Instance.status == query_params["status"])
             # 总数
             count = query.count()
             # 排序

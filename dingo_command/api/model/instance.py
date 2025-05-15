@@ -6,6 +6,7 @@ from dingo_command.api.model.cluster import NetworkConfigObject
 class OpenStackConfigObject(BaseModel):
     openstack_auth_url: Optional[str] = Field(None, description="openstack的url")
     project_id: Optional[str] = Field(None, description="openstack的id")
+    token: Optional[str] = Field(None, description="openstack的id")
     project_name: Optional[str] = Field(None, description="openstack的租户")
     openstack_username: Optional[str] = Field(None, description="openstack的用户")
     openstack_password: Optional[str] = Field(None, description="openstack的用户密码")

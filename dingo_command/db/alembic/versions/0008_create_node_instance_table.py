@@ -50,7 +50,7 @@ def upgrade() -> None:
     sa.Column('create_time', sa.DateTime(), nullable=True),
     sa.Column('update_time', sa.DateTime(), nullable=True),
     sa.Column('description', sa.String(length=255), nullable=True),
-    sa.Column('extra', sa.String(length=255), nullable=True),
+    sa.Column('extra', sa.Text(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_ops_instance_info_id'), 'ops_instance_info', ['id'], unique=False)
@@ -80,7 +80,7 @@ def upgrade() -> None:
     sa.Column('create_time', sa.DateTime(), nullable=True),
     sa.Column('update_time', sa.DateTime(), nullable=True),
     sa.Column('description', sa.String(length=255), nullable=True),
-    sa.Column('extra', sa.String(length=255), nullable=True),
+    sa.Column('extra', sa.Text(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_ops_node_info_id'), 'ops_node_info', ['id'], unique=False)
