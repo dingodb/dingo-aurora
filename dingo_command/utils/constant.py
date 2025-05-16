@@ -78,4 +78,6 @@ MESSAGE_TYPE_TABLE = {
     "Report_Gpu_Consume": "bsm_dws_gpu_consume_info",
     "Report_Gpu_Avg_Allocate": "bsm_dws_gpu_avg_allocate_info",
     "Report_Gpu_Avg_Consume": "bsm_dws_gpu_avg_consume_info",
+    "Report_Dwd_Node_Detail": "bsm_dwd_node_detail_info",
+    "Report_Dwd_Pod_Detail": "bsm_dwd_pod_detail_info",
 }
