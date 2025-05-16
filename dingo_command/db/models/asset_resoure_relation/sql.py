@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func
+from sqlalchemy import func, asc, desc
 
 from dingo_command.db.engines.mysql import get_session
 from dingo_command.db.models.asset.models import AssetBasicInfo
@@ -33,11 +33,22 @@ class AssetResourceRelationSQL:
             # 总数
             count = query.count()
             # 排序
-            if sort_keys is not None and sort_keys  == "resource_project_name":
-                if sort_dirs == "ascend" or sort_dirs is None:
-                    query = query.order_by(AssetResourceRelationInfo.resource_project_name.asc())
-                elif sort_dirs == "descend":
-                    query = query.order_by(AssetResourceRelationInfo.resource_project_name.desc())
+            if sort_keys is not None:
+                if sort_keys  == "resource_project_name":
+                    if sort_dirs == "ascend" or sort_dirs is None:
+                        query = query.order_by(AssetResourceRelationInfo.resource_project_name.asc())
+                    elif sort_dirs == "descend":
+                        query = query.order_by(AssetResourceRelationInfo.resource_project_name.desc())
+                elif sort_keys  == "resource_count":
+                    if sort_dirs == "ascend" or sort_dirs is None:
+                        query = query.order_by(asc("resource_count"))
+                    elif sort_dirs == "descend":
+                        query = query.order_by(desc("resource_count"))
+                elif sort_keys == "asset_count":
+                    if sort_dirs == "ascend" or sort_dirs is None:
+                        query = query.order_by(asc("asset_count"))
+                    elif sort_dirs == "descend":
+                        query = query.order_by(desc("asset_count"))
             else:
                 query = query.order_by(AssetResourceRelationInfo.create_date.desc())
             # 分页条件
@@ -162,20 +173,19 @@ class AssetResourceRelationSQL:
                 distinct(AssetResourceRelationInfo.resource_project_id).count()
 
     @classmethod
-    def get_all_vpc_resource_status_info(cls):
+    def get_all_resource_status_info(cls):
         session = get_session()
         with session.begin():
             return session.query(AssetResourceRelationInfo.resource_id,
                                  AssetResourceRelationInfo.resource_name,
-                                 AssetResourceRelationInfo.resource_status).filter(AssetResourceRelationInfo.resource_project_id.isnot(None)).all()
+                                 AssetResourceRelationInfo.resource_status).all()
 
     @classmethod
-    def get_asset_id_empty_vpc_resource_count(cls):
+    def get_asset_id_empty_resource_count(cls):
         session = get_session()
         with session.begin():
             return session.query(AssetResourceRelationInfo). \
-                filter(AssetResourceRelationInfo.asset_id.is_(None)). \
-                filter(AssetResourceRelationInfo.resource_project_id.isnot(None)).count()
+                filter(AssetResourceRelationInfo.asset_id.is_(None)).count()
 
     @classmethod
     def get_asset_id_not_empty_list(cls):
@@ -185,13 +195,12 @@ class AssetResourceRelationSQL:
                 filter(AssetResourceRelationInfo.asset_id.isnot(None)).all()
 
     @classmethod
-    def get_vpc_resource_relation_asset_failure_count(cls):
+    def get_resource_relation_asset_failure_count(cls):
         session = get_session()
         with session.begin():
             query = session.query(AssetResourceRelationInfo). \
                         outerjoin(AssetBasicInfo, AssetBasicInfo.id == AssetResourceRelationInfo.asset_id). \
                         filter(AssetResourceRelationInfo.asset_id.isnot(None)). \
-                        filter(AssetResourceRelationInfo.resource_project_id.isnot(None)). \
                         filter(AssetBasicInfo.asset_status == "3")
             return query.count()
 

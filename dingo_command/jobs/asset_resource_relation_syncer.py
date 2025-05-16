@@ -29,7 +29,7 @@ def fetch_relation_info():
     try:
         # 1、读取裸金属列表
         node_list = ironic_client.ironic_list_nodes()
-        print(f"裸金属列表数据: {node_list}")
+        # print(f"裸金属列表数据: {node_list}")
         # 2、读取所有的资产数据
         asset_list = get_all_asset_list()
         print(f"资产数据数目：{len(asset_list)}, 裸机节点数目：{len(node_list)}")
