@@ -1,6 +1,7 @@
 # 资产的service层
 from enum import Enum
 import json
+import random
 import uuid
 from datetime import datetime
 
@@ -23,7 +24,7 @@ from dingo_command.common import neutron
 from dingo_command.common.nova_client import NovaClient, nova_client
 from dingo_command.services.custom_exception import Fail
 from dingo_command.services.system import SystemService
-
+from dingo_command.services import CONF
 
 
 LOG = log.getLogger(__name__)
@@ -36,7 +37,7 @@ thin_border = Border(
     top=Side(border_style="thin", color="000000"),  # 上边框
     bottom=Side(border_style="thin", color="000000")  # 下边框
 )
-
+auth_url = CONF.DEFAULT.auth_url
 system_service = SystemService()
 
 class ClusterService:
@@ -61,7 +62,8 @@ class ClusterService:
                         az=self.get_az_value(node.type),
                         flavor=node.flavor_id,
                         floating_ip=True,
-                        etcd=True
+                        etcd=True,
+                        image_id=node.image
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
@@ -326,15 +328,16 @@ class ClusterService:
                 region_name=cluster.region_name,
                 type=cluster.type,
                 kube_info=kube_info,
-                create_time=cluster.create_time,
-                update_time=cluster.update_time,
+                created_at=cluster.create_time.timestamp() * 1000,
+                updated_at=cluster.update_time.timestamp() * 1000,
                 description=cluster.description,
                 gpu=cluster.gpu,
                 cpu=cluster.cpu,
                 mem=cluster.mem,
                 gpu_mem = cluster.gpu_mem,
                 network_config=network_config,
-                extra=cluster.extra
+                extra=cluster.extra,
+                private_key=cluster.private_key
             )
             #查询网络信息
             neutron_api = neutron.API()  # 创建API类的实例
@@ -359,8 +362,9 @@ class ClusterService:
                 for n in node_res:
                     node_info = NodeConfigObject()
                     node_info.status = n.status
-                    node_info.instance_id = n.instance_id   
-                
+                    node_info.instance_id = n.instance_id
+                    nodeinfos = nodeinfos.append(node_info) 
+            res_cluster.node_config = nodeinfos
             if not res or not res.get("data"):
                 return None
             # 返回第一条数据
@@ -379,8 +383,26 @@ class ClusterService:
         if res.get("total") > 0:
             raise Fail("集群名称已存在")
         return True
-
-    def create_cluster(self, cluster: ClusterObject):
+    def generate_random_cidr(self):
+        import random
+        
+        # 第一部分固定为 10
+        first_octet = 10
+        
+        # 第二部分范围从 100 到 130
+        second_octet = random.randint(100, 130)
+        
+        # 第三部分范围从 0 到 255
+        third_octet = random.randint(0, 255)
+        
+        # 第四部分固定为 0，因为是 /24 网段
+        fourth_octet = 0
+        
+        # 生成 CIDR 字符串
+        cidr = f"{first_octet}.{second_octet}.{third_octet}.{fourth_octet}/24"
+        
+        return cidr
+    def create_cluster(self, cluster: ClusterObject, token):
         # 数据校验 todo
         self.check_cluster_param(cluster)
         try:
@@ -405,20 +427,30 @@ class ClusterService:
             instance_db_list, instance_bm_list = self.convert_instance_todb(cluster, k8s_nodes)
             InstanceSQL.create_instance_list(instance_db_list)
             # 创建terraform变量
-            
+            # 生成一个随机的私有cidr
+            subnet_cidr = self.generate_random_cidr()
+            #校验是否重复
+            floatingip_pool,public_floatingip_pool,public_subnetids,external_subnetids,external_net_id= self.get_floatip_pools(neutron_api, external_net)
+                        
             tfvars = ClusterTFVarsObject(
                 id = cluster_info_db.id,
                 cluster_name=cluster.name,
                 image=cluster.node_config[0].image,
                 nodes=k8s_nodes,
-                subnet_cidr="192.168.10.0/24",
-                floatingip_pool=external_net[0]['name'],
-                external_net=external_net[0]['id'],
+                subnet_cidr=subnet_cidr,
+                floatingip_pool=floatingip_pool,
+                public_floatingip_pool=public_floatingip_pool,
+                public_subnetids=public_subnetids,
+                external_subnetids=external_subnetids,
+                external_net=external_net_id,
                 use_existing_network=False,
                 ssh_user=cluster.node_config[0].user,
                 k8s_master_loadbalancer_enabled=lb_enbale,
                 number_of_k8s_masters = 1,
-                number_of_k8s_masters_no_floating_ip = cluster.kube_info.number_master - 1
+                number_of_k8s_masters_no_floating_ip = cluster.kube_info.number_master - 1,
+                token = token,
+                auth_url = auth_url,
+                tenant_id=cluster.project_id,
                 )
             if cluster.node_config[0].auth_type == "password":
                 tfvars.password = cluster.node_config[0].password
@@ -441,6 +473,31 @@ class ClusterService:
             
         except Fail as e:
             raise e
+
+    def get_floatip_pools(self, neutron_api, external_net):
+        floatingip_pool = ""
+        public_floatingip_pool=""
+        external_net_id = ""
+        external_subnetids = []
+        public_subnetids = []
+        for net in external_net:
+            for subnet_id in net["subnets"]:
+                subnet = neutron_api.get_subnet_by_id(subnet_id)
+                import ipaddress; 
+                if ipaddress.ip_network(subnet["cidr"]).is_private:
+                    if floatingip_pool=="":
+                        floatingip_pool=net["name"]
+                        external_net_id = net["id"]
+                    external_subnetids.append(subnet_id)
+                elif not ipaddress.ip_network(subnet["cidr"]).is_private:
+                    if public_floatingip_pool=="":
+                        public_floatingip_pool=net["name"]
+                    public_subnetids = public_subnetids.append(subnet_id)
+        if public_floatingip_pool == "":
+            public_floatingip_pool = floatingip_pool
+        if public_subnetids == []:
+            public_subnetids = external_subnetids     
+        return floatingip_pool,public_floatingip_pool,public_subnetids,external_subnetids,external_net_id
 
     def delete_cluster(self, cluster_id):
         if not cluster_id:

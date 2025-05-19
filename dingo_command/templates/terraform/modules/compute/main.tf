@@ -1,3 +1,4 @@
+
 data "openstack_images_image_v2" "vm_image" {
   count = var.image_uuid == "" ? 1 : 0
   most_recent = true
@@ -40,7 +41,7 @@ resource "openstack_compute_keypair_v2" "key_pair" {
 
 # Check if flavor exists
 data "openstack_compute_flavor_v2" "k8s_control" {
-  name = "k8s_control_plan"  # 替换为你的 Flavor 名称
+  name = "command_4u8g110G"  # 替换为你的 Flavor 名称
 }
 
 resource "openstack_networking_secgroup_v2" "secgroup" {
@@ -227,9 +228,9 @@ resource "openstack_compute_instance_v2" "k8s-master" {
     depends_on       = var.network_router_id
     use_access_ip    = var.use_access_ip
   }
-  #depends_on = [
-  #  openstack_networking_trunk_v2.trunk_masters
-  #]
+  depends_on = [
+    openstack_networking_secgroup_v2.secgroup
+  ]
   provisioner "local-exec" {
     command = "%{if var.password == ""}sed -e s#USER#${var.ssh_user}# -e s#PRIVATE_KEY_FILE#${var.private_key_path}# -e s#BASTION_ADDRESS#${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}# ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}"
   }
@@ -312,9 +313,9 @@ resource "openstack_compute_instance_v2" "k8s-master-no-floatip" {
     depends_on       = var.network_router_id
     use_access_ip    = var.use_access_ip
   }
-  #depends_on = [
-  #  openstack_networking_trunk_v2.trunk_masters
-  #]
+  depends_on = [
+    openstack_networking_secgroup_v2.secgroup
+  ]
   provisioner "local-exec" {
     command = "%{if var.password == ""}sed -e s#USER#${var.ssh_user}# -e s#PRIVATE_KEY_FILE#${var.private_key_path}# -e s#BASTION_ADDRESS#${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}# ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}"
   }
@@ -414,9 +415,9 @@ resource "openstack_compute_instance_v2" "nodes" {
     depends_on       = var.network_router_id
     use_access_ip    = var.use_access_ip
   }
-  #depends_on = [
-  #  openstack_networking_trunk_v2.trunk_nodes
-  #]
+  depends_on = [
+    openstack_networking_secgroup_v2.secgroup
+  ]
   provisioner "local-exec" {
     command = "%{if each.value.floating_ip} %{if var.password == ""}sed -e s#USER#${var.ssh_user}# -e s#PRIVATE_KEY_FILE#${var.private_key_path}# -e s#BASTION_ADDRESS#${element([for key, value in var.k8s_master_fips : value.address], 0)}# ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element([for key, value in var.k8s_master_fips : value.address], 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}%{else}true%{endif}"
   }

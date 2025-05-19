@@ -1,3 +1,9 @@
+provider "openstack" {
+  token    = var.token
+  auth_url =  var.auth_url
+  tenant_id = var.tenant_id
+}
+
 module "network" {
   source = "./modules/network"
   number_subnet         = var.number_subnet
@@ -14,6 +20,9 @@ module "network" {
   admin_subnet_id       = var.admin_subnet_id
   bus_subnet_id         = var.bus_subnet_id
   use_existing_network  = var.use_existing_network
+  token = var.token
+  auth_url = var.auth_url
+  tenant_id = var.tenant_id
 }
 
 module "ips" {
@@ -23,6 +32,7 @@ module "ips" {
   number_of_k8s_masters_no_etcd = var.number_of_k8s_masters_no_etcd
   number_of_nodes               = var.number_of_nodes
   floatingip_pool               = var.floatingip_pool
+  external_subnetids            = var.external_subnetids
   number_of_bastions            = var.number_of_bastions
   external_net                  = var.external_net
   admin_network_name            = var.admin_network_name
@@ -33,6 +43,9 @@ module "ips" {
   k8s_master_fips               = var.k8s_master_fips
   bastion_fips                  = var.bastion_fips
   router_internal_port_id       = module.network.router_internal_port_id
+  token = var.token
+  auth_url = var.auth_url
+  tenant_id = var.tenant_id
 }
 
 module "compute" {
@@ -120,6 +133,9 @@ module "compute" {
   ]
   key_pair                                     = var.key_pair
   password                                     = var.password
+  token = var.token
+  auth_url = var.auth_url
+  tenant_id = var.tenant_id
 }
 
 module "loadbalancer" {
@@ -127,13 +143,16 @@ module "loadbalancer" {
 
   cluster_name                          = var.cluster_name
   subnet_id                             = module.network.admin_subnet_id
-  floatingip_pool                       = var.floatingip_pool
+  public_floatingip_pool                = var.public_floatingip_pool
+  public_subnetids                      = var.public_subnetids
   k8s_master_ips                        = module.compute.k8s_master_ips
   k8s_master_loadbalancer_enabled       = var.k8s_master_loadbalancer_enabled
   k8s_master_loadbalancer_listener_port = var.k8s_master_loadbalancer_listener_port
   k8s_master_loadbalancer_server_port   = var.k8s_master_loadbalancer_server_port
   k8s_master_loadbalancer_public_ip     = var.k8s_master_loadbalancer_public_ip
-
+  token = var.token
+  auth_url = var.auth_url
+  tenant_id = var.tenant_id
   depends_on = [
     module.compute.k8s_master
   ]

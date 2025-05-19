@@ -283,3 +283,16 @@ variable "key_pair" {
 variable "password" {
   type = string
 }
+
+variable "token" {
+  type    = string
+  default = ""
+}
+variable "auth_url" {
+  type    = string
+  default = ""
+}
+variable "tenant_id" {
+  type    = string
+  default = ""
+}

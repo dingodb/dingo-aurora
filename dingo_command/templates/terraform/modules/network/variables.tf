@@ -29,3 +29,16 @@ variable "use_existing_network" {
   type        = bool
   default     = false
 }
+
+variable "token" {
+  type    = string
+  default = ""
+}
+variable "auth_url" {
+  type    = string
+  default = ""
+}
+variable "tenant_id" {
+  type    = string
+  default = ""
+}

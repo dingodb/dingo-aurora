@@ -1,5 +1,6 @@
 
 from typing import Dict, Optional, List
+from sqlalchemy import  DateTime
 
 from pydantic import BaseModel, Field
 from dingo_command.api.model.base import DingoopsObject
@@ -39,6 +40,7 @@ class NodeGroup(BaseModel):
     flavor: Optional[str] = Field(None, description="规格")
     floating_ip: Optional[bool] = Field(None, description="浮动ip")
     etcd: Optional[bool] = Field(None, description="是否是etcd节点")
+    image_id: Optional[bool] = Field(None, description="镜像id")
 
 class KubeClusterObject(BaseModel):
     kube_lb_address: Optional[str] = Field(None, description="负载均衡器的浮动ip")
@@ -65,6 +67,13 @@ class ClusterObject(DingoopsObject):
     security_group: Optional[str] = Field(None, description="安全组名称")
     kube_info: Optional[KubeClusterObject] = Field(None, description="k8s信息")
     status: Optional[str] = Field(None, description="集群状态")
+    cpu: Optional[int] = Field(0, description="cpu数量")
+    mem: Optional[int] = Field(0, description="mem数量")
+    gpu: Optional[int] = Field(0, description="cpu数量")
+    gpu_mem: Optional[int] = Field(0, description="gpu_mem数量")
+    node_count: Optional[int] = Field(0, description="节点数量")
+    status_msg: Optional[str] = Field(None, description="集群状态信息")
+    private_key: Optional[str] = Field(None, description="集群私钥")
 
 class NodeObject(DingoopsObject):
     project_id: Optional[str] = Field(None, description="项目id")
@@ -107,6 +116,9 @@ class ClusterTFVarsObject(BaseModel):
     ssh_user: Optional[str] = Field(None, description="用户名")
     password: Optional[str] = Field(None, description="密码")
     floatingip_pool: Optional[str] = Field(None, description="浮动ip池")
+    public_floatingip_pool: Optional[str] = Field(None, description="公网浮动ip池") 
+    external_subnetids: Optional[List[str]] = Field(None, description="公网浮动ip池") 
+    public_subnetids: Optional[List[str]] = Field(None, description="公网浮动ip池") 
     subnet_cidr: Optional[str] = Field(None, description="运行时类型")
     use_existing_network: Optional[bool] = Field(None, description="是否使用已有网络")
     external_net: Optional[str] = Field(None, description="外部网络id")
@@ -121,6 +133,10 @@ class ClusterTFVarsObject(BaseModel):
     number_of_k8s_nodes_no_floating_ip: Optional[int] = Field(0, description="无浮动IP的K8s worker节点数量")
     k8s_master_loadbalancer_enabled: Optional[bool] = Field(False, description="是否启用负载均衡器")
     public_key_path: Optional[str] = Field(None, description="公钥路径")
+    tenant_id: Optional[str] = Field(None, description="租户id")
+    auth_url: Optional[str] = Field(None, description="鉴权url")
+    token: Optional[str] = Field(None, description="token")
+    
 
 
 class NodeRemoveObject(BaseModel):

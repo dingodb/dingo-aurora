@@ -50,6 +50,7 @@ class NodeGroup(BaseModel):
     flavor: Optional[str] = Field(None, description="规格")
     floating_ip: Optional[bool] = Field(None, description="浮动ip")
     etcd: Optional[bool] = Field(None, description="是否是etcd节点")
+    image_id: Optional[bool] = Field(None, description="镜像id")
 
 
 class ClusterTFVarsObject(BaseModel):
@@ -64,6 +65,9 @@ class ClusterTFVarsObject(BaseModel):
     ssh_user: Optional[str] = Field(None, description="用户名")
     password: Optional[str] = Field(None, description="密码")
     floatingip_pool: Optional[str] = Field(None, description="浮动ip池")
+    public_floatingip_pool: Optional[str] = Field(None, description="公网浮动ip池") 
+    external_subnetids: Optional[list[str]] = Field(None, description="公网浮动ip池") 
+    public_subnetids: Optional[list[str]] = Field(None, description="公网浮动ip池") 
     subnet_cidr: Optional[str] = Field(None, description="运行时类型")
     use_existing_network: Optional[bool] = Field(None, description="是否使用已有网络")
     external_net: Optional[str] = Field(None, description="外部网络id")
@@ -79,9 +83,11 @@ class ClusterTFVarsObject(BaseModel):
     k8s_master_loadbalancer_enabled: Optional[bool] = Field(False, description="是否启用负载均衡器")
     private_key_path: Optional[str] = Field(None, description="私钥路径")
     public_key_path: Optional[str] = Field(None, description="公钥路径")
-
-
-def create_infrastructure(cluster: ClusterTFVarsObject, task_info: Taskinfo, region_name: str = "regionOne"):
+    tenant_id: Optional[str] = Field(None, description="租户id")
+    auth_url: Optional[str] = Field(None, description="鉴权url")
+    token: Optional[str] = Field(None, description="token")
+    
+def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, region_name:str = "regionOne"):
     """使用Terraform创建基础设施"""
     try:
 
@@ -92,18 +98,7 @@ def create_infrastructure(cluster: ClusterTFVarsObject, task_info: Taskinfo, reg
         subprocess.run(["cp", "-r", str(TERRAFORM_DIR), str(cluster_dir)], capture_output=True)
         os.chdir(os.path.join(cluster_dir, "terraform"))
         # 初始化terraform
-        # os.environ['https_proxy'] = "172.20.3.88:1088"
-        os.environ['CURRENT_CLUSTER_DIR'] = cluster_dir
-        res = subprocess.run(["terraform", "init"], capture_output=True)
-        if res.returncode != 0:
-            # 发生错误时更新任务状态为"失败"
-            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-            task_info.state = "failed"
-            task_info.detail = res.stderr
-            update_task_state(task_info)
-            print(f"Terraform init error: {res.stderr}")
-            return False
-
+        #os.environ['https_proxy']="10.220.70.88:1088"
         if cluster.password == "":
             if os.path.exists(os.path.join(cluster_dir, "id_rsa")) \
                     and os.path.exists(os.path.join(cluster_dir, "id_rsa.pub")):
@@ -128,10 +123,21 @@ def create_infrastructure(cluster: ClusterTFVarsObject, task_info: Taskinfo, reg
         tfvars_str = json.dumps(cluster, default=lambda o: o.__dict__, indent=2)
         with open("output.tfvars.json", "w") as f:
             f.write(tfvars_str)
-
+            
+        os.environ['CURRENT_CLUSTER_DIR']=cluster_dir
+        res = subprocess.run(["terraform", "init"], capture_output=True)
+        if res.returncode != 0:
+            # 发生错误时更新任务状态为"失败"
+            task_info.end_time =datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "failed"
+            task_info.detail = res.stderr
+            update_task_state(task_info)
+            print(f"Terraform init error: {res.stderr}")
+            return False
+       
         # 执行terraform apply
         # os.environ['OS_CLOUD']=cluster.region_name
-        os.environ['OS_CLOUD'] = region_name
+        #os.environ['OS_CLOUD']=region_name 
         res = subprocess.run([
             "terraform",
             "apply",
@@ -363,13 +369,11 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
                         task_info = component_task
                         TaskSQL.insert(component_task)
                     
-            time.sleep(0.01)
+            #time.sleep(0.01)
             continue
-        print("out: {}".format(runner.stdout.read()))
-        print("err: {}".format(runner.stderr.read()))
-        print(runner.stdout)
-        with open("ansible_debug.log", "a") as log_file:
-            log_file.write(print(runner.stdout))
+        log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "ansible_debug.log")
+        with open(log_file, "a") as log_file:
+            log_file.write(format(runner.stdout.read()))
         thread.join()
         # 检查最终状态
         if runner.rc != 0:
@@ -457,14 +461,13 @@ def get_cluster_kubeconfig(cluster: ClusterTFVarsObject, lb_ip, master_ip, float
 
     print(f"lb_ip: {lb_ip}, master_ip: {master_ip}, float_ip: {float_ip}")
     try:
-
         kubeconfig = ""
         # SSH连接到master节点获取kubeconfig
         if cluster.password != "":
-
             result = subprocess.run(
                 [
                     "ssh",
+                    "-o", "StrictHostKeyChecking=no",
                     f"{cluster.ssh_user}@{float_ip}",
                     "sudo cat /etc/kubernetes/admin.conf"
                 ],
@@ -478,9 +481,11 @@ def get_cluster_kubeconfig(cluster: ClusterTFVarsObject, lb_ip, master_ip, float
             result = subprocess.run(
                 [
                     "ssh",
+                    "-o", "StrictHostKeyChecking=no",
                     "-i", key_file_path,  # SSH私钥路径
                     f"{cluster.ssh_user}@{float_ip}",
                     "sudo cat /etc/kubernetes/admin.conf"
+                    ""
                 ],
                 capture_output=True,
                 text=True,
@@ -499,7 +504,6 @@ def get_cluster_kubeconfig(cluster: ClusterTFVarsObject, lb_ip, master_ip, float
             "server: https://127.0.0.1:6443",
             f"server: https://{ip}:6443"
         )
-
         return kubeconfig
 
     except subprocess.CalledProcessError as e:
@@ -773,13 +777,14 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             raise Exception("Ansible kubernetes deployment failed")
         # 阻塞线程，直到ansible_client.get_playbook_result()返回结果
         # 获取集群的kube_config
-        kube_config = get_cluster_kubeconfig(cluster,lb_ip,master_ip,float_ip)
+        kube_config = get_cluster_kubeconfig(cluster_tfvars,lb_ip,master_ip,float_ip)
         # 更新集群状态为running
         count, db_cluster = ClusterSQL.list_cluster(cluster_dict["id"])
-        db_cluster.kube_config = kube_config
-        db_cluster.status = 'error'
-        db_cluster.error_message = str(e.__str__())
-        ClusterSQL.update_cluster(db_cluster)
+        c = db_cluster[0]
+        c.kube_config = kube_config
+        c.status = 'running'
+        c.error_message = ""
+        ClusterSQL.update_cluster(c)
 
         # 更新集群node的状态为running
         session = get_session()
@@ -873,7 +878,7 @@ def delete_cluster(self, cluster_id, region_name):
 
     os.chdir(terraform_dir)
     # 删除集群
-    os.environ['OS_CLOUD'] = region_name
+    #os.environ['OS_CLOUD'] = region_name
     res = subprocess.run(["terraform", "destroy", "-auto-approve", "-var-file=output.tfvars.json"], capture_output=True)
     if res.returncode != 0:
         # 发生错误时更新任务状态为"失败"

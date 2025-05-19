@@ -27,3 +27,16 @@ variable "k8s_master_fips" {}
 variable "bastion_fips" {}
 
 variable "router_internal_port_id" {}
+variable "token" {
+  type    = string
+  default = ""
+}
+variable "auth_url" {
+  type    = string
+  default = ""
+}
+variable "tenant_id" {
+  type    = string
+  default = ""
+}
+variable "external_subnetids" {}

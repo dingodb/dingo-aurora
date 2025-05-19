@@ -453,3 +453,30 @@ variable "password" {
   type    = string
   default = ""
 }
+
+variable "token" {
+  description = "OpenStack authentication token"
+  type        = string
+  sensitive   = true
+}
+variable "tenant_id" {
+  type    = string
+  default = ""
+}
+variable "auth_url" {
+  description = "OpenStack Keystone auth URL"
+  type        = string
+}
+
+variable "public_floatingip_pool" {
+  type    = string
+  default = ""
+}
+variable "public_subnetids" {
+  type    = list(string)
+  default = []
+}
+variable "external_subnetids" {
+  type    = list(string)
+  default = []
+}

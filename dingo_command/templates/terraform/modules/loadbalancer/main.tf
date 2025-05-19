@@ -43,7 +43,8 @@ resource "openstack_lb_monitor_v2" "monitor" {
 
 resource "openstack_networking_floatingip_v2" "floatip_1" {
   count = var.k8s_master_loadbalancer_enabled && var.k8s_master_loadbalancer_public_ip == "" ? 1 : 0
-  pool = var.floatingip_pool
+  pool = var.public_floatingip_pool
+  subnet_ids = var.public_subnetids
 }
 
 resource "openstack_networking_floatingip_associate_v2" "public_ip" {
