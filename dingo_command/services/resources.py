@@ -169,7 +169,10 @@ class ResourcesService:
 
     # 查询某个资源的监控指标项数据
     def get_resource_metrics_by_resource_id(self, resource_id):
-        temp = {}
+        temp = {"resource_gpu_count": None,
+                "resource_gpu_power": None,
+                "resource_cpu_usage": None,
+                "resource_memory_usage": None}
         # 查询数据
         db_resource_metrics = AssetResourceRelationSQL.get_resource_metrics_by_resource_id(resource_id)
         print(db_resource_metrics)

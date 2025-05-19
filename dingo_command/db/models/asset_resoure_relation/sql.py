@@ -81,15 +81,20 @@ class AssetResourceRelationSQL:
                                   AssetResourceRelationInfo.resource_project_name.label("resource_project_name"),
                                   )
             # 外连接
-            query = query.outerjoin(AssetBasicInfo, AssetBasicInfo.id == AssetResourceRelationInfo.asset_id)
+            query = query.outerjoin(AssetBasicInfo, AssetBasicInfo.id == AssetResourceRelationInfo.asset_id). \
+                outerjoin(ResourceMetrics, ResourceMetrics.resource_id == AssetResourceRelationInfo.resource_id).group_by(AssetResourceRelationInfo.resource_id)
             if 'resource_name' in query_params and query_params['resource_name']:
                 query = query.filter(AssetResourceRelationInfo.resource_name.like('%' + query_params['resource_name'] + '%'))
             if 'resource_status' in query_params and query_params['resource_status']:
-                query = query.filter(AssetResourceRelationInfo.resource_status == query_params['resource_status'])
+                # 状态拆分
+                resource_status_arr = query_params["resource_status"].split(",")
+                query = query.filter(AssetResourceRelationInfo.resource_status.in_(resource_status_arr))
             if 'asset_name' in query_params and query_params['asset_name']:
                 query = query.filter(AssetBasicInfo.name.like('%' + query_params['asset_name'] + '%'))
             if 'asset_status' in query_params and query_params['asset_status']:
-                query = query.filter(AssetBasicInfo.asset_status == query_params['asset_status'])
+                # 状态拆分
+                asset_status_arr = query_params["asset_status"].split(",")
+                query = query.filter(AssetBasicInfo.asset_status.in_(asset_status_arr))
             if 'resource_user_name' in query_params and query_params['resource_user_name']:
                 query = query.filter(AssetResourceRelationInfo.resource_user_name.like('%' + query_params['resource_user_name'] + '%'))
             if 'resource_project_name' in query_params and query_params['resource_project_name']:
@@ -100,11 +105,32 @@ class AssetResourceRelationSQL:
             # 总数
             count = query.count()
             # 排序
-            if sort_keys is not None and sort_keys in resource_detail_list_dir_dic:
-                if sort_dirs == "ascend" or sort_dirs is None:
-                    query = query.order_by(resource_detail_list_dir_dic[sort_keys].asc())
-                elif sort_dirs == "descend":
-                    query = query.order_by(resource_detail_list_dir_dic[sort_keys].desc())
+            if sort_keys is not None:
+                if sort_keys in resource_detail_list_dir_dic:
+                    if sort_dirs == "ascend" or sort_dirs is None:
+                        query = query.order_by(resource_detail_list_dir_dic[sort_keys].asc())
+                    elif sort_dirs == "descend":
+                        query = query.order_by(resource_detail_list_dir_dic[sort_keys].desc())
+                elif sort_keys == "resource_gpu_count":
+                    if sort_dirs == "ascend" or sort_dirs is None:
+                        query = query.filter(ResourceMetrics.name == "gpu_count").order_by(ResourceMetrics.data.asc())
+                    elif sort_dirs == "descend":
+                        query = query.filter(ResourceMetrics.name == "gpu_count").order_by(ResourceMetrics.data.desc())
+                elif sort_keys == "resource_gpu_power":
+                    if sort_dirs == "ascend" or sort_dirs is None:
+                        query = query.filter(ResourceMetrics.name == "gpu_power").order_by(ResourceMetrics.data.asc())
+                    elif sort_dirs == "descend":
+                        query = query.filter(ResourceMetrics.name == "gpu_power").order_by(ResourceMetrics.data.desc())
+                elif sort_keys == "resource_cpu_usage":
+                    if sort_dirs == "ascend" or sort_dirs is None:
+                        query = query.filter(ResourceMetrics.name == "cpu_usage").order_by(ResourceMetrics.data.asc())
+                    elif sort_dirs == "descend":
+                        query = query.filter(ResourceMetrics.name == "cpu_usage").order_by(ResourceMetrics.data.desc())
+                elif sort_keys == "resource_memory_usage":
+                    if sort_dirs == "ascend" or sort_dirs is None:
+                        query = query.filter(ResourceMetrics.name == "memory_usage").order_by(ResourceMetrics.data.asc())
+                    elif sort_dirs == "descend":
+                        query = query.filter(ResourceMetrics.name == "memory_usage").order_by(ResourceMetrics.data.desc())
             else:
                 query = query.order_by(AssetResourceRelationInfo.create_date.desc())
             # 分页条件
@@ -140,6 +166,12 @@ class AssetResourceRelationSQL:
                 AssetResourceRelationInfo.resource_id == resource_id).delete()
 
     @classmethod
+    def delete_all_asset_resource_relation_data(cls):
+        session = get_session()
+        with session.begin():
+            return session.query(AssetResourceRelationInfo).delete()
+
+    @classmethod
     def update_asset_resource_relation(cls, asset_resource_relation):
         session = get_session()
         with session.begin():
@@ -170,7 +202,7 @@ class AssetResourceRelationSQL:
         with ((session.begin())):
             return session.query(AssetResourceRelationInfo). \
                 filter(AssetResourceRelationInfo.resource_project_id.isnot(None)). \
-                distinct(AssetResourceRelationInfo.resource_project_id).count()
+                group_by(AssetResourceRelationInfo.resource_project_id).count()
 
     @classmethod
     def get_all_resource_status_info(cls):

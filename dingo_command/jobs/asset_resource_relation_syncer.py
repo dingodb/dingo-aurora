@@ -37,8 +37,12 @@ def fetch_relation_info():
         # server_list = nova_client.nova_list_servers()
         # print(f"虚拟机列表数据: {server_list}")
         # 数据判空
-        if not node_list or not asset_list :
-            print("裸金属列表数据或资产列表数据为空")
+        if not node_list:
+            print("裸金属列表数据")
+            # 删除资源与资产关联表中的数据
+            AssetResourceRelationSQL.delete_all_asset_resource_relation_data()
+            # 删除资源metrics表中数据
+            AssetResourceRelationSQL.delete_all_resource_metrics()
             return
         # 4、数据遍历，对比裸金属与资产数据
         asset_resource_relation_list = []
@@ -59,14 +63,15 @@ def fetch_relation_info():
             ipmi_address = temp_node.get('driver_info').get('ipmi_address') if temp_node.get('driver_info') else None
             # 与裸机对应的资产的id
             asset_id = None
-            # 遍历资产查找与裸机ipmi的IP能对应的数据
-            for temp_asset in asset_list:
-                # 资产的ip地址
-                asset_ips = get_asset_ip(temp_asset)
-                if asset_ips and ipmi_address and ipmi_address in asset_ips:
-                    # ipmi的ip地址与资产的ip地址相同
-                    asset_id = temp_asset.get('asset_id')
-                    break
+            if asset_list is not None:
+                # 遍历资产查找与裸机ipmi的IP能对应的数据
+                for temp_asset in asset_list:
+                    # 资产的ip地址
+                    asset_ips = get_asset_ip(temp_asset)
+                    if asset_ips and ipmi_address and ipmi_address in asset_ips:
+                        # ipmi的ip地址与资产的ip地址相同
+                        asset_id = temp_asset.get('asset_id')
+                        break
             # 组装数据
             temp_relation = init_asset_resource_relation(temp_node, asset_id, server_detail)
             # 追加资源的用户和项目名称
@@ -104,13 +109,16 @@ def fetch_relation_info():
 
 # 初始化资源与资产关联关系
 def init_asset_resource_relation(temp_node, asset_id, server_detail):
+    resource_name = temp_node.get('instance_info').get('display_name') if temp_node.get('instance_info') else None
+    if resource_name is None: # 裸机节点未创建云主机时，取裸机节点的名称
+       resource_name = temp_node.get('name')
     # 初始化然后返回
     return AssetResourceRelationInfo(
         id=uuid.uuid4().hex,
         resource_id=temp_node.get('uuid'),
         asset_id=asset_id,
         resource_type='baremetal',
-        resource_name=temp_node.get('instance_info').get('display_name') if temp_node.get('instance_info') else None,
+        resource_name=resource_name,
         resource_status=temp_node.get('provision_state'),
         resource_ip=temp_node.get('driver_info').get('ipmi_address') if temp_node.get('driver_info') else None,
         resource_user_id=server_detail.get('user_id') if server_detail else None,
