@@ -115,6 +115,8 @@ class ResourcesService:
             if resource_status_info_data:
                 for resource_status_info in resource_status_info_data:
                     resource_status_info_temp = {}
+                    resource_status_info_temp['resource_project_id'] = resource_status_info.resource_project_id
+                    resource_status_info_temp['resource_project_name'] = resource_status_info.resource_project_name
                     resource_status_info_temp['resource_id'] = resource_status_info.resource_id
                     resource_status_info_temp['resource_name'] = resource_status_info.resource_name
                     if resource_status_info.resource_status == "active":
@@ -125,10 +127,6 @@ class ResourcesService:
                     resource_status_info_ret.append(resource_status_info_temp)
 
             result['resource_status_info'] = resource_status_info_ret
-
-            # 资源使用情况：
-            # 资产分配的情况
-
             return result
         except Exception as e:
             import traceback
@@ -184,14 +182,14 @@ class ResourcesService:
             if resource_metric.name == 'gpu_count':
                 temp["resource_gpu_count"] = resource_metric.data
             # 资源GPU平均功率
-            if resource_metric.name == 'gpu_power':
-                temp["resource_gpu_power"] = resource_metric.data
+            if resource_metric.name == 'gpu_power' and resource_metric.data is not None:
+                temp["resource_gpu_power"] = "{:.2f}".format(float(str(resource_metric.data)))
             # CPU使用率
-            if resource_metric.name == 'cpu_usage':
-                temp["resource_cpu_usage"] = resource_metric.data
+            if resource_metric.name == 'cpu_usage' and resource_metric.data is not None:
+                temp["resource_cpu_usage"] = "{:.2f}".format(float(str(resource_metric.data)))
             # 内存使用率
-            if resource_metric.name == 'memory_usage':
-                temp["resource_memory_usage"] = resource_metric.data
+            if resource_metric.name == 'memory_usage' and resource_metric.data is not None:
+                temp["resource_memory_usage"] = "{:.2f}".format(float(str(resource_metric.data)))
 
         # 返回
         return temp

@@ -100,7 +100,10 @@ class AssetResourceRelationSQL:
             if 'resource_project_name' in query_params and query_params['resource_project_name']:
                 query = query.filter(AssetResourceRelationInfo.resource_project_name.like('%' + query_params['resource_project_name'] + '%'))
             # 查询
-            query = query.filter(AssetResourceRelationInfo.resource_project_id == resource_project_id, AssetResourceRelationInfo.resource_project_id.isnot(None))
+            if resource_project_id is not None:
+                query = query.filter(AssetResourceRelationInfo.resource_project_id == resource_project_id, AssetResourceRelationInfo.resource_project_id.isnot(None))
+            else:
+                query = query.filter(AssetResourceRelationInfo.resource_project_id.isnot(None))
 
             # 总数
             count = query.count()
@@ -208,7 +211,9 @@ class AssetResourceRelationSQL:
     def get_all_resource_status_info(cls):
         session = get_session()
         with session.begin():
-            return session.query(AssetResourceRelationInfo.resource_id,
+            return session.query(AssetResourceRelationInfo.resource_project_id,
+                                 AssetResourceRelationInfo.resource_project_name,
+                                 AssetResourceRelationInfo.resource_id,
                                  AssetResourceRelationInfo.resource_name,
                                  AssetResourceRelationInfo.resource_status).all()
 

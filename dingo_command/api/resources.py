@@ -25,8 +25,8 @@ async def vpc_resource_statistic_list(page: int = Query(1, description="页码")
     except Exception as e:
         raise (HTTPException(status_code=400, detail="vpc resource statistic list error"))
 
-@router.get("/resources/{resource_project_id}/resource_detail_list", summary="VPC下资源详情列表", description="查询指定VPC下资源详情列表")
-async def resource_detail_list(resource_project_id: str,
+@router.get("/resources/resource_detail_list", summary="VPC下资源详情列表", description="查询指定或所有VPC下资源详情列表")
+async def resource_detail_list(resource_project_id: str = Query(None, description="project id. 其值为空时，查询所有project id下的资源"),
                                page: int = Query(1, description="页码"),
                                page_size: int = Query(10, description="页数量大小"),
                                sort_keys: str = Query(None, description="排序字段"),
