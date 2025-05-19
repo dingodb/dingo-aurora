@@ -93,7 +93,7 @@ async def list_params():
         raise HTTPException(status_code=400, detail="get cluster param error")
     
 @router.get("/cluster/{cluster_id}", summary="获取k8s集群详情", description="获取k8s集群详情")
-async def get_cluster(cluster_id:str):
+async def get_cluster(cluster_id:str, token: str = Depends(get_token)):
     try:
         # 集群信息存入数据库
         result = cluster_service.get_cluster(cluster_id)
@@ -108,10 +108,10 @@ async def get_cluster(cluster_id:str):
         raise HTTPException(status_code=400, detail="get cluster error")
 
 @router.delete("/cluster/{cluster_id}", summary="删除k8s集群", description="删除k8s集群")
-async def delete_cluster(cluster_id:str):
+async def delete_cluster(cluster_id:str, token: str = Depends(get_token)):
     try:
         # 集群信息存入数据库
-        result = cluster_service.delete_cluster(cluster_id)
+        result = cluster_service.delete_cluster(cluster_id, token)
         # 操作日志
         #SystemService.create_system_log(OperateLogApiModel(operate_type="create", resource_type="flow", resource_id=result, resource_name=cluster_object.name, operate_flag=True))
         return result

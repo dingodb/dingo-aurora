@@ -800,7 +800,9 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         # 更新集群状态为running
         count, db_cluster = ClusterSQL.list_cluster(cluster_dict["id"])
         c = db_cluster[0]
-        c.kube_config = kube_config
+        kube_info = json.loads(c.kube_info)
+        kube_info["kube_config"] = kube_config
+        c.kube_info = json.dumps(kube_info)
         c.status = 'running'
         c.error_message = ""
         ClusterSQL.update_cluster(c)
@@ -886,9 +888,32 @@ def get_networks(cluster_tfvars, task_info, host_file):
     bussubnet_id = hosts_data["_meta"]["hostvars"][master_node_name]["bussubnet_id"]
     return network_id, bus_network_id, subnet_id, bussubnet_id
 
+def load_tfvars_to_object(tfvars_path):
+    """
+    从 output.tfvars.json 文件加载内容并转换为 ClusterTFVarsObject 对象
+    
+    Args:
+        tfvars_path: output.tfvars.json 文件路径
+        
+    Returns:
+        ClusterTFVarsObject 对象
+    """
+    import json
+    from dingo_command.celery_api.workers import ClusterTFVarsObject
+    
+    # 读取 tfvars 文件
+    with open(tfvars_path, 'r') as f:
+        tfvars_data = json.load(f)
+    
+    # 将 JSON 数据直接传递给 Pydantic 模型构造函数
+    # Pydantic 会自动处理数据类型转换和验证
+    cluster_tfvars = ClusterTFVarsObject(**tfvars_data)
+    
+    return cluster_tfvars
+
 
 @celery_app.task(bind=True)
-def delete_cluster(self, cluster_id, region_name):
+def delete_cluster(self, cluster_id, region_name, token):
     # 进入到terraform目录
     cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_id)
     terraform_dir = os.path.join(cluster_dir, "terraform")
@@ -898,7 +923,18 @@ def delete_cluster(self, cluster_id, region_name):
     os.chdir(terraform_dir)
     # 删除集群
     #os.environ['OS_CLOUD'] = region_name
+    
     res = subprocess.run(["terraform", "destroy", "-auto-approve", "-var-file=output.tfvars.json"], capture_output=True)
+    # 获取 tfvars 文件路径
+    cluster_id = "your_cluster_id"
+    tfvars_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_id, "terraform", "output.tfvars.json")
+
+    # 加载为 ClusterTFVarsObject 对象
+    cluster_tfvars = load_tfvars_to_object(tfvars_path)
+    cluster_tfvars.token = token
+    tfvars_str = json.dumps(cluster_tfvars, default=lambda o: o.__dict__, indent=2)
+    with open("output.tfvars.json", "w") as f:
+        f.write(tfvars_str)
     if res.returncode != 0:
         # 发生错误时更新任务状态为"失败"
 

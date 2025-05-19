@@ -378,8 +378,9 @@ class ClusterService:
                     node_info = NodeConfigObject()
                     node_info.status = n.status
                     node_info.instance_id = n.instance_id
-                    nodeinfos = nodeinfos.append(node_info) 
+                    nodeinfos.append(node_info) 
             res_cluster.node_config = nodeinfos
+            res_cluster.node_count = count
             if not res or not res.get("data"):
                 return None
             # 返回第一条数据
@@ -514,7 +515,7 @@ class ClusterService:
             public_subnetids = external_subnetids     
         return floatingip_pool,public_floatingip_pool,public_subnetids,external_subnetids,external_net_id
 
-    def delete_cluster(self, cluster_id):
+    def delete_cluster(self, cluster_id,token):
         if not cluster_id:
             return None
         # 详情
@@ -557,7 +558,7 @@ class ClusterService:
                     instance.update_time = datetime.now()
                     instance_list_db.append(instance)
                 InstanceSQL.update_instance_list(instance_list_db)
-            result = celery_app.send_task("dingo_command.celery_api.workers.delete_cluster", args=[cluster_id, region])
+            result = celery_app.send_task("dingo_command.celery_api.workers.delete_cluster", args=[cluster_id, region, token])
             # if result.get():
             #     # 删除成功，更新数据库状态
             #     cluster.status = "deleted"'
