@@ -17,9 +17,9 @@ NOVA_REGION_NAME = CONF.nova.region_name
 
 class NovaClient:
 
-    def __init__(self):
+    def __init__(self, token=None):
         self.session = requests.Session()
-        self.token = None
+        self.token = token
         self.service_catalog = []
 
         # 认证并初始化session
@@ -27,36 +27,47 @@ class NovaClient:
 
     def authenticate(self):
         """获取认证Token和服务目录"""
-        auth_data = {
-            "auth": {
-                "identity": {
-                    "methods": ["password"],
-                    "password": {
-                        "user": {
-                            "name": NOVA_USER_NAME,
-                            "password": NOVA_PASSWORD,
-                            "domain": {"name": NOVA_USER_DOMAIN}
+        if not self.token:
+            auth_data = {
+                "auth": {
+                    "identity": {
+                        "methods": ["password"],
+                        "password": {
+                            "user": {
+                                "name": NOVA_USER_NAME,
+                                "password": NOVA_PASSWORD,
+                                "domain": {"name": NOVA_USER_DOMAIN}
+                            }
                         }
-                    }
-                },
-                "scope": {
-                    "project": {
-                        "name": NOVA_PROJECT_NAME,
-                        "domain": {"name": NOVA_PROJECT_DOMAIN}
+                    },
+                    "scope": {
+                        "project": {
+                            "name": NOVA_PROJECT_NAME,
+                            "domain": {"name": NOVA_PROJECT_DOMAIN}
+                        }
                     }
                 }
             }
-        }
 
-        headers = {'Content-Type': 'application/json'}
-        response = requests.post(f"{NOVA_AUTH_URL}/v3/auth/tokens", data=json.dumps(auth_data), headers=headers)
-        if response.status_code != 201:
-            print(f"nova获取token失败: {response.text}")
+            headers = {'Content-Type': 'application/json'}
+            response = requests.post(f"{NOVA_AUTH_URL}/v3/auth/tokens", data=json.dumps(auth_data), headers=headers)
+            if response.status_code != 201:
+                print(f"nova获取token失败: {response.text}")
+            else:
+                self.token = response.headers['X-Subject-Token']
+                self.service_catalog = response.json()['token']['catalog']
+                self.session.headers.update({'X-Auth-Token': self.token})
+                self.session.headers.update({'X-OpenStack-Nova-API-Version': "latest" })
         else:
-            self.token = response.headers['X-Subject-Token']
-            self.service_catalog = response.json()['token']['catalog']
-            self.session.headers.update({'X-Auth-Token': self.token})
-            self.session.headers.update({'X-OpenStack-Nova-API-Version': "latest" })
+            headers = {'X-Auth-Token': self.token, 'X-Subject-Token': self.token}
+            response = requests.get(f"{NOVA_AUTH_URL}/v3/auth/tokens", headers=headers)
+            if response.status_code != 200:
+                print(f"nova获取token失败: {response.text}")
+            else:
+                # self.token = response.headers['X-Subject-Token']
+                self.service_catalog = response.json()['token']['catalog']
+                self.session.headers.update({'X-Auth-Token': self.token})
+                self.session.headers.update({'X-OpenStack-Nova-API-Version': "latest" })
 
 
     def get_service_endpoint(self, service_type, interface='public', region='RegionOne'):
@@ -83,7 +94,7 @@ class NovaClient:
         if response.status_code != 200:
             raise Exception(f"nova详情请求失败: {response.text}")
         return response.json()['server']
-    
+
     # 根据id查询规格
     def nova_get_flavor(self, flavor_id):
         endpoint = self.get_service_endpoint('compute')
@@ -109,6 +120,56 @@ class NovaClient:
             raise Exception(f"nova规格请求失败: {response.text}")
         return response.json()
 
+    def nova_create_server(self, name, image_id, flavor_id, network_id, security_groups=None, user_data=None,
+                           key_name=None, metadata=None, config_drive=False):
+        """
+        创建虚拟机
+        :param name: 虚拟机名称（需唯一）
+        :param image_id: 镜像ID（通过glance_get_image验证）
+        :param flavor_id: 规格ID（通过nova_get_flavor验证）
+        :param network_id: 网络ID
+        :param security_groups: 可选安全组列表（如['default']）
+        :return: 虚拟机创建响应数据
+        """
+        # 1. 参数预验证
+        self.glance_get_image(image_id)  # 确认镜像存在
+        self.nova_get_flavor(flavor_id)  # 确认规格存在
+
+        # 2. 构造请求体
+        request_body = {
+            "server": {
+                "name": name,
+                "imageRef": image_id,
+                "flavorRef": flavor_id,
+                "networks": [{"uuid": network_id}]
+            }
+        }
+        if security_groups:
+            request_body["server"]["security_groups"] = [
+                {"name": sg} for sg in security_groups
+            ]
+        if user_data:
+            request_body["server"]["user_data"] = user_data
+        if key_name:
+            request_body["server"]["key_name"] = key_name
+        if metadata:
+            request_body["server"]["metadata"] = metadata
+        if config_drive:
+            request_body["server"]["config_drive"] = config_drive
+        # 3. 获取Nova服务端点
+        endpoint = self.get_service_endpoint('compute')
+
+        # 4. 发送创建请求
+        response = self.session.post(
+            f"{endpoint}/servers",
+            json=request_body,
+            headers={'Content-Type': 'application/json'}
+        )
+
+        # 5. 处理响应
+        if response.status_code != 202:
+            raise Exception(f"创建失败[HTTP {response.status_code}]: {response.text}")
+        return response.json()['server']
 
 # 声明nova的client
 nova_client = NovaClient()

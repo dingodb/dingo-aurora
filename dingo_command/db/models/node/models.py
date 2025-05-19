@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Column, String, Text, DateTime
+from sqlalchemy import Column, String, Text, DateTime, Integer
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -31,6 +31,11 @@ class NodeInfo(Base):
     flavor_id = Column(String(length=128), default=0, nullable= True)
     security_group = Column(String(length=128), default=0, nullable= True)
     private_key = Column(Text, nullable=True)
+    operation_system = Column(String(length=128), default=0, nullable=False)
+    cpu = Column(Integer, nullable=True)
+    gpu = Column(Integer, nullable=True)
+    mem = Column(Integer, nullable=True)
+    disk = Column(Integer, nullable=True)
     auth_type = Column(String(length=128), default=0, nullable= True)
     user = Column(String(length=128), default=0, nullable= False)
     password = Column(String(length=128), default=0, nullable= False)

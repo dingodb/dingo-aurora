@@ -1,4 +1,4 @@
-from fastapi import Query
+from fastapi import Query, Header, Depends
 from dingo_command.api.model.cluster import ScaleNodeObject
 
 from dingo_command.services.cluster import ClusterService
@@ -9,6 +9,10 @@ from fastapi import APIRouter, HTTPException
 router = APIRouter()
 node_service = NodeService()
 
+async def get_token(x_auth_token: str = Header(None, alias="X-Auth-Token")):
+    if x_auth_token is None:
+        raise HTTPException(status_code=401, detail="X-Auth-Token header is missing")
+    return x_auth_token
 
 @router.get("/node/list", summary="k8s集群节点列表", description="k8s集群节点列表")
 async def list_nodes(cluster_id: str = Query(None, description="集群id"),
@@ -56,7 +60,7 @@ async def get_node(node_id: str):
 
 
 @router.post("/node", summary="扩容节点", description="扩容节点")
-async def create_node(cluster: ScaleNodeObject):
+async def create_node(cluster: ScaleNodeObject, token: str = Depends(get_token)):
     # 先检查下是否有正在处于扩容的状态，如果是就直接返回
     cluster_service = ClusterService()
     cluster_info = cluster_service.get_cluster(cluster.id)
@@ -68,7 +72,7 @@ async def create_node(cluster: ScaleNodeObject):
         raise HTTPException(status_code=400, detail="the cluster is scaling, please wait")
     try:
         # 创建节点（扩容节点）
-        result = node_service.create_node(cluster_info, cluster)
+        result = node_service.create_node(cluster_info, cluster, token)
         return {"data": result}
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)

@@ -31,6 +31,7 @@ class Instance(Base):
     node_type = Column(String(length=128), default=0, nullable= False)
     region = Column(String(length=128), default=0, nullable= False)
     status = Column(String(length=128), default=0, nullable= False)
+    private_key = Column(Text, nullable=True)
     user = Column(String(length=128), default=0, nullable= False)
     password = Column(String(length=128), default=0, nullable= False)
     cpu = Column(Integer, nullable=True)

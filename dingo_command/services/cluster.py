@@ -105,6 +105,11 @@ class ClusterService:
                     node_db.auth_type = node.auth_type
                     node_db.security_group = node.security_group
                     node_db.flavor_id = node.flavor_id
+                    node_db.operation_system = operation_system
+                    node_db.cpu = cpu
+                    node_db.gpu = gpu
+                    node_db.mem = mem
+                    node_db.disk = disk
                     node_db.status = "creating"
                     node_db.admin_address = ""
                     node_db.name = cluster.name + f"-master-{int(master_index)}"
@@ -162,6 +167,11 @@ class ClusterService:
                     node_db.auth_type = node.auth_type
                     node_db.security_group = node.security_group
                     node_db.flavor_id = node.flavor_id
+                    node_db.operation_system = operation_system
+                    node_db.cpu = cpu
+                    node_db.gpu = gpu
+                    node_db.mem = mem
+                    node_db.disk = disk
                     node_db.status = "creating"
                     node_db.admin_address = ""
                     node_db.name = cluster.name + f"-node-{int(node_index)}"
@@ -219,6 +229,11 @@ class ClusterService:
                     node_db.auth_type = node.auth_type
                     node_db.security_group = node.security_group
                     node_db.flavor_id = node.flavor_id
+                    node_db.operation_system = operation_system
+                    node_db.cpu = cpu
+                    node_db.gpu = gpu
+                    node_db.mem = mem
+                    node_db.disk = disk
                     node_db.status = "creating"
                     node_db.admin_address = ""
                     node_db.name = cluster.name + f"-node-{int(node_index)}"

@@ -30,10 +30,11 @@ from dingo_command.db.engines.mysql import get_engine, get_session
 from dingo_command.services.custom_exception import Fail
 from dingo_command.services.system import SystemService
 from dingo_command.common.nova_client import nova_client
+from dingo_command.services import CONF
 
 LOG = log.getLogger(__name__)
 BASE_DIR = os.getcwd()
-
+auth_url = CONF.DEFAULT.auth_url
 # 定义边框样式
 thin_border = Border(
     left=Side(border_style="thin", color="000000"),  # 左边框
@@ -195,6 +196,11 @@ class NodeService:
                     node_db.password = node.password
                     node_db.image = node.image
                     node_db.instance_id = instance_db.id
+                    node_db.operation_system = operation_system
+                    node_db.cpu = cpu
+                    node_db.gpu = gpu
+                    node_db.mem = mem
+                    node_db.disk = disk
                     node_db.project_id = cluster_info.project_id
                     node_db.auth_type = node.auth_type
                     node_db.security_group = node.security_group
@@ -316,7 +322,7 @@ class NodeService:
         InstanceSQL.create_instance_list(instance_db_list)
         return node_list_json, instance_list_json
 
-    def create_node(self, cluster_info, cluster: ScaleNodeObject):
+    def create_node(self, cluster_info, cluster: ScaleNodeObject, token):
         # 在这里执行创建集群的那个流程，先创建vm虚拟机，然后添加到本k8s集群里面
         # 数据校验 todo
         try:
@@ -347,16 +353,10 @@ class NodeService:
             # 创建terraform变量
             tfvars = ClusterTFVarsObject(
                 id=cluster.id,
-                cluster_name=cluster_info.name,
-                image=cluster.node_config[0].image,
                 nodes=k8s_nodes,
-                subnet_cidr="192.168.10.0/24",
-                floatingip_pool=external_net[0]['name'],
-                external_net=external_net[0]['id'],
-                use_existing_network=False,
-                ssh_user=cluster.node_config[0].user,
-                k8s_master_loadbalancer_enabled=lb_enbale,
-                number_of_k8s_masters=cluster_info.kube_info.number_master
+                token=token,
+                auth_url=auth_url,
+                tenant_id=cluster_info.project_id,
             )
             if cluster.node_config[0].auth_type == "password":
                 tfvars.password = cluster.node_config[0].password
@@ -617,9 +617,9 @@ class NodeService:
                     gpu = pci_alias.split(':')[1]
         return int(cpu), int(gpu), int(mem), int(disk)
 
-    def get_image_info(self, image_name):
+    def get_image_info(self, image_id):
         operation_system = ""
-        image = nova_client.get_image(image_name)
+        image = nova_client.glance_get_image(image_id)
         if image is not None and image.get("images") and len(image.get("images")) > 0:
             image = nova_client.glance_get_image(image["images"][0].get("id"))
             if image is not None:

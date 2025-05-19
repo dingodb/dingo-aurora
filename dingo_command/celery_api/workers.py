@@ -1,5 +1,6 @@
 from datetime import datetime
 import json
+import base64
 import os
 import subprocess
 import time
@@ -22,6 +23,7 @@ from dingo_command.celery_api import CONF
 from dingo_command.db.engines.mysql import get_engine, get_session
 from dingo_command.db.models.cluster.sql import ClusterSQL, TaskSQL
 from dingo_command.common import CONF as CommonConf
+from dingo_command.common.nova_client import NovaClient
 
 from dingo_command.db.models.node.sql import NodeSQL
 from dingo_command.db.models.instance.sql import InstanceSQL
@@ -552,7 +554,7 @@ Content-Disposition: attachment; filename="passwd-script.txt"
 echo '{user}:{password}' | chpasswd
 
 --===============2309984059743762475==--"""
-    return user_data
+    return base64.b64encode(user_data.encode("utf-8")).decode()
 
 
 def create_ssh_keypair(conn, key_name=SSH_KEY_NAME):
@@ -603,73 +605,90 @@ def create_subnet_id(conn, network, subnet_name=INSTANCE_SUBNET_NAME):
 def create_vm_instance(conn, instance_info: InstanceCreateObject, instance_list):
     server_list = []
     # 在这里使用openstack的api接口，直接创建vm
+    nclient = NovaClient(token=instance_info.openstack_info.token)
     if instance_info.user and instance_info.password:
         user_data = get_user_data(instance_info.user, instance_info.password)
         for ins in instance_list:
-            server = conn.create_server(
-                name=ins.get("name"),
-                image=instance_info.image_id,
-                flavor=instance_info.flavor_id,
-                network=instance_info.network_id,
-                userdata=user_data,
-                security_groups=instance_info.security_group,
-                wait=False
-            )
-            server_list.append(server.id)
+            # server = conn.create_server(
+            #     name=ins.get("name"),
+            #     image=instance_info.image_id,
+            #     flavor=instance_info.flavor_id,
+            #     network=instance_info.network_id,
+            #     userdata=user_data,
+            #     security_groups=instance_info.security_group,
+            #     wait=False
+            # )
+            server = nclient.nova_create_server(ins.get("name"), instance_info.image_id, instance_info.flavor_id,
+                                                instance_info.network_id, user_data=user_data)
+            server_list.append(server.get("id"))
     else:
         for ins in instance_list:
-            server = conn.create_server(
-                name=ins.get("name"),
-                image=instance_info.image_id,
-                flavor=instance_info.flavor_id,
-                network=instance_info.network_id,
-                key_name=instance_info.sshkey_name,
-                security_groups=instance_info.security_group,
-                wait=False
-            )
-            server_list.append(server.id)
+            # server = conn.create_server(
+            #     name=ins.get("name"),
+            #     image=instance_info.image_id,
+            #     flavor=instance_info.flavor_id,
+            #     network=instance_info.network_id,
+            #     key_name=instance_info.sshkey_name,
+            #     security_groups=instance_info.security_group,
+            #     wait=False
+            # )
+            server = nclient.nova_create_server(ins.get("name"), instance_info.image_id,
+                                                instance_info.flavor_id, instance_info.network_id,
+                                                key_name=instance_info.sshkey_name)
+            server_list.append(server.get("id"))
     return server_list
 
 
 def create_bm_instance(conn, instance_info: InstanceCreateObject, instance_list):
     server_list = []
+    nclient = NovaClient(token=instance_info.openstack_info.token)
+    meta_data = {
+        "baremetal": "true",
+        "capabilities": "boot_option:local"
+    },
     # 在这里使用openstack的api接口，直接创建vm
     if instance_info.user and instance_info.password:
         # 在这里使用openstack的api接口，直接创建bm
         user_data = get_user_data(instance_info.user, instance_info.password)
         for ins in instance_list:
-            server = conn.create_server(
-                name=ins.get("name"),
-                image=instance_info.image_id,
-                flavor=instance_info.flavor_id,
-                network=instance_info.network_id,
-                userdata=user_data,
-                security_groups=instance_info.security_group,
-                config_drive=True,
-                meta={
-                    "baremetal": "true",
-                    "capabilities": "boot_option:local"
-                },
-                wait=False
-            )
-            server_list.append(server.id)
+            # server = conn.create_server(
+            #     name=ins.get("name"),
+            #     image=instance_info.image_id,
+            #     flavor=instance_info.flavor_id,
+            #     network=instance_info.network_id,
+            #     userdata=user_data,
+            #     security_groups=instance_info.security_group,
+            #     config_drive=True,
+            #     meta={
+            #         "baremetal": "true",
+            #         "capabilities": "boot_option:local"
+            #     },
+            #     wait=False
+            # )
+            server = nclient.nova_create_server(ins.get("name"), instance_info.image_id,
+                                                instance_info.flavor_id, instance_info.network_id,
+                                                user_data=user_data, config_drive=True, metadata=meta_data)
+            server_list.append(server.get("id"))
     else:
         for ins in instance_list:
-            server = conn.create_server(
-                name=ins.get("name"),
-                image=instance_info.image_id,
-                flavor=instance_info.flavor_id,
-                network=instance_info.network_id,
-                key_name=instance_info.sshkey_name,
-                security_groups=instance_info.security_group,
-                config_drive=True,
-                meta={
-                    "baremetal": "true",
-                    "capabilities": "boot_option:local"
-                },
-                wait=False
-            )
-            server_list.append(server.id)
+            # server = conn.create_server(
+            #     name=ins.get("name"),
+            #     image=instance_info.image_id,
+            #     flavor=instance_info.flavor_id,
+            #     network=instance_info.network_id,
+            #     key_name=instance_info.sshkey_name,
+            #     security_groups=instance_info.security_group,
+            #     config_drive=True,
+            #     meta={
+            #         "baremetal": "true",
+            #         "capabilities": "boot_option:local"
+            #     },
+            #     wait=False
+            # )
+            server = nclient.nova_create_server(ins.get("name"), instance_info.image_id,
+                                                instance_info.flavor_id, instance_info.network_id,
+                                                key_name=instance_info.sshkey_name, config_drive=True, metadata=meta_data)
+            server_list.append(server.get("id"))
     return server_list
 
 
@@ -906,7 +925,7 @@ def delete_node(self, cluster_id, cluster_name, node, instance, extravars):
         extravars["skip_confirmation"] = "true"
         cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id))
         os.environ['CURRENT_CLUSTER_DIR'] = cluster_dir
-        os.environ['OS_CLOUD'] = node.get("region_name")
+        # os.environ['OS_CLOUD'] = node.get("region_name")
         # 1、在这里先找到cluster的文件夹，找到对应的目录，先通过发来的node_list组合成extravars的变量，再执行remove-node.yaml
         ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
         os.chdir(ansible_dir)
