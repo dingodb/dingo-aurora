@@ -634,6 +634,8 @@ class ClusterService:
         node_index = 1
         for idx, node in enumerate(cluster.node_config):
             if node.role == "worker" and node.type == "vm":
+                cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
+                operation_system = self.get_image_info(node.image)
                 for i in range(node.count):
                     k8s_nodes[f"node-{int(node_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
@@ -651,14 +653,21 @@ class ClusterService:
                     instance_db.password = node.password
                     instance_db.security_group = node.security_group
                     instance_db.flavor_id = node.flavor_id
+                    instance_db.operation_system = operation_system
+                    instance_db.cpu = cpu
+                    instance_db.gpu = gpu
+                    instance_db.mem = mem
+                    instance_db.disk = disk
                     instance_db.status = "creating"
                     instance_db.ip_address = ""
-                    instance_db.name = cluster.name + f"node-{int(node_index)}"
+                    instance_db.name = cluster.name + f"-node-{int(node_index)}"
                     instance_db.floating_ip = ""
                     instance_db.create_time = datetime.now()
                     instance_db_list.append(instance_db)
                     node_index = node_index + 1
             if node.role == "worker" and node.type == "baremental":
+                cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
+                operation_system = self.get_image_info(node.image)
                 for i in range(node.count):
                     k8s_nodes[f"node-{int(node_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
@@ -676,9 +685,14 @@ class ClusterService:
                     instance_db.password = node.password
                     instance_db.security_group = node.security_group
                     instance_db.flavor_id = node.flavor_id
+                    instance_db.operation_system = operation_system
+                    instance_db.cpu = cpu
+                    instance_db.gpu = gpu
+                    instance_db.mem = mem
+                    instance_db.disk = disk
                     instance_db.status = "creating"
                     instance_db.ip_address = ""
-                    instance_db.name = cluster.name + f"node-{int(node_index)}"
+                    instance_db.name = cluster.name + f"-node-{int(node_index)}"
                     instance_db.floating_ip = ""
                     instance_db.create_time = datetime.now()
                     instance_db_list.append(instance_db)

@@ -33,7 +33,7 @@ from dingo_command.common.nova_client import nova_client
 from dingo_command.services import CONF
 
 LOG = log.getLogger(__name__)
-BASE_DIR = os.getcwd()
+WORK_DIR = CONF.DEFAULT.cluster_work_dir
 auth_url = CONF.DEFAULT.auth_url
 # 定义边框样式
 thin_border = Border(
@@ -334,17 +334,16 @@ class NodeService:
             # cluster_service = ClusterService()
             # clust_dbinfo = cluster_service.get_cluster(cluster.id)
 
-            output_file = os.path.join(BASE_DIR, "dingo_command", "ansible-deploy", "inventory", str(cluster.id),
-                                       "terraform", "output.tfvars.json")
+            output_file = os.path.join(WORK_DIR, "inventory", str(cluster.id), "terraform", "output.tfvars.json")
             with open(output_file) as f:
                 content = json.loads(f.read())
 
-            neutron_api = neutron.API()  # 创建API类的实例
-            external_net = neutron_api.list_external_networks()
-
-            lb_enbale = False
-            if cluster_info.kube_info.number_master > 1:
-                lb_enbale = cluster_info.kube_info.loadbalancer_enabled
+            # neutron_api = neutron.API()  # 创建API类的实例
+            # external_net = neutron_api.list_external_networks()
+            #
+            # lb_enbale = False
+            # if cluster_info.kube_info.number_master > 1:
+            #     lb_enbale = cluster_info.kube_info.loadbalancer_enabled
 
             cluster_info_db = self.convert_clusterinfo_todb(cluster_info.id, cluster_info.name)
             ClusterSQL.update_cluster(cluster_info_db)

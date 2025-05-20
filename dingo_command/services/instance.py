@@ -136,7 +136,7 @@ class InstanceService:
                 pci_alias = flavor['extra_specs']['pci_passthrough:alias']
                 if ':' in pci_alias:
                     gpu = pci_alias.split(':')[1]
-        user, password, network_id, cluster_id, cluster_name, sshkey_name, security_group = "", "", "", "", "", "", ""
+        user, password, network_id, cluster_id, cluster_name, sshkey_name = "", "", "", "", "", ""
         if instance_info.user:
             user = instance_info.user
         if instance_info.password:
@@ -151,6 +151,8 @@ class InstanceService:
             sshkey_name = instance_info.sshkey_name
         if instance_info.security_group:
             security_group = instance_info.security_group
+        else:
+            security_group = "default"
         if instance_info.numbers == 1:
             instance_info_db = InstanceDB()
             instance_info_db.id = str(uuid.uuid4())

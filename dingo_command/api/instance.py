@@ -4,6 +4,8 @@ from dingo_command.api.model.instance import InstanceRemoveObject, InstanceCreat
 from dingo_command.services.instance import InstanceService
 from dingo_command.services.custom_exception import Fail
 from fastapi import APIRouter, HTTPException
+from dingo_command.db.engines.mysql import get_session
+from dingo_command.db.models.instance.models import Instance
 
 router = APIRouter()
 instance_service = InstanceService()
@@ -82,6 +84,12 @@ async def delete_instance(instance_id: str, token: str = Depends(get_token)):
         instance = instance_service.get_instance(instance_id)
         if not instance.get("data"):
             return {"data": None}
+        if not instance.get("data").server_id:
+            session = get_session()
+            with session.begin():
+                db_instance = session.get(Instance, instance_id)
+                session.delete(db_instance)
+            return {"data": "success"}
         # 删除某些instance，删除这个server，并在数据路中删除这个instance的数据信息
         openstack_info = OpenStackConfigObject()
         openstack_info.token = token
