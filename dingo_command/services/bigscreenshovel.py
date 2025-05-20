@@ -80,7 +80,7 @@ class BigScreenShovelService:
             "value": {
                 "src-uri": "amqp://" + src_mq_url,
                 "src-queue": SHOVEL_QUEUE,
-                "dest-uri": dest_mq_url_array,
+                "dest-uri": dest_mq_url_array[0],
                 "dest-queue": SHOVEL_QUEUE,
                 "ack-mode": "on-confirm",
                 "reconnect-delay": 5
