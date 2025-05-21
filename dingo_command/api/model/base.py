@@ -8,8 +8,8 @@ class DingoopsObject(BaseModel):
     name: str = Field(None, description="对象的名称")
     description: str = Field(None, description="对象的描述信息")
     extra: dict = Field(None, description="对象的扩展信息")
-    created_at: str = Field(None, description="对象的创建时间")
-    updated_at: str = Field(None, description="对象的更新时间")
+    created_at: int = Field(None, description="对象的创建时间")
+    updated_at: int = Field(None, description="对象的更新时间")
 
 
 # 基础响应模型

@@ -405,7 +405,15 @@ def iter_host_ips(hosts, ips,ip_lb, adminsubnet, bussububnet):
 
         yield host
 
-
+def iter_host_network(hosts, adminsubnet, bussububnet):
+    '''Update hosts that have an entry in the floating IP list'''
+    for host in hosts:
+        # print("adminsubnet: ", adminsubnet)
+        # print("bussububnet: ", bussububnet)
+        host[1]['subnet_id'] = adminsubnet
+        host[1]['bussubnet_id'] = bussububnet
+        
+        yield host
 ## QUERY TYPES
 def query_host(hosts, target):
     for name, attrs, _ in hosts:
@@ -483,10 +491,12 @@ def main():
     ips = dict(iterips(iterresources(tfstates(args.root))))
     lb_ip = iterlbips(iterresources(tfstates(args.root)))
     adminsubnet, bussububnet = itersubnets(iterresources(tfstates(args.root)))
-    
+    #hosts = iter_host_ips(hosts, ips, lb_ip, adminsubnet, bussububnet)
+
     if ips:
         hosts = iter_host_ips(hosts, ips, lb_ip, adminsubnet, bussububnet)
-
+    else:
+        hosts = iter_host_network(hosts, adminsubnet, bussububnet)
     if args.list:
         output = query_list(hosts)
         if args.nometa:

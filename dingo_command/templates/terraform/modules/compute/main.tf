@@ -41,7 +41,7 @@ resource "openstack_compute_keypair_v2" "key_pair" {
 
 # Check if flavor exists
 data "openstack_compute_flavor_v2" "k8s_control" {
-  name = "command_4u8g110G"  # 替换为你的 Flavor 名称
+  name = "d4-8-110"  # 替换为你的 Flavor 名称
 }
 
 resource "openstack_networking_secgroup_v2" "secgroup" {
@@ -352,7 +352,7 @@ resource "openstack_networking_port_v2" "nodes_port" {
 #}
 
 resource "openstack_networking_floatingip_associate_v2" "master" {
-  count                 = 1
+  count                 = var.number_of_k8s_masters
   floating_ip           = var.k8s_master_fips[0]
   port_id               = element(openstack_networking_port_v2.admin_master_port.*.id, 0)
 }

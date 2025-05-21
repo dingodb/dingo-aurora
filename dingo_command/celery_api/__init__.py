@@ -18,7 +18,9 @@ default_opts = [
     cfg.StrOpt('center_transport_url', default=None, help='the region one openstack rabbit mq url'),
     cfg.BoolOpt('center_region_flag', default=False, help='the region is center region'),
     cfg.StrOpt('region_name', default=None, help='the openstack region name'),
-    cfg.StrOpt('cluster_work_dir', default='/var/lib/dingo-command', help='the openstack region name')
+    cfg.StrOpt('cluster_work_dir', default='/var/lib/dingo-command', help='the openstack region name'),
+    cfg.StrOpt('harbor_url', default=None, help='harbor url'),
+    cfg.StrOpt('fileserver_url', default=None, help='fileserver url'),
 ]
 
 CONF.register_group(default_group)
@@ -70,4 +72,4 @@ CONF.register_opts(redis_opts, redis_group)
 ansible_dir = os.path.join(os.getcwd(), "dingo_command","templates","ansible-deploy")
 WORK_DIR = CONF.DEFAULT.cluster_work_dir
 aaa = subprocess.run(["cp", "-LRpf", ansible_dir, WORK_DIR], capture_output=True)
-print(aaa.stdout)
+# print(aaa.stdout)

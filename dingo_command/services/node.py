@@ -158,7 +158,8 @@ class NodeService:
                         az=self.get_az_value(node.type),
                         flavor=node.flavor_id,
                         floating_ip=False,
-                        etcd=False
+                        etcd=False,
+                        image_id=node.image
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
@@ -220,7 +221,8 @@ class NodeService:
                         az=self.get_az_value(node.type),
                         flavor=node.flavor_id,
                         floating_ip=False,
-                        etcd=False
+                        etcd=False,
+                        image_id=node.image
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
@@ -322,6 +324,31 @@ class NodeService:
         InstanceSQL.create_instance_list(instance_db_list)
         return node_list_json, instance_list_json
 
+    def get_floatip_pools(self, neutron_api, external_net):
+        floatingip_pool = ""
+        public_floatingip_pool=""
+        external_net_id = ""
+        external_subnetids = []
+        public_subnetids = []
+        for net in external_net:
+            for subnet_id in net["subnets"]:
+                subnet = neutron_api.get_subnet_by_id(subnet_id)
+                import ipaddress;
+                if ipaddress.ip_network(subnet["cidr"]).is_private:
+                    if floatingip_pool=="":
+                        floatingip_pool=net["name"]
+                        external_net_id = net["id"]
+                    external_subnetids.append(subnet_id)
+                elif not ipaddress.ip_network(subnet["cidr"]).is_private:
+                    if public_floatingip_pool=="":
+                        public_floatingip_pool=net["name"]
+                    public_subnetids = public_subnetids.append(subnet_id)
+        if public_floatingip_pool == "":
+            public_floatingip_pool = floatingip_pool
+        if public_subnetids == []:
+            public_subnetids = external_subnetids
+        return floatingip_pool,public_floatingip_pool,public_subnetids,external_subnetids,external_net_id
+
     def create_node(self, cluster_info, cluster: ScaleNodeObject, token):
         # 在这里执行创建集群的那个流程，先创建vm虚拟机，然后添加到本k8s集群里面
         # 数据校验 todo
@@ -334,25 +361,39 @@ class NodeService:
             # cluster_service = ClusterService()
             # clust_dbinfo = cluster_service.get_cluster(cluster.id)
 
-            output_file = os.path.join(WORK_DIR, "inventory", str(cluster.id), "terraform", "output.tfvars.json")
+            output_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "terraform", "output.tfvars.json")
             with open(output_file) as f:
                 content = json.loads(f.read())
-
-            # neutron_api = neutron.API()  # 创建API类的实例
-            # external_net = neutron_api.list_external_networks()
-            #
-            # lb_enbale = False
-            # if cluster_info.kube_info.number_master > 1:
-            #     lb_enbale = cluster_info.kube_info.loadbalancer_enabled
 
             cluster_info_db = self.convert_clusterinfo_todb(cluster_info.id, cluster_info.name)
             ClusterSQL.update_cluster(cluster_info_db)
             k8s_nodes = content["nodes"]
+            subnet_cidr = content.get("subnet_cidr")
+            lb_enbale = content.get("k8s_master_loadbalancer_enabled")
+            number_of_k8s_masters_no_floating_ip = content.get("number_of_k8s_masters_no_floating_ip")
+            neutron_api = neutron.API()  # 创建API类的实例
+            external_net = neutron_api.list_external_networks()
+            (floatingip_pool, public_floatingip_pool, public_subnetids,
+             external_subnetids, external_net_id) = self.get_floatip_pools(neutron_api, external_net)
+
             node_list, instance_list = self.generate_k8s_nodes(cluster_info, cluster, k8s_nodes)
             # 创建terraform变量
             tfvars = ClusterTFVarsObject(
                 id=cluster.id,
+                cluster_name=cluster_info.name,
+                image_uuid=cluster.node_config[0].image,
                 nodes=k8s_nodes,
+                subnet_cidr=subnet_cidr,
+                floatingip_pool=floatingip_pool,
+                public_floatingip_pool=public_floatingip_pool,
+                public_subnetids=public_subnetids,
+                external_subnetids=external_subnetids,
+                external_net=external_net_id,
+                use_existing_network=False,
+                ssh_user=cluster.node_config[0].user,
+                k8s_master_loadbalancer_enabled=lb_enbale,
+                number_of_k8s_masters=1,
+                number_of_k8s_masters_no_floating_ip=number_of_k8s_masters_no_floating_ip,
                 token=token,
                 auth_url=auth_url,
                 tenant_id=cluster_info.project_id,

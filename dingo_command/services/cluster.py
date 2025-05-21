@@ -125,7 +125,8 @@ class ClusterService:
                         az=self.get_az_value(node.type),
                         flavor=node.flavor_id,
                         floating_ip=False,
-                        etcd=False
+                        etcd=False,
+                        image_id=node.image
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
@@ -187,7 +188,8 @@ class ClusterService:
                         az=self.get_az_value(node.type),
                         flavor=node.flavor_id,
                         floating_ip=False,
-                        etcd=False
+                        etcd=False,
+                        image_id=node.image
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
@@ -250,6 +252,7 @@ class ClusterService:
             # Create a serializable dictionary from the NodeDB object
             node_dict = {
                 "id": node.id,
+                "image_id": node.image,
                 "node_type": node.node_type,
                 "cluster_id": node.cluster_id,
                 "cluster_name": node.cluster_name,
@@ -300,6 +303,11 @@ class ClusterService:
         try:
             # 按照条件从数据库中查询数据
             count, data = ClusterSQL.list_cluster(query_params, page, page_size, sort_keys, sort_dirs)
+             # 过滤掉状态为 "deleted" 的集群
+            filtered_data = [cluster for cluster in data if cluster.status != "deleted"]
+            
+            # 重新计算过滤后的数量
+            filtered_count = len(filtered_data)
             # 返回数据
             res = {}
             # 页数相关信息
@@ -307,8 +315,8 @@ class ClusterService:
                 res['currentPage'] = page
                 res['pageSize'] = page_size
                 res['totalPages'] = ceil(count / int(page_size))
-            res['total'] = count
-            res['data'] = data
+            res['total'] = filtered_count
+            res['data'] = filtered_data
             return res
         except Exception as e:
             import traceback
@@ -371,13 +379,13 @@ class ClusterService:
             # 空
             # 查询节点信息
             node_query_params = {"cluster_id": cluster_id}
-            count, node_res = NodeSQL.list_nodes(node_query_params, 1, -1, None, None)
+            count, node_res = InstanceSQL.list_instances(node_query_params, 1, -1, None, None)
             nodeinfos = []
             if count > 0:
                 for n in node_res:
                     node_info = NodeConfigObject()
                     node_info.status = n.status
-                    node_info.instance_id = n.instance_id
+                    node_info.instance_id = n.id
                     nodeinfos.append(node_info) 
             res_cluster.node_config = nodeinfos
             res_cluster.node_count = count
@@ -392,6 +400,8 @@ class ClusterService:
 
     def check_cluster_param(self, cluster: ClusterObject):
         # 判断名称是否重复、判断是否有空值、判断是否有重复的节点配置
+        
+        
         query_params = {}
         query_params["name"] = cluster.name
         query_params["project_id"] = cluster.project_id
@@ -451,7 +461,7 @@ class ClusterService:
             tfvars = ClusterTFVarsObject(
                 id = cluster_info_db.id,
                 cluster_name=cluster.name,
-                image=cluster.node_config[0].image,
+                image_uuid=cluster.node_config[0].image,
                 nodes=k8s_nodes,
                 subnet_cidr=subnet_cidr,
                 floatingip_pool=floatingip_pool,
@@ -488,6 +498,7 @@ class ClusterService:
             return cluster_info_db
             
         except Fail as e:
+            
             raise e
 
     def get_floatip_pools(self, neutron_api, external_net):

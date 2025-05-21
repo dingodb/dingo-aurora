@@ -52,8 +52,6 @@ class ClusterSQL:
                 query = query.filter(Cluster.service_cidr.like('%' + query_params["service_cidr"] + '%'))
             if "bus_address" in query_params and query_params["bus_address"]:
                 query = query.filter(Cluster.bus_address.like('%' + query_params["bus_address"] + '%'))
-            if "api_address" in query_params and query_params["api_address"]:
-                query = query.filter(Cluster.api_address.like('%' + query_params["api_address"] + '%'))
             if "cni" in query_params and query_params["cni"]:
                 query = query.filter(Cluster.cni.like('%' + query_params["cni"] + '%'))
             if "user_name" in query_params and query_params["user_name"]:

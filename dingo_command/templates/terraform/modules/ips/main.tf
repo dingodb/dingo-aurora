@@ -14,7 +14,7 @@ resource "null_resource" "dummy_dependency" {
 #  depends_on = [null_resource.dummy_dependency]
 #}
 resource "openstack_networking_floatingip_v2" "k8s_master" {
-  count      = length(var.k8s_master_fips) > 0 ? 0 : 1
+  count      = length(var.k8s_master_fips) > 0 ? 0 : var.number_of_k8s_masters
   pool       = var.floatingip_pool
   subnet_ids = var.external_subnetids
   depends_on = [null_resource.dummy_dependency]

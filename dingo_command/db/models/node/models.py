@@ -40,6 +40,7 @@ class NodeInfo(Base):
     auth_type = Column(String(length=128), nullable= True)
     user = Column(String(length=128), nullable= True)
     password = Column(String(length=128), nullable= True)
+    disk_type = Column(String(length=128), nullable=True)
     create_time = Column(DateTime, nullable=True)
     update_time = Column(DateTime, nullable=True)
     description = Column(String(length=255), nullable=True)
