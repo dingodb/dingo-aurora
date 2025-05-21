@@ -19,7 +19,7 @@ async def project_resource_statistic_list(page: int = Query(1, description="页�
         if resource_project_name:
             query_params['resource_project_name'] = resource_project_name
         # 查询资源统计概览相关数据
-        return resources_service.vpc_resource_statistic_list(query_params, page, page_size, sort_keys, sort_dirs)
+        return resources_service.project_resource_statistic_list(query_params, page, page_size, sort_keys, sort_dirs)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
