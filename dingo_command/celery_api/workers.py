@@ -158,8 +158,10 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, regio
             print(f"Terraform apply error: {res.stderr}")
             return False
         key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory",str(cluster.id), "id_rsa")
-        with open(key_file_path, 'r') as key_file:
-            private_key_content = key_file.read()
+        private_key_content = ""
+        if os.path.exists(key_file_path):
+            with open(key_file_path, 'r') as key_file:
+                private_key_content = key_file.read()
         query_params = {}
         query_params["id"] = cluster.id
         count, data = ClusterSQL.list_cluster(query_params)
@@ -321,8 +323,10 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
         host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "hosts")
         playbook_file = os.path.join(WORK_DIR, "ansible-deploy", "cluster.yml")
         key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "id_rsa")
-        with open(key_file_path, 'r') as key_file:
-            private_key_content = key_file.read()
+        private_key_content = None
+        if os.path.exists(key_file_path):
+            with open(key_file_path, 'r') as key_file:
+                private_key_content = key_file.read()
         
         print(f"start deploy kubernetes cluster: {ansible_dir}")
         thread,runner = run_playbook(playbook_file, host_file, ansible_dir, ssh_key=private_key_content)
@@ -788,6 +792,32 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             "--private-key", key_file_path
         ], capture_output=True)
         # result = subprocess.run("", shell=True, capture_output=True)
+
+        # 更新集群node的状态为running
+        session = get_session()
+        with session.begin():
+            for node in node_list:
+                db_node = session.get(NodeInfo, node.get("id"))
+                for k, v in hosts_data["_meta"]["hostvars"].items():
+                    if db_node.name == k:
+                        db_node.server_id = v.get("id")
+                        db_node.status = "running"
+                        db_node.admin_address = v.get("ip")
+                        db_node.floating_ip = v.get("public_ipv4")
+                        break
+
+        # 更新集群instance的状态为running
+        with session.begin():
+            for instance in instance_list:
+                db_instance = session.get(Instance, instance.get("id"))
+                for k, v in hosts_data["_meta"]["hostvars"].items():
+                    # 需要添加节点的ip地址等信息
+                    if db_instance.name == k:
+                        db_instance.server_id = v.get("id")
+                        db_instance.status = "running"
+                        db_instance.ip_address = v.get("ip")
+                        db_instance.floating_ip = v.get("public_ipv4")
+                        break
 
         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
         task_info.state = "success"

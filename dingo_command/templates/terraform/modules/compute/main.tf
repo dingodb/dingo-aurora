@@ -35,6 +35,7 @@ data "openstack_networking_network_v2" "bus_network" {
 
 # create key pair
 resource "openstack_compute_keypair_v2" "key_pair" {
+  count      = (var.public_key_path != null && var.public_key_path != "") ? 1 : 0
   name       = var.cluster_name
   public_key = var.public_key_path != "" ? chomp(file(var.public_key_path)) : ""
 }
@@ -115,7 +116,7 @@ locals {
   nodes_settings = {
     for name, node in var.nodes :
       name => {
-        "key_pair"       = openstack_compute_keypair_v2.key_pair.name,
+        "key_pair"       = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : "",
         "password"       = var.password,
         "use_local_disk" = (node.root_volume_size_in_gb != null ? node.root_volume_size_in_gb : var.node_root_volume_size_in_gb) == 0,
         "image_id"       = node.image_id != null ? node.image_id : local.image_to_use_node,
@@ -130,7 +131,7 @@ locals {
   masters_settings = {
     for name, node in var.k8s_masters :
       name => {
-        "key_pair"       = openstack_compute_keypair_v2.key_pair.name,
+        "key_pair"       = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : "",
         "password"       = var.password,
         "use_local_disk" = (node.root_volume_size_in_gb != null ? node.root_volume_size_in_gb : var.master_root_volume_size_in_gb) == 0,
         "image_id"       = node.image_id != null ? node.image_id : local.image_to_use_master,
@@ -203,7 +204,7 @@ resource "openstack_compute_instance_v2" "k8s-master" {
   availability_zone = "nova"
   image_id          = local.image_to_use_master
   flavor_id         = local.master_flavor
-  key_pair          = openstack_compute_keypair_v2.key_pair.name
+  key_pair          = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : ""
   user_data         = data.cloudinit_config.cloudinit.rendered
   security_groups = [openstack_networking_secgroup_v2.secgroup.name]
   dynamic "block_device" {
@@ -288,7 +289,7 @@ resource "openstack_compute_instance_v2" "k8s-master-no-floatip" {
   availability_zone = "nova"
   image_id          = local.image_to_use_master
   flavor_id         = local.master_flavor
-  key_pair          = openstack_compute_keypair_v2.key_pair.name
+  key_pair          = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : ""
   user_data         = data.cloudinit_config.cloudinit.rendered
   security_groups = [openstack_networking_secgroup_v2.secgroup.name]
   dynamic "block_device" {
@@ -387,7 +388,7 @@ resource "openstack_compute_instance_v2" "nodes" {
   availability_zone = each.value.az
   image_id          = local.nodes_settings[each.key].use_local_disk ? local.nodes_settings[each.key].image_id : null
   flavor_id         = each.value.flavor
-  key_pair          = openstack_compute_keypair_v2.key_pair.name
+  key_pair          = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : ""
   user_data         = each.value.cloudinit != null ? templatefile("${path.module}/templates/cloudinit.yaml.tmpl", {
     extra_partitions = each.value.cloudinit.extra_partitions,
     netplan_critical_dhcp_interface = each.value.cloudinit.netplan_critical_dhcp_interface,
