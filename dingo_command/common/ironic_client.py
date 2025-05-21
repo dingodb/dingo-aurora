@@ -50,14 +50,17 @@ class IronicClient:
         }
 
         headers = {'Content-Type': 'application/json'}
-        response = requests.post(f"{IRONIC_AUTH_URL}/v3/auth/tokens", data=json.dumps(auth_data), headers=headers)
-        if response.status_code != 201:
-            print(f"ironic获取token失败: {response.text}")
-        else:
-            self.token = response.headers['X-Subject-Token']
-            self.service_catalog = response.json()['token']['catalog']
-            self.session.headers.update({'X-Auth-Token': self.token})
-            self.session.headers.update({'X-OpenStack-Ironic-API-Version': "latest" })
+        try:
+            response = requests.post(f"{IRONIC_AUTH_URL}/v3/auth/tokens", data=json.dumps(auth_data), headers=headers)
+            if response.status_code != 201:
+                print(f"ironic[{IRONIC_AUTH_URL}] 获取token失败: {response.text}")
+            else:
+                self.token = response.headers['X-Subject-Token']
+                self.service_catalog = response.json()['token']['catalog']
+                self.session.headers.update({'X-Auth-Token': self.token})
+                self.session.headers.update({'X-OpenStack-Ironic-API-Version': "latest" })
+        except Exception as e:
+            print(f"ironic[{IRONIC_AUTH_URL}] 获取token报错：{e}")
 
 
     def get_service_endpoint(self, service_type, interface='public', region='RegionOne'):

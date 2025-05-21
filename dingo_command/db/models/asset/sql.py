@@ -102,7 +102,7 @@ class AssetSQL:
                 outerjoin(AssetContractsInfo, AssetContractsInfo.asset_id == AssetBasicInfo.id). \
                 outerjoin(AssetBelongsInfo, AssetBelongsInfo.asset_id == AssetBasicInfo.id). \
                 outerjoin(AssetCustomersInfo, AssetCustomersInfo.asset_id == AssetBasicInfo.id). \
-                outerjoin(AssetResourceRelationInfo, AssetResourceRelationInfo.asset_id == AssetBasicInfo.id)
+                outerjoin(AssetResourceRelationInfo, AssetResourceRelationInfo.asset_id == AssetBasicInfo.id).group_by(AssetBasicInfo.id)
             # 数据库查询参数
             if "asset_name" in query_params and query_params["asset_name"]:
                 query = query.filter(AssetBasicInfo.name.like('%' + str(query_params["asset_name"]) + '%'))

@@ -16,7 +16,7 @@ resource_detail_list_dir_dic= {"resource_name":AssetResourceRelationInfo.resourc
 class AssetResourceRelationSQL:
 
     @classmethod
-    def vpc_resource_statistic_list(cls, query_params, page=1, page_size=10, sort_keys=None, sort_dirs="ascend"):
+    def project_resource_statistic_list(cls, query_params, page=1, page_size=10, sort_keys=None, sort_dirs="ascend"):
         # 获取session
         session = get_session()
         with session.begin():
@@ -200,7 +200,7 @@ class AssetResourceRelationSQL:
             return session.query(AssetResourceRelationInfo).count()
 
     @classmethod
-    def get_vpc_resource_project_not_empty_count(cls):
+    def get_project_resource_project_not_empty_count(cls):
         session = get_session()
         with ((session.begin())):
             return session.query(AssetResourceRelationInfo). \

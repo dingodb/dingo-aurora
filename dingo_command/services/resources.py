@@ -11,13 +11,13 @@ from dingo_command.utils import datetime
 class ResourcesService:
 
     @classmethod
-    def vpc_resource_statistic_list(self, query_params, page, page_size, sort_keys, sort_dirs):
+    def project_resource_statistic_list(self, query_params, page, page_size, sort_keys, sort_dirs):
         # 资源按vpc_id分组： 根据裸金属和裸金属对应的虚拟机所属的租户进行分组
         # VPC名称、资源类型、资源数量、资产数量
         # 业务逻辑
         try:
             # 按照条件从数据库中查询数据
-            count, data = AssetResourceRelationSQL.vpc_resource_statistic_list(query_params, page, page_size, sort_keys, sort_dirs)
+            count, data = AssetResourceRelationSQL.project_resource_statistic_list(query_params, page, page_size, sort_keys, sort_dirs)
             # 数据处理
             # 遍历
             ret = []
@@ -98,7 +98,7 @@ class ResourcesService:
             resource_total_count = AssetResourceRelationSQL.get_all_asset_resource_relation_count()
             result['resource_total_count'] = resource_total_count
             # 项目数目
-            project_count = AssetResourceRelationSQL.get_vpc_resource_project_not_empty_count()
+            project_count = AssetResourceRelationSQL.get_project_resource_project_not_empty_count()
             result['project_count'] = project_count
 
             # 资源的资产ID为空数目，即为未分配节点数目
