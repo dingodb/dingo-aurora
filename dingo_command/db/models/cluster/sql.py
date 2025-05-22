@@ -28,6 +28,8 @@ class ClusterSQL:
             # 查询语句
 
             # 数据库查询参数
+            if "exact_name" in query_params and query_params["exact_name"]:
+                query = query.filter(Cluster.name == query_params["exact_name"])
             if "name" in query_params and query_params["name"]:
                 query = query.filter(Cluster.name.like('%' + query_params["name"] + '%'))
             if "id" in query_params and query_params["id"]:

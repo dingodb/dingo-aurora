@@ -296,3 +296,6 @@ variable "tenant_id" {
   type    = string
   default = ""
 }
+
+variable "forward_float_ip_id" {}
+variable "port_forwards" {}

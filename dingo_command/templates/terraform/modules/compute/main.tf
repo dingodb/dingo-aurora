@@ -42,7 +42,7 @@ resource "openstack_compute_keypair_v2" "key_pair" {
 
 # Check if flavor exists
 data "openstack_compute_flavor_v2" "k8s_control" {
-  name = "d4-8-110"  # 替换为你的 Flavor 名称
+  name = "k8s_control"  # 替换为你的 Flavor 名称
 }
 
 resource "openstack_networking_secgroup_v2" "secgroup" {
@@ -219,6 +219,7 @@ resource "openstack_compute_instance_v2" "k8s-master" {
       delete_on_termination = true
     }
   }
+  tags = ["kubernetes control"]
   network {
     port = element(openstack_networking_port_v2.admin_master_port.*.id, count.index)
   }
@@ -304,6 +305,7 @@ resource "openstack_compute_instance_v2" "k8s-master-no-floatip" {
       delete_on_termination = true
     }
   }
+  tags = ["kubernetes control"]
   network {
     port = element(openstack_networking_port_v2.admin_master_no_float_port.*.id, count.index)
   }
@@ -405,6 +407,7 @@ resource "openstack_compute_instance_v2" "nodes" {
       delete_on_termination = true
     }
   }
+  tags = var.number_of_k8s_masters == 0 ? ["worker node"] : ["kubernetes worker node"]
   security_groups        = [openstack_networking_secgroup_v2.secgroup.name]
   network {
     port = openstack_networking_port_v2.nodes_port[each.key].id
@@ -423,6 +426,58 @@ resource "openstack_compute_instance_v2" "nodes" {
     command = "%{if each.value.floating_ip} %{if var.password == ""}sed -e s#USER#${var.ssh_user}# -e s#PRIVATE_KEY_FILE#${var.private_key_path}# -e s#BASTION_ADDRESS#${element([for key, value in var.k8s_master_fips : value.address], 0)}# ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element([for key, value in var.k8s_master_fips : value.address], 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}%{else}true%{endif}"
   }
 }
+
+#resource "openstack_networking_portforwarding_v2" "pf_1" {
+#  for_each         = var.number_of_nodes == 0 && var.number_of_nodes_no_floating_ip == 0  var.forward_float_ip_id != ""? var.nodes : {}
+#  floatingip_id    = var.forward_float_ip_id
+#  external_port    = var.forward_out_port
+#  internal_port    = var.forward_in_port
+#  internal_port_id = openstack_networking_port_v2.nodes_port[each.key].id
+#  protocol         = "tcp"
+#  depends_on = [
+#    openstack_compute_instance_v2.nodes
+#  ]
+#}
+locals {
+  # 检查是否满足执行端口转发的条件
+  should_create_port_forwarding = (
+    var.number_of_nodes == 0 && 
+    var.number_of_nodes_no_floating_ip == 0 && 
+    var.forward_float_ip_id != null &&
+    var.forward_float_ip_id != ""
+  )
+  
+  # 根据条件决定是生成映射还是返回空映射
+  port_forwarding_mappings = local.should_create_port_forwarding ? {
+    for pair in flatten([
+      for node_key, node in var.nodes : [
+        for idx, port_mapping in var.port_forwards : {
+          node_key     = node_key
+          mapping_key  = "${node_key}-${idx}"
+          external_port = port_mapping.external_port
+          internal_port = port_mapping.internal_port
+          protocol     = port_mapping.protocol
+          internal_ip = openstack_compute_instance_v2.nodes[node_key].network[0].fixed_ip
+        }
+      ]
+    ]) : pair.mapping_key => pair
+  } : {}
+}
+resource "openstack_networking_portforwarding_v2" "pf_multi" {
+  for_each = local.port_forwarding_mappings
+
+  floatingip_id    = var.forward_float_ip_id
+  external_port    = each.value.external_port
+  internal_port    = each.value.internal_port
+  internal_port_id = openstack_networking_port_v2.nodes_port[each.value.node_key].id
+  protocol         = each.value.protocol
+  internal_ip_address = each.value.internal_ip
+  depends_on = [
+    openstack_compute_instance_v2.nodes
+  ]
+}
+
+
 # resource "openstack_networking_floatingip_associate_v2" "masters" {
 #   for_each              = var.number_of_k8s_masters == 0 && var.number_of_k8s_masters_no_etcd == 0 && var.number_of_k8s_masters_no_floating_ip == 0 && var.number_of_k8s_masters_no_floating_ip_no_etcd == 0 ? { for key, value in var.masters : key => value if value.floating_ip } : {}
 #   floating_ip           = var.masters_fips[each.key].address

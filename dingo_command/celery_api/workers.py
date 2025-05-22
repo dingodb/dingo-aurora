@@ -57,7 +57,11 @@ class NodeGroup(BaseModel):
     etcd: Optional[bool] = Field(None, description="是否是etcd节点")
     image_id: Optional[str] = Field(None, description="镜像id")
 
-
+class Port_forwards(BaseModel):
+    internal_port: Optional[int] = Field(None, description="转发的内部端口")
+    external_port: Optional[int] = Field(None, description="转发的外部端口")
+    protocol: Optional[str] = Field(None, description="协议")
+    
 class ClusterTFVarsObject(BaseModel):
     id: Optional[str] = Field(None, description="集群id")
     cluster_name: Optional[str] = Field(None, description="集群id")
@@ -91,6 +95,8 @@ class ClusterTFVarsObject(BaseModel):
     tenant_id: Optional[str] = Field(None, description="租户id")
     auth_url: Optional[str] = Field(None, description="鉴权url")
     token: Optional[str] = Field(None, description="token")
+    forward_float_ip_id: Optional[str] = Field("", description="集群浮动ip的id")
+    port_forwards: Optional[list[Port_forwards]] = Field(None, description="端口转发配置")
     
 def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, region_name:str = "regionOne"):
     """使用Terraform创建基础设施"""

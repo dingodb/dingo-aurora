@@ -389,6 +389,8 @@ class ClusterService:
                     nodeinfos.append(node_info) 
             res_cluster.node_config = nodeinfos
             res_cluster.node_count = count
+            
+            # 查询
             if not res or not res.get("data"):
                 return None
             # 返回第一条数据
@@ -403,7 +405,7 @@ class ClusterService:
         
         
         query_params = {}
-        query_params["name"] = cluster.name
+        query_params["exact_name"] = cluster.name
         query_params["project_id"] = cluster.project_id
         res = self.list_clusters(query_params, 1, -1, None, None)
         if res.get("total") > 0:
@@ -457,7 +459,9 @@ class ClusterService:
             subnet_cidr = self.generate_random_cidr()
             #校验是否重复
             floatingip_pool,public_floatingip_pool,public_subnetids,external_subnetids,external_net_id= self.get_floatip_pools(neutron_api, external_net)
-                        
+            
+            
+                   
             tfvars = ClusterTFVarsObject(
                 id = cluster_info_db.id,
                 cluster_name=cluster.name,
@@ -477,6 +481,8 @@ class ClusterService:
                 token = token,
                 auth_url = auth_url,
                 tenant_id=cluster.project_id,
+                port_forwards=cluster.port_forwards,
+                forward_float_ip_id = cluster.forward_float_ip_id
                 )
             if cluster.node_config[0].auth_type == "password":
                 tfvars.password = cluster.node_config[0].password
@@ -485,6 +491,7 @@ class ClusterService:
             #组装cluster信息为ClusterTFVarsObject格式
             if cluster.type == "baremental":
                 tfvars.number_of_k8s_masters = 0
+                tfvars.number_of_k8s_masters_no_floating_ip = 0
                 result = celery_app.send_task("dingo_command.celery_api.workers.create_cluster",
                                           args=[tfvars.dict(), cluster.dict(), instance_bm_list ])
             elif cluster.type == "kubernetes":
