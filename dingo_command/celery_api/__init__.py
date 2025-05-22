@@ -32,7 +32,9 @@ redis_opts = [
     cfg.StrOpt('redis_ip', default=None, help='the redis ip'),
     cfg.IntOpt('redis_port', default=None, help='the redis port'),
     cfg.StrOpt('redis_password', default=None, help='the redis password'),
+    cfg.StrOpt('sentinel_url', default=None, help='the redis sentinel'),
 ]
+
 
 # 注册默认配置
 CONF.register_group(default_group)
