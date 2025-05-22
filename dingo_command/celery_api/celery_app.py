@@ -24,7 +24,7 @@ class Config:
     result_expires = 600  # A built-in periodic task will delete the results after this time (seconds)
     # assuming that celery beat is enabled. The task runs daily at 4am.
     # task_ignore_result = True  # now we control this per task
-    task_compression = "json"
+    task_compression = "gzip"
     result_compression = "json"
     broker_connection_retry = True
     broker_connection_retry_on_startup = True

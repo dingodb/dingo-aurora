@@ -4,6 +4,7 @@ import base64
 import os
 import subprocess
 import time
+import copy
 from typing import Dict, Optional
 from dingo_command.api.model.cluster import ClusterObject
 from dingo_command.api.model.instance import InstanceCreateObject
@@ -440,7 +441,7 @@ def update_ansible_status(task_info, event, task_name, host, task_status):
             update_task_state(task_info)
 
 
-def scale_kubernetes(cluster: ClusterObject):
+def scale_kubernetes(cluster: ClusterObject, scale_nodes):
     """使用Ansible扩容K8s集群"""
     try_count = 5
     count = 0
@@ -457,7 +458,8 @@ def scale_kubernetes(cluster: ClusterObject):
             else:
                 private_key_content = None
 
-            thread, runner = run_playbook(playbook_file, host_file, ansible_dir, ssh_key=private_key_content)
+            thread, runner = run_playbook(playbook_file, host_file, ansible_dir,
+                                          ssh_key=private_key_content, limit=scale_nodes)
             # 处理并打印事件日志
             while runner.status not in ['canceled', 'successful', 'timeout', 'failed']:
                 for event in runner.events:
@@ -727,7 +729,7 @@ def create_bm_instance(conn, instance_info: InstanceCreateObject, instance_list)
 
 
 @celery_app.task(bind=True)
-def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_list, scale=False):
+def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_list, scale_nodes=None, scale=False):
     try:
         task_id = self.request.id.__str__()
         print(f"Task ID: {task_id}")
@@ -763,18 +765,19 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
 
         print(f"config ssh no pass {task_id}")
         master_ip, lb_ip, hosts_data = get_ips(cluster_tfvars, task_info, host_file)
-        for i in range(1, cluster_tfvars.number_of_k8s_masters + 1):
-            print(f"delete host from know_hosts  {task_id}")
-            master_node_name = f"{cluster_tfvars.cluster_name}-k8s-master-{i}"
-            tmp_ip = hosts_data["_meta"]["hostvars"][master_node_name]["access_ip_v4"]
-            cmd = f'ssh-keygen -f "/root/.ssh/known_hosts" -R "{tmp_ip}"'
-            result = subprocess.run(cmd, shell=True, capture_output=True)
-            if result.returncode != 0:
-                task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                task_info.state = "failed"
-                task_info.detail = str(result.stderr)
-                update_task_state(task_info)
-                raise Exception("Ansible kubernetes deployment failed")
+        if os.path.exists("/root/.ssh/known_hosts"):
+            for i in range(1, cluster_tfvars.number_of_k8s_masters + 1):
+                print(f"delete host from know_hosts  {task_id}")
+                master_node_name = f"{cluster_tfvars.cluster_name}-k8s-master-{i}"
+                tmp_ip = hosts_data["_meta"]["hostvars"][master_node_name]["access_ip_v4"]
+                cmd = f'ssh-keygen -f "/root/.ssh/known_hosts" -R "{tmp_ip}"'
+                result = subprocess.run(cmd, shell=True, capture_output=True)
+                if result.returncode != 0:
+                    task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                    task_info.state = "failed"
+                    task_info.detail = str(result.stderr)
+                    update_task_state(task_info)
+                    raise Exception("Ansible kubernetes deployment failed")
         if cluster_tfvars.password != "":
             cmd = f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no {cluster_tfvars.ssh_user}@{master_ip}'
             result = subprocess.run(cmd, shell=True, capture_output=True)
@@ -849,7 +852,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         cluster.id = cluster_tf_dict["id"]
 
         if scale:
-            ansible_result = scale_kubernetes(cluster)
+            ansible_result = scale_kubernetes(cluster, scale_nodes)
         else:
             ansible_result = deploy_kubernetes(cluster, lb_ip, task_id)
         if not ansible_result:
@@ -866,32 +869,6 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         c.status = 'running'
         c.error_message = ""
         ClusterSQL.update_cluster(c)
-
-        # 更新集群node的状态为running
-        session = get_session()
-        with session.begin():
-            for node in node_list:
-                db_node = session.get(NodeInfo, node.get("id"))
-                for k, v in hosts_data["_meta"]["hostvars"].items():
-                    if db_node.name == k:
-                        db_node.server_id = v.get("id")
-                        db_node.status = "running"
-                        db_node.admin_address = v.get("ip")
-                        db_node.floating_ip = v.get("public_ipv4")
-                        break
-
-        # 更新集群instance的状态为running
-        with session.begin():
-            for instance in instance_list:
-                db_instance = session.get(Instance, instance.get("id"))
-                for k, v in hosts_data["_meta"]["hostvars"].items():
-                    # 需要添加节点的ip地址等信息
-                    if db_instance.name == k:
-                        db_instance.server_id = v.get("id")
-                        db_instance.status = "running"
-                        db_instance.ip_address = v.get("ip")
-                        db_instance.floating_ip = v.get("public_ipv4")
-                        break
 
         # 更新数据库的状态为success
         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
@@ -1034,8 +1011,10 @@ def delete_cluster(self, cluster_id, region_name, token):
 
 
 @celery_app.task(bind=True)
-def delete_node(self, cluster_id, cluster_name, node, instance, extravars):
+def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extravars):
     try:
+        node_list = json.loads(node_list)
+        instance_list = json.loads(instance_list)
         extravars["skip_confirmation"] = "true"
         cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id))
         os.environ['CURRENT_CLUSTER_DIR'] = cluster_dir
@@ -1050,8 +1029,6 @@ def delete_node(self, cluster_id, cluster_name, node, instance, extravars):
         if os.path.exists(key_file_path):
             with open(key_file_path, 'r') as key_file:
                 private_key_content = key_file.read()
-        # run_playbook(playbook_file, host_file, ansible_dir, ssh_key=private_key_content, extravars=extravars)
-
         thread, runner = run_playbook(playbook_file, host_file, ansible_dir,
                                       ssh_key=private_key_content, extravars=extravars)
         # 处理并打印事件日志
@@ -1107,21 +1084,66 @@ def delete_node(self, cluster_id, cluster_name, node, instance, extravars):
         with session.begin():
             db_cluster = session.get(Cluster, (cluster_id, cluster_name))
             db_cluster.status = 'running'
-            # 根据 node.id 删除节点
-            node = session.get(NodeInfo, node.get("id"))  # 假设 NodeSQL 是 ORM 模型类
-            if node:
-                session.delete(node)
-
-            # 根据 instance.id 删除实例
-            instance = session.get(Instance, instance.get("id"))  # 假设 InstanceSQL 是 ORM 模型类
-            instance.status = "running"
-            instance.cluster_id = ""
-            instance.cluster_name = ""
+            for node in node_list:
+                # 根据 node.id 删除节点
+                node = session.get(NodeInfo, node.get("id"))
+                if node:
+                    session.delete(node)
+            for instance in instance_list:
+                # 根据 instance.id 更新实例
+                instance = session.get(Instance, instance.get("id"))
+                instance.status = "running"
+                instance.cluster_id = ""
+                instance.cluster_name = ""
 
     except subprocess.CalledProcessError as e:
         print(f"Ansible error: {e}")
         return False
 
+@celery_app.task(bind=True)
+def delete_baremetal(self, cluster_id, cluster_name, instance_list, token):
+    try:
+        instance_list = json.loads(instance_list)
+        # 执行terraform销毁这些节点（这里需要通过之前生成的output.json文件生成）
+        output_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id),
+                                   "terraform", "output.tfvars.json")
+        node_name_list = []
+        for instance in instance_list:
+            node_name_list.append(instance.get("name")[len(cluster_name) + 1:])
+        with open(output_file) as f:
+            content = json.loads(f.read())
+            content_new = copy.deepcopy(content)
+            for node in content["nodes"]:
+                if node in node_name_list:
+                    del content_new["nodes"][node]
+        content_new["token"] = token
+        with open(output_file, "w") as f:
+            json.dump(content_new, f, indent=4)
+
+        # 执行terraform apply
+        cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id))
+        os.environ['CURRENT_CLUSTER_DIR'] = cluster_dir
+        terraform_dir = os.path.join(cluster_dir, "terraform")
+        os.chdir(terraform_dir)
+        res = subprocess.run([
+            "terraform",
+            "apply",
+            "-auto-approve",
+            "-var-file=output.tfvars.json"
+        ], capture_output=True, text=True)
+        session = get_session()
+        with session.begin():
+            db_cluster = session.get(Cluster, (cluster_id, cluster_name))
+            db_cluster.status = 'running'
+            for node in instance_list:
+                # 根据 node.id 删除节点
+                node = session.get(Instance, node.get("id"))
+                if node:
+                    session.delete(node)
+
+    except subprocess.CalledProcessError as e:
+        print(f"Ansible error: {e}")
+        return False
 
 @celery_app.task(bind=True)
 def create_instance(self, instance, instance_list):

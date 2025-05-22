@@ -1,5 +1,5 @@
 from fastapi import Query, Header, Depends
-from dingo_command.api.model.cluster import ScaleNodeObject
+from dingo_command.api.model.cluster import ScaleNodeObject, NodeRemoveObject
 
 from dingo_command.services.cluster import ClusterService
 from dingo_command.services.node import NodeService
@@ -70,6 +70,10 @@ async def create_node(cluster: ScaleNodeObject, token: str = Depends(get_token))
         raise HTTPException(status_code=400, detail="the cluster is creating, please wait")
     if cluster_info.status == "scaling":
         raise HTTPException(status_code=400, detail="the cluster is scaling, please wait")
+    if cluster_info.status == "deleting":
+        raise HTTPException(status_code=400, detail="the cluster is deleting, please wait")
+    if cluster_info.status == "removing":
+        raise HTTPException(status_code=400, detail="the cluster is removing, please wait")
     try:
         # 创建节点（扩容节点）
         result = node_service.create_node(cluster_info, cluster, token)
@@ -82,28 +86,39 @@ async def create_node(cluster: ScaleNodeObject, token: str = Depends(get_token))
         raise HTTPException(status_code=400, detail="scale node error")
 
 
-@router.delete("/node/{node_id}", summary="缩容节点", description="缩容节点")
-async def delete_node(node_id: str):
-    data = node_service.get_node(node_id)
-    if data.get("data") is not None:
-        node = data.get("data")
+@router.post("/node/remove", summary="缩容节点", description="缩容节点")
+async def delete_node(node_info: NodeRemoveObject):
+    try:
+        print("node_info is:", node_info)
         # 先检查下是否有正在处于缩容的状态，如果是就直接返回
         cluster_service = ClusterService()
-        result = cluster_service.get_cluster(node.cluster_id)
+        result = cluster_service.get_cluster(node_info.cluster_id)
         if not result:
             raise HTTPException(status_code=400, detail="the cluster does not exist, please check")
         if result.status == "creating":
             raise HTTPException(status_code=400, detail="the cluster is creating, please wait")
-        try:
-            # 缩容某些节点
-            result = node_service.delete_node(node)
-            if result is not None:
-                return {"data": result}
-        except Fail as e:
-            raise HTTPException(status_code=400, detail=e.error_message)
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            raise HTTPException(status_code=400, detail="delete node error")
-    else:
-        raise HTTPException(status_code=400, detail="can not find the node, please check")
+        if result.status == "deleting":
+            raise HTTPException(status_code=400, detail="the cluster is deleting, please wait")
+        if result.status == "scaling":
+            raise HTTPException(status_code=400, detail="the cluster is scaling, please wait")
+        if result.status == "removing":
+            raise HTTPException(status_code=400, detail="the cluster is removing, please wait")
+
+        # 缩容某些节点
+        node_list = []
+        for id in node_info.node_list:
+            node = node_service.get_node(id)
+            if not node.get("data"):
+                continue
+            node_list.append(node.get("data"))
+        if not node_list:
+            raise HTTPException(status_code=400, detail="there are no nodes, please check")
+        result = node_service.delete_node(node_info.cluster_id, result.name, node_list)
+        if result is not None:
+            return {"data": result}
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail="remove node error")

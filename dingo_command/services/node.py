@@ -107,46 +107,56 @@ class NodeService:
         db_cluster.update_time = datetime.now()
         return db_cluster
 
-    def update_nodes_todb(self, node):
-        node.status = "deleting"
-        node.update_time = datetime.now()
-        node_dict = {
-            "id": node.id,
-            "name": node.name,
-            "cluster_id": node.cluster_id,
-            "cluster_name": node.cluster_name,
-            "instance_id": node.instance_id,
-            "server_id": node.server_id,
-            "admin_address": node.admin_address,
-            "role": node.role,
-            "node_type": node.node_type,
-            "auth_type": node.auth_type,
-            "region_name": node.region,
-            "user": node.user,
-            "password": node.password,
-        }
-        return node, node_dict
+    def update_nodes_todb(self, node_list):
+        node_info_list = []
+        for node in node_list:
+            node.status = "deleting"
+            node.update_time = datetime.now()
+            node_dict = {
+                "id": node.id,
+                "name": node.name,
+                "cluster_id": node.cluster_id,
+                "cluster_name": node.cluster_name,
+                "instance_id": node.instance_id,
+                "server_id": node.server_id,
+                "admin_address": node.admin_address,
+                "role": node.role,
+                "node_type": node.node_type,
+                "auth_type": node.auth_type,
+                "region_name": node.region,
+                "user": node.user,
+                "password": node.password,
+            }
+            node_info_list.append(node_dict)
+        instance_list_json = json.dumps(node_info_list)
+        return node_list, instance_list_json
 
-    def update_instances_todb(self, node):
+    def update_instances_todb(self, node_list):
         session = get_session()
-        db_instance = session.get(InstanceDB, node.instance_id)
-        db_instance.status = "deleting"
-        db_instance.update_time = datetime.now()
-        instance_dict = {
-            "id": db_instance.id,
-            "name": db_instance.name,
-            "cluster_id": db_instance.cluster_id,
-            "cluster_name": db_instance.cluster_name,
-            "server_id": db_instance.server_id,
-            "ip_address": db_instance.ip_address,
-            "node_type": db_instance.node_type,
-            "region": db_instance.region,
-            "user": db_instance.user,
-            "password": db_instance.password,
-        }
-        return db_instance, instance_dict
+        instance_info_list = []
+        instance_db_list = []
+        for node in node_list:
+            db_instance = session.get(InstanceDB, node.instance_id)
+            db_instance.status = "deleting"
+            db_instance.update_time = datetime.now()
+            instance_dict = {
+                "id": db_instance.id,
+                "name": db_instance.name,
+                "cluster_id": db_instance.cluster_id,
+                "cluster_name": db_instance.cluster_name,
+                "server_id": db_instance.server_id,
+                "ip_address": db_instance.ip_address,
+                "node_type": db_instance.node_type,
+                "region": db_instance.region,
+                "user": db_instance.user,
+                "password": db_instance.password,
+            }
+            instance_db_list.append(db_instance)
+            instance_info_list.append(instance_dict)
+        instance_list_json = json.dumps(instance_info_list)
+        return instance_db_list, instance_list_json
 
-    def generate_k8s_nodes(self, cluster_info, cluster, k8s_nodes):
+    def generate_k8s_nodes(self, cluster_info, cluster, k8s_nodes, scale_nodes):
         node_db_list, instance_db_list = [], []
         node_index = len(k8s_nodes) + 1
         for idx, node in enumerate(cluster.node_config):
@@ -161,6 +171,7 @@ class NodeService:
                         etcd=False,
                         image_id=node.image
                     )
+                    scale_nodes.append(f"node-{int(node_index)}")
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
                     instance_db.node_type = node.type
@@ -224,6 +235,7 @@ class NodeService:
                         etcd=False,
                         image_id=node.image
                     )
+                    scale_nodes.append(f"node-{int(node_index)}")
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
                     instance_db.node_type = node.type
@@ -333,7 +345,7 @@ class NodeService:
         for net in external_net:
             for subnet_id in net["subnets"]:
                 subnet = neutron_api.get_subnet_by_id(subnet_id)
-                import ipaddress;
+                import ipaddress
                 if ipaddress.ip_network(subnet["cidr"]).is_private:
                     if floatingip_pool=="":
                         floatingip_pool=net["name"]
@@ -368,6 +380,7 @@ class NodeService:
             cluster_info_db = self.convert_clusterinfo_todb(cluster_info.id, cluster_info.name)
             ClusterSQL.update_cluster(cluster_info_db)
             k8s_nodes = content["nodes"]
+            scale_nodes = []
             subnet_cidr = content.get("subnet_cidr")
             lb_enbale = content.get("k8s_master_loadbalancer_enabled")
             number_of_k8s_masters_no_floating_ip = content.get("number_of_k8s_masters_no_floating_ip")
@@ -376,7 +389,7 @@ class NodeService:
             (floatingip_pool, public_floatingip_pool, public_subnetids,
              external_subnetids, external_net_id) = self.get_floatip_pools(neutron_api, external_net)
 
-            node_list, instance_list = self.generate_k8s_nodes(cluster_info, cluster, k8s_nodes)
+            node_list, instance_list = self.generate_k8s_nodes(cluster_info, cluster, k8s_nodes, scale_nodes)
             # 创建terraform变量
             tfvars = ClusterTFVarsObject(
                 id=cluster.id,
@@ -413,27 +426,24 @@ class NodeService:
             traceback.print_exc()
             raise e
 
-    def delete_node(self, node):
-        if not node:
-            return None
+    def delete_node(self, cluster_id, cluster_name, node_list):
         # 详情
         try:
-            cluster_id = node.cluster_id
-            cluster_name = node.cluster_name
             extravars = {}
-            extravars["node"] = node.name
-            if node.role == "master":
-                raise ValueError("node’s role is not master")
+            node_name_list = []
+            for node in node_list:
+                node_name_list.append(node.name)
+            extravars["node"] = ",".join(node_name_list)
 
             # 写入集群的状态为正在缩容的状态，防止其他缩容的动作重复执行
             cluster_info_db = self.update_clusterinfo_todb(cluster_id, cluster_name)
             ClusterSQL.update_cluster(cluster_info_db)
             # 写入节点的状态为正在deleting的状态
-            node_info_db, node_dict = self.update_nodes_todb(node)
-            NodeSQL.update_node(node_info_db)
+            node_db_list, node_dict = self.update_nodes_todb(node_list)
+            NodeSQL.update_node_list(node_db_list)
             # 写入instance的状态为正在deleting的状态
-            instance_info_db, instance_dict = self.update_instances_todb(node)
-            InstanceSQL.update_instance(instance_info_db)
+            instance_db_list, instance_dict = self.update_instances_todb(node_list)
+            InstanceSQL.update_instance_list(instance_db_list)
 
             # 调用celery_app项目下的work.py中的delete_cluster方法
             result = celery_app.send_task("dingo_command.celery_api.workers.delete_node",

@@ -35,7 +35,6 @@ redis_opts = [
     cfg.StrOpt('sentinel_url', default=None, help='the redis sentinel'),
 ]
 
-
 # 注册默认配置
 CONF.register_group(default_group)
 CONF.register_opts(default_opts, default_group)
