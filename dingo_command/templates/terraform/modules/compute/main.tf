@@ -7,8 +7,8 @@ data "openstack_images_image_v2" "vm_image" {
 
 
 data "openstack_images_image_v2" "image_master" {
-  count = var.image_master_uuid == "" ? var.image_uuid == "" ? 1 : 0 : 0
-  name = var.image_master == "" ? var.image : var.image_master
+  count = var.image_master_uuid == "" ?  1 : 0
+  name = var.image_master
 }
 
 data "cloudinit_config" "cloudinit" {
@@ -111,7 +111,7 @@ locals {
 
 # Image uuid
   image_to_use_node = var.image_uuid != "" ? var.image_uuid : data.openstack_images_image_v2.vm_image[0].id
-  image_to_use_master = var.image_master_uuid != "" ? var.image_master_uuid : var.image_uuid != "" ? var.image_uuid : data.openstack_images_image_v2.image_master[0].id
+  image_to_use_master = var.image_master_uuid != "" ? var.image_master_uuid : data.openstack_images_image_v2.image_master[0].id
   master_flavor = data.openstack_compute_flavor_v2.k8s_control.id
   nodes_settings = {
     for name, node in var.nodes :
@@ -457,7 +457,7 @@ locals {
           external_port = port_mapping.external_port
           internal_port = port_mapping.internal_port
           protocol     = port_mapping.protocol
-          internal_ip = openstack_compute_instance_v2.nodes[node_key].network[0].fixed_ip
+          internal_ip = openstack_compute_instance_v2.nodes[node_key].network[0].fixed_ip_v4
         }
       ]
     ]) : pair.mapping_key => pair

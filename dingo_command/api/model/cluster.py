@@ -150,6 +150,7 @@ class ClusterTFVarsObject(BaseModel):
     token: Optional[str] = Field(None, description="token")
     forward_float_ip_id: Optional[str] = Field("", description="集群浮动ip的id")
     port_forwards: Optional[List[Port_forwards]] = Field(None, description="端口转发配置")
+    image_master: Optional[str] = Field(None, description="master节点的镜像")
 
 class NodeRemoveObject(BaseModel):
     cluster_id: Optional[str] = Field(None, description="集群id")

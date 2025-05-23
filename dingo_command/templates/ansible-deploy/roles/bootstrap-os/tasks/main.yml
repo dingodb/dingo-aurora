@@ -6,6 +6,22 @@
   # This command should always run, even in check mode
   check_mode: false
 
+- name: Check if systemd-resolved service exists
+  stat:
+    path: /lib/systemd/system/systemd-resolved.service
+  register: systemd_resolved_service
+  check_mode: false
+
+- name: Restart systemd-resolved service
+  systemd:
+    name: systemd-resolved
+    state: restarted
+    daemon_reload: yes
+  when: systemd_resolved_service.stat.exists | bool
+  register: systemd_resolved_restart
+  become: true
+
+
 - name: Include distro specifics vars and tasks
   vars:
     os_release_dict: "{{ os_release.stdout_lines | select('regex', '^.+=.*$') | map('regex_replace', '\"', '') |
@@ -30,7 +46,6 @@
       paths: []
     loop_control:
       loop_var: included_tasks_file
-
 
 - name: Create remote_tmp for it is used by another module
   file:

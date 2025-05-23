@@ -209,7 +209,7 @@ variable "bus_subnet_id" {
 variable "dns_nameservers" {
   description = "An array of DNS name server names used by hosts in this subnet."
   type        = list(string)
-  default     = []
+  default = ["233.5.5.5","8.8.8.8"]
 }
 
 variable "k8s_master_fips" {

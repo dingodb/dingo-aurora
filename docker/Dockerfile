@@ -26,7 +26,7 @@ RUN apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /etc/dingo-command /var/log/dingo-command /var/lib/dingo-command
 
-COPY ./etc/.terraformrc /$HOME/.terraformrc
+COPY ./etc/.terraformrc /root/.terraformrc
 COPY ./etc/gunicorn.py /etc/dingo-command/gunicorn.py
 COPY ./etc/dingo-command.conf /etc/dingo-command/dingo-command.conf
 COPY ./etc/supervisord.conf /etc/dingo-command/supervisord.conf

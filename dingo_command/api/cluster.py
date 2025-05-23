@@ -1,4 +1,7 @@
-from fastapi import Query
+import os
+import tempfile
+from fastapi import BackgroundTasks, Query
+from fastapi.responses import FileResponse
 from dingo_command.api.model.cluster import ClusterObject
 
 from dingo_command.services.cluster import ClusterService,TaskService
@@ -61,6 +64,35 @@ async def list_cluster(id:str = Query(None, description="集群id"),
     except Exception as e:
         return None
     
+@router.get("/cluster/key", summary="下载key文件", description="下载key文件")
+async def get_cluster_private_key(cluster_id:str = Query(None, description="集群id"),
+                            instance_id:str = Query(None, description="集群id")):
+    """获取集群的私钥内容"""
+    if not cluster_id and not instance_id:
+        return None
+    try:
+        # 根据id查询集群
+        cs=ClusterService()
+        private_key = cs.get_key_file(cluster_id, instance_id)
+        if private_key is None:
+            raise HTTPException(status_code=400, detail="Key not found")
+        filename = "id_rsa.pem"
+        fd, temp_path = tempfile.mkstemp()
+        with os.fdopen(fd, 'w') as tmp:
+            tmp.write(private_key)
+            os.chmod(temp_path, 0o600)
+       
+        # 返回文件响应
+        return FileResponse(
+            path=temp_path,
+            filename=filename,
+            media_type="application/octet-stream",
+            #background=BackgroundTasks([lambda: os.unlink(temp_path)])  # 请求完成后删除临时文件
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise e
     
 @router.get("/progress", summary="创建k8s集群进度", description="创建k8s集群进度")
 async def get_cluster_progress(cluster_id:str):

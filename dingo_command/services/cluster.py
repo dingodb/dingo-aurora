@@ -1,6 +1,7 @@
 # 资产的service层
 from enum import Enum
 import json
+import os
 import random
 import uuid
 from datetime import datetime
@@ -38,6 +39,8 @@ thin_border = Border(
     bottom=Side(border_style="thin", color="000000")  # 下边框
 )
 auth_url = CONF.DEFAULT.auth_url
+WORK_DIR = CONF.DEFAULT.cluster_work_dir
+image_master = CONF.DEFAULT.k8s_master_image
 system_service = SystemService()
 
 class ClusterService:
@@ -430,13 +433,15 @@ class ClusterService:
         cidr = f"{first_octet}.{second_octet}.{third_octet}.{fourth_octet}/24"
         
         return cidr
+    
+    def generate_random_port(self):
+        """从 20000 到 40000 范围内随机生成一个端口号"""
+        import random
+        return random.randint(20000, 40000)
     def create_cluster(self, cluster: ClusterObject, token):
         # 数据校验 todo
         self.check_cluster_param(cluster)
         try:
-            cluster_info_db = self.convert_clusterinfo_todb(cluster)
-            res = ClusterSQL.create_cluster(cluster_info_db)
-
             neutron_api = neutron.API()  # 创建API类的实例
             external_net = neutron_api.list_external_networks()
 
@@ -444,8 +449,7 @@ class ClusterService:
             if cluster.kube_info.number_master>1 and cluster.type == "kubernetes":
                 lb_enbale = cluster.kube_info.loadbalancer_enabled
            
-
-            #组装cluster信息为ClusterTFVarsObject格式
+            cluster_info_db = self.convert_clusterinfo_todb(cluster)
             cluster.id = cluster_info_db.id
             k8s_masters = {}
             k8s_nodes = {}
@@ -454,14 +458,19 @@ class ClusterService:
             # 保存instance信息到数据库
             instance_db_list, instance_bm_list = self.convert_instance_todb(cluster, k8s_nodes)
             InstanceSQL.create_instance_list(instance_db_list)
-            # 创建terraform变量
             # 生成一个随机的私有cidr
             subnet_cidr = self.generate_random_cidr()
-            #校验是否重复
+            #获取浮动ip池
             floatingip_pool,public_floatingip_pool,public_subnetids,external_subnetids,external_net_id= self.get_floatip_pools(neutron_api, external_net)
             
-            
-                   
+            res = ClusterSQL.create_cluster(cluster_info_db)
+            #设置端口转发的外部端口 
+            if cluster.port_forwards != None:
+                for p in cluster.port_forwards:
+                    if p.external_port == None or p.external_port == "":
+                        p.external_port = self.generate_random_port()
+            if cluster.forward_float_ip_id == None:
+                cluster.forward_float_ip_id = ""
             tfvars = ClusterTFVarsObject(
                 id = cluster_info_db.id,
                 cluster_name=cluster.name,
@@ -482,7 +491,8 @@ class ClusterService:
                 auth_url = auth_url,
                 tenant_id=cluster.project_id,
                 port_forwards=cluster.port_forwards,
-                forward_float_ip_id = cluster.forward_float_ip_id
+                forward_float_ip_id = cluster.forward_float_ip_id,
+                image_master = image_master
                 )
             if cluster.node_config[0].auth_type == "password":
                 tfvars.password = cluster.node_config[0].password
@@ -501,6 +511,7 @@ class ClusterService:
                 pass
             else:
                 pass
+
             # 成功返回资产id
             return cluster_info_db
             
@@ -517,7 +528,7 @@ class ClusterService:
         for net in external_net:
             for subnet_id in net["subnets"]:
                 subnet = neutron_api.get_subnet_by_id(subnet_id)
-                import ipaddress; 
+                import ipaddress
                 if ipaddress.ip_network(subnet["cidr"]).is_private:
                     if floatingip_pool=="":
                         floatingip_pool=net["name"]
@@ -775,7 +786,45 @@ class ClusterService:
                     operation_system = image.get("name")
         return operation_system
 
-
+    def get_key_file(self, cluster_id:str, instance_id:str):
+        # 根据id查询集群
+        if  instance_id != None and cluster_id == None:
+            # 如果传入了instance_id，则根据instance_id查询集群
+            instance_query_params = {}
+            instance_query_params["id"] = instance_id
+            instance_res = InstanceSQL.list_instances(instance_query_params, 1, 10, None, None)
+            # 空
+            if not instance_res or instance_res[0]==0:
+                return None
+            # 返回第一条数据
+            instance = instance_res[1]
+            if instance[0].private_key != None and instance[0].private_key != "":
+                return instance[0].private_key
+            cluster_id = instance.cluster_id
+        if cluster_id == "" or cluster_id == None:
+            return None
+        query_params = {}
+        query_params["id"] = cluster_id
+        res = self.list_clusters(query_params, 1, 10, None, None)
+        # 如果集群不存在
+        if not res or not res.get("data"):
+            return None
+            
+        # 获取集群信息
+        cluster = res.get("data")[0]
+        private_key = cluster.private_key
+        # 检查是否有私钥
+        if not cluster.private_key:
+            # 如果数据库没有保存私钥，尝试从文件系统获取
+            key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), "id_rsa")
+            if os.path.exists(key_file_path):
+                with open(key_file_path, "r") as f:
+                    private_key = f.read()
+            else:
+                raise Fail("找不到集群对应的私钥文件")
+        return private_key
+        
+        
 class TaskService:
     
     class TaskMessage(Enum):
