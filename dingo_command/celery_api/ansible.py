@@ -24,7 +24,7 @@ class CustomCallback(CallbackBase):
 
 
 
-def run_playbook(playbook_name, inventory, data_dir, ssh_key, extravars=None,cmdline_args=None):
+def run_playbook(playbook_name, inventory, data_dir, ssh_key, extravars=None, limit=None):
     # 设置环境变量
     envvars = {
         "ANSIBLE_FORKS": 1,
@@ -37,8 +37,8 @@ def run_playbook(playbook_name, inventory, data_dir, ssh_key, extravars=None,cmd
         quiet=True,
         envvars=envvars,
         extravars=extravars,
-        ssh_key=ssh_key
+        ssh_key=ssh_key,
+        limit=limit
     )
 
-    
     return thread,runner

@@ -151,10 +151,9 @@ class ClusterTFVarsObject(BaseModel):
     forward_float_ip_id: Optional[str] = Field("", description="集群浮动ip的id")
     port_forwards: Optional[List[Port_forwards]] = Field(None, description="端口转发配置")
 
-
 class NodeRemoveObject(BaseModel):
     cluster_id: Optional[str] = Field(None, description="集群id")
-    node_list: Optional[List[NodeObject]] = Field(None, description="缩容节点列表")
+    node_list: Optional[List[str]] = Field(None, description="缩容节点列表")
 
 class ScaleNodeObject(BaseModel):
     id: Optional[str] = Field(None, description="集群名称")
