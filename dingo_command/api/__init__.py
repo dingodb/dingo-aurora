@@ -2,8 +2,8 @@
 import os
 
 from fastapi import APIRouter
-from dingo_command.api import assets, bigscreens, system, monitor, cluster, node, instance, websocket, resources, message
-
+from dingo_command.api import assets, bigscreens, system, monitor, cluster, node, instance, websocket, resources, \
+    message, cloudkitty
 
 # 启动时创建excel的临时存放目录
 excel_temp_dir = "/home/dingo_command/temp_excel/"
@@ -20,4 +20,5 @@ api_router.include_router(node.router, tags=["Node"])
 api_router.include_router(websocket.router, tags=["WebSockets"])
 api_router.include_router(resources.router, tags=["Resources"])
 api_router.include_router(instance.router, tags=["Instance"])
+api_router.include_router(cloudkitty.router, tags=["CloudKitty"])
 api_router.include_router(message.router, tags=["Message"])
