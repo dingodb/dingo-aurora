@@ -1,6 +1,7 @@
 # 消息的service层
 import uuid
 import json
+from enum import Enum
 
 from oslo_log import log
 from oslo_config import cfg
@@ -23,6 +24,11 @@ MY_IP = CONF.DEFAULT.my_ip
 TRANSPORT_URL = CONF.DEFAULT.transport_url
 CENTER_TRANSPORT_URL = CONF.DEFAULT.center_transport_url
 CENTER_REGION_FLAG = CONF.DEFAULT.center_region_flag
+
+# 消息状态的枚举
+class MessageStatusEnum(Enum):
+    READY = "READY"  # 准备中
+    ERROR = "ERROR"  # 错误
 
 
 class MessageService:
@@ -59,6 +65,21 @@ class MessageService:
             message_db.update_date = datetime.fromtimestamp(datetime.now().timestamp()) # 当前时间
             # 创建
             MessageSQL.update_external_message(message_db)
+        except Fail as e:
+            raise e
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+
+    # 批量更新外部消息的状态为ERROR
+    def update_external_many_message_4error(self, message_ids, error_description):
+        try:
+            # 判空
+            if not message_ids:
+                raise Fail("message id not exists", error_message="报送的消息是未知id")
+            # 更新错误消息
+            MessageSQL.update_external_message_4error(message_ids, error_description)
         except Fail as e:
             raise e
         except Exception as e:
@@ -151,13 +172,22 @@ class MessageService:
                     print("get dingo_command_report_message_lock redis lock success")
                     # 遍历message_type_table 按照类型进行插入数据
                     for message_type_key, message_dingo_table in MESSAGE_TYPE_TABLE.items():
+                        # 检查当前类型的数据是否存在ERROR状态的数据，如果存在ERROR状态数据则需要告警，并且不再报送数据
+                        error_status_number = MessageSQL.get_external_message_number_by_status(message_type_key, MessageStatusEnum.ERROR)
+                        if error_status_number > 0:
+                            print(f"message type {message_type_key} has error status message, please check it")
+                            continue
                         # 每次读取1000条
                         query_params = {"message_type":message_type_key}
-                        _, message_list = MessageSQL.list_external_message(query_params, 1, 1000, None, None)
+                        # 按照创建时间顺序排序
+                        _, message_list = MessageSQL.list_external_message(query_params, 1, 1000, "create_date", "ascend")
                         # 判空 进入下一种类型
                         if not message_list:
                             print(f"{message_type_key} message type no message to send")
                             continue
+                        # 报送的数据结构可能是变化的，兼容不同的结构，生产不同的插入语句,不同的插入语句对应不同的数据内容
+                        insert_dingodb_sql_value_map = {}
+                        insert_dingodb_sql_message_id_map = {}
                         # 遍历消息列表
                         for temp_message in message_list:
                             # 判断message是否合规
@@ -173,18 +203,11 @@ class MessageService:
                             # 组装sql
                             insert_dingodb_sql = self.create_dingodb_insert_sql(message_data_json, message_dingo_table)
                             insert_dingodb_values = tuple(message_data_json.values())
-                            # 执行sql
-                            try:
-                                self.insert_one_into_dingodb(insert_dingodb_sql, insert_dingodb_values)
-                                # 成功之后删除掉当前数据
-                                MessageSQL.delete_external_message(temp_message.id)
-                                # 成功记录成功的操作日志
-                                print(f"success insert message to dingodb: {temp_message}")
-                            except Exception as e:
-                                import traceback
-                                traceback.print_exc()
-                                # 记录错误日志信息
-                                self.update_external_message_4error(temp_message, traceback.format_exc())
+                            # 加入到map中
+                            insert_dingodb_sql_value_map = self.add_sql_and_values_to_map(insert_dingodb_sql_value_map, insert_dingodb_sql, insert_dingodb_values)
+                            insert_dingodb_sql_message_id_map = self.add_sql_and_id_to_map(insert_dingodb_sql_message_id_map, insert_dingodb_sql, temp_message.id)
+                        # 批量多个数据
+                        self.insert_many_message_to_dingodb(insert_dingodb_sql_value_map, insert_dingodb_sql_message_id_map)
                 else:
                     print("get dingo_command_report_message_lock redis lock failed")
         except Fail as e:
@@ -194,6 +217,35 @@ class MessageService:
             traceback.print_exc()
             raise e
 
+
+    # 执行sql与数据分组键值对
+    def add_sql_and_values_to_map(self, insert_dingodb_sql_map, insert_dingodb_sql, insert_dingodb_values):
+        # 判空
+        if not insert_dingodb_sql_map:
+            insert_dingodb_sql_map = {}
+        # 判断当前sql是否存在，如果存在则直接添加值
+        if insert_dingodb_sql in insert_dingodb_sql_map:
+            insert_dingodb_sql_map[insert_dingodb_sql].append(insert_dingodb_values)
+        else:
+            insert_dingodb_sql_map[insert_dingodb_sql] = [insert_dingodb_values]
+        # 返回数据
+        return insert_dingodb_sql_map
+
+
+    # 执行sql与消息id键值对
+    def add_sql_and_id_to_map(self, insert_dingodb_message_id_map, insert_dingodb_sql, message_id):
+        # 判空
+        if not insert_dingodb_message_id_map:
+            insert_dingodb_message_id_map = {}
+        # 判断当前sql是否存在，如果存在则直接添加值
+        if insert_dingodb_sql in insert_dingodb_message_id_map:
+            insert_dingodb_message_id_map[insert_dingodb_sql].append(message_id)
+        else:
+            insert_dingodb_message_id_map[insert_dingodb_sql] = [message_id]
+        # 返回数据
+        return insert_dingodb_message_id_map
+
+
     def load_message_data_json(self,message_db):
         try:
         # 处理数据
@@ -202,6 +254,7 @@ class MessageService:
         except Exception as e:
             import traceback
             traceback.print_exc()
+
 
     # 组装dingodb的插入sql语句
     def create_dingodb_insert_sql(self, message_data_json, message_dingo_table):
@@ -213,12 +266,70 @@ class MessageService:
         # 返回组装语句
         return dingodb_sql_template
 
+
+    # 处理多条message数据
+    def insert_many_message_to_dingodb(self, insert_dingodb_sql_value_map, insert_dingodb_sql_message_id_map)  :
+        # 判空
+        if not insert_dingodb_sql_value_map or not insert_dingodb_sql_message_id_map:
+            print("no message to insert to dingodb")
+            return
+        # 当前处理的message_id
+        message_ids = None
+        # 执行
+        try:
+            # 遍历sql语句，执行插入操作
+            for insert_dingodb_sql, insert_dingodb_values in insert_dingodb_sql_value_map.items():
+                # 当前处理的id
+                message_ids = insert_dingodb_sql_message_id_map[insert_dingodb_sql]
+                # 执行插入多条
+                self.insert_many_into_dingodb(insert_dingodb_sql, insert_dingodb_values)
+                # 成功之后删除掉当前数据
+                MessageSQL.delete_external_message_by_ids(message_ids)
+                # 成功记录成功的操作日志
+                print(f"success insert message to dingodb: {message_ids}")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            # 记录错误日志信息
+            self.update_external_many_message_4error(message_ids, traceback.format_exc())
+
+
+    # 处理1条message数据
+    def insert_one_message_to_dingodb(self, temp_message, insert_dingodb_sql, insert_dingodb_values):
+        # 执行sql
+        try:
+            self.insert_one_into_dingodb(insert_dingodb_sql, insert_dingodb_values)
+            # 成功之后删除掉当前数据
+            MessageSQL.delete_external_message(temp_message.id)
+            # 成功记录成功的操作日志
+            print(f"success insert message to dingodb: {temp_message}")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            # 记录错误日志信息
+            self.update_external_message_4error(temp_message, traceback.format_exc())
+
+
     # 执行插入dingodb的sql语句
     def insert_one_into_dingodb(self, insert_dingodb_sql, insert_dingodb_values):
         # 执行sql
         try:
             # 执行插入语句
             aliyun_dingodb_utils.insert_one(insert_dingodb_sql, insert_dingodb_values)
+            print(f"success execute sql: {insert_dingodb_sql}")
+            print(f"success insert message to dingodb: {insert_dingodb_values}")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+
+
+    # 执行插入dingodb的sql语句
+    def insert_many_into_dingodb(self, insert_dingodb_sql, insert_dingodb_values):
+        # 执行sql
+        try:
+            # 执行插入语句
+            aliyun_dingodb_utils.insert_many(insert_dingodb_sql, insert_dingodb_values)
             print(f"success execute sql: {insert_dingodb_sql}")
             print(f"success insert message to dingodb: {insert_dingodb_values}")
         except Exception as e:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlalchemy import func
 
 from dingo_command.db.engines.mysql import get_session
 from dingo_command.db.models.message.models import ExternalMessage
@@ -29,6 +30,13 @@ class MessageSQL:
         with session.begin():
             # 删除消息
             session.query(ExternalMessage).filter(ExternalMessage.id == message_id).delete()
+
+    @classmethod
+    def delete_external_message_by_ids(cls, message_ids):
+        session = get_session()
+        with session.begin():
+            # 删除消息
+            session.query(ExternalMessage).filter(ExternalMessage.id.in_(message_ids)).delete()
 
     @classmethod
     def get_external_message_by_id(cls, message_id):
@@ -72,3 +80,15 @@ class MessageSQL:
             message_list = query.all()
             # 返回
             return count, message_list
+
+    @classmethod
+    def get_external_message_number_by_status(cls, message_type, message_status):
+        session = get_session()
+        with session.begin():
+            return session.query(ExternalMessage).filter(ExternalMessage.message_type == message_type).filter(ExternalMessage.message_status == message_status).count()
+
+    @classmethod
+    def update_external_message_4error(cls, message_ids, description):
+        session = get_session()
+        with session.begin():
+            session.query(ExternalMessage).filter(ExternalMessage.id.in_(message_ids)).update({'message_status':'ERROR', 'message_description': description, 'update_date': func.now()}, synchronize_session=False)
