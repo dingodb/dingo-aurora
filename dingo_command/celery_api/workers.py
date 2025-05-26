@@ -568,7 +568,7 @@ def delete_vm_instance(conn, instance):
         with session.begin():
             db_instance = session.get(Instance, instance.get("id"))
             db_instance.status = "error"
-            db_instance.status_msg = e
+            db_instance.status_msg = str(e)
         raise ValueError(e)
 
 
@@ -873,6 +873,10 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             update_task_state(task_info)
             raise Exception(error_msg)
 
+        output_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory",
+                                   str(cluster.id), "terraform", "output.tfvars.json")
+        with open(output_file) as f:
+            content = json.loads(f.read())
         # 更新集群node的状态为running
         session = get_session()
         with session.begin():
