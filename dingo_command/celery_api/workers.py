@@ -269,6 +269,7 @@ def create_cluster(self, cluster_tf: ClusterTFVarsObject, cluster_dict: ClusterO
                         db_instance.status = "running"
                         db_instance.cidr = content.get("subnet_cidr")
                         db_instance.ip_address = v.get("ip")
+                        db_instance.security_group = str(cluster.name)
                         if v.get("public_ipv4") != v.get("ip"):
                             db_instance.floating_ip = v.get("public_ipv4")
         query_params = {}
@@ -916,6 +917,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                         db_node.server_id = v.get("id")
                         db_node.status = "running"
                         db_node.cidr = content.get("subnet_cidr")
+                        db_node.security_group = cluster.name
                         db_node.admin_address = v.get("ip")
                         if v.get("public_ipv4") != v.get("ip"):
                             db_node.floating_ip = v.get("public_ipv4")
@@ -931,6 +933,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                         db_instance.server_id = v.get("id")
                         db_instance.status = "running"
                         db_instance.cidr = content.get("subnet_cidr")
+                        db_instance.security_group = cluster.name
                         db_instance.ip_address = v.get("ip")
                         if v.get("public_ipv4") != v.get("ip"):
                             db_instance.floating_ip = v.get("public_ipv4")
@@ -1323,6 +1326,7 @@ def create_instance(self, instance, instance_list):
                                 db_instance.server_id = server.id
                                 db_instance.private_key = content
                                 db_instance.status = "running"
+                                db_instance.security_group = "default"
                                 db_instance.cidr = "10.0.0.0/16"
                     server_id_active.append(server_id)
                 elif server.status == "ERROR":
