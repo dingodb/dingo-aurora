@@ -35,6 +35,7 @@ from dingo_command.services import CONF
 LOG = log.getLogger(__name__)
 WORK_DIR = CONF.DEFAULT.cluster_work_dir
 auth_url = CONF.DEFAULT.auth_url
+image_master = CONF.DEFAULT.k8s_master_image
 # 定义边框样式
 thin_border = Border(
     left=Side(border_style="thin", color="000000"),  # 左边框
@@ -387,6 +388,8 @@ class NodeService:
             k8s_nodes = content["nodes"]
             scale_nodes = []
             subnet_cidr = content.get("subnet_cidr")
+            port_forwards = content.get("port_forwards")
+            forward_float_ip_id = content.get("forward_float_ip_id")
             lb_enbale = content.get("k8s_master_loadbalancer_enabled")
             number_of_k8s_masters_no_floating_ip = content.get("number_of_k8s_masters_no_floating_ip")
             neutron_api = neutron.API()  # 创建API类的实例
@@ -415,6 +418,9 @@ class NodeService:
                 token=token,
                 auth_url=auth_url,
                 tenant_id=cluster_info.project_id,
+                port_forwards=port_forwards,
+                forward_float_ip_id=forward_float_ip_id,
+                image_master=image_master,
             )
             if cluster.node_config[0].auth_type == "password":
                 tfvars.password = cluster.node_config[0].password

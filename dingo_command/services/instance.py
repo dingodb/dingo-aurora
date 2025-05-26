@@ -27,6 +27,7 @@ from dingo_command.services import CONF
 
 WORK_DIR = CONF.DEFAULT.cluster_work_dir
 auth_url = CONF.DEFAULT.auth_url
+image_master = CONF.DEFAULT.k8s_master_image
 LOG = log.getLogger(__name__)
 BASE_DIR = os.getcwd()
 
@@ -312,6 +313,8 @@ class InstanceService:
             ClusterSQL.update_cluster(cluster_info_db)
             k8s_nodes = content["nodes"]
             subnet_cidr = content.get("subnet_cidr")
+            port_forwards = content.get("port_forwards")
+            forward_float_ip_id = content.get("forward_float_ip_id")
             neutron_api = neutron.API()  # 创建API类的实例
             external_net = neutron_api.list_external_networks()
             (floatingip_pool, public_floatingip_pool, public_subnetids,
@@ -335,6 +338,9 @@ class InstanceService:
                 token=token,
                 auth_url=auth_url,
                 tenant_id=cluster_info.project_id,
+                port_forwards=port_forwards,
+                forward_float_ip_id=forward_float_ip_id,
+                image_master=image_master,
             )
             if cluster.node_config[0].auth_type == "password":
                 tfvars.password = cluster.node_config[0].password
