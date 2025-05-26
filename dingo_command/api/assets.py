@@ -6,6 +6,7 @@ from typing import List, Optional
 import pandas
 from fastapi import APIRouter, UploadFile, File, Query, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
+from starlette.background import BackgroundTask
 
 from dingo_command.api.model.assets import AssetCreateApiModel, AssetManufacturerApiModel, AssetUpdateStatusApiModel, \
     AssetPartApiModel, AssetTypeApiModel, AssetFlowApiModel, AssetBatchDownloadApiModel, AssetBatchUpdateApiModel, \
@@ -14,6 +15,7 @@ from dingo_command.api.model.system import OperateLogApiModel
 from dingo_command.services.assets import AssetsService
 from dingo_command.services.custom_exception import Fail
 from dingo_command.services.system import SystemService
+from dingo_command.utils import file_utils
 from dingo_command.utils.constant import EXCEL_TEMP_DIR, ASSET_TEMPLATE_ASSET_SHEET, ASSET_TEMPLATE_PART_SHEET, \
     ASSET_TEMPLATE_ASSET_TYPE, ASSET_TEMPLATE_NETWORK_SHEET
 from dingo_command.utils.datetime import format_d8q_timestamp
@@ -248,12 +250,14 @@ async def download_assets_xlsx(asset_type: str, asset_ids: str):
     except Exception as e:
         import traceback
         traceback.print_exc()
+        file_utils.cleanup_temp_file(result_file_path)
     # 文件存在则下载
     if os.path.exists(result_file_path):
         return FileResponse(
             path=result_file_path,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            filename=result_file_name  # 下载时显示的文件名
+            filename=result_file_name,  # 下载时显示的文件名
+            background=BackgroundTask(file_utils.cleanup_temp_file, result_file_path)
         )
     return {"error": "File not found"}
 
@@ -274,12 +278,14 @@ async def download_assets_xlsx(asset_type: str, asset_id: Optional[str]=None):
     except Exception as e:
         import traceback
         traceback.print_exc()
+        file_utils.cleanup_temp_file(result_file_path)
     # 文件存在则下载
     if os.path.exists(result_file_path):
         return FileResponse(
             path=result_file_path,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            filename=result_file_name  # 下载时显示的文件名
+            filename=result_file_name,  # 下载时显示的文件名
+            background=BackgroundTask(file_utils.cleanup_temp_file, result_file_path)
         )
     return {"error": "File not found"}
 
@@ -551,7 +557,8 @@ async def download_asset_template_xlsx(template_id:str):
         return FileResponse(
             path=file_path,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            filename=template_id + ".xlsx"  # 下载时显示的文件名
+            filename=template_id + ".xlsx",  # 下载时显示的文件名
+            background=BackgroundTask(file_utils.cleanup_temp_file, file_path)
         )
     return {"error": "File not found"}
 
