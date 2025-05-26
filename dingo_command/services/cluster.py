@@ -778,18 +778,16 @@ class ClusterService:
                     gpu = pci_alias.split(':')[1]
         return int(cpu), int(gpu), int(mem), int(disk)
 
-    def get_image_info(self, image_name):
+    def get_image_info(self, image_id):
         operation_system = ""
-        image = nova_client.get_image(image_name)
-        if image is not None and image.get("images") and len(image.get("images")) > 0:
-            image = nova_client.glance_get_image(image["images"][0].get("id"))
-            if image is not None:
-                if image.get("os_version"):
-                    operation_system = image.get("os_version")
-                elif image.get("os_distro"):
-                    operation_system = image.get("os_distro")
-                else:
-                    operation_system = image.get("name")
+        image = nova_client.glance_get_image(image_id)
+        if image is not None:
+            if image.get("os_version"):
+                operation_system = image.get("os_version")
+            elif image.get("os_distro"):
+                operation_system = image.get("os_distro")
+            else:
+                operation_system = image.get("name")
         return operation_system
 
     def get_key_file(self, cluster_id:str, instance_id:str):
