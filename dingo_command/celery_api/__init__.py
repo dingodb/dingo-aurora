@@ -20,7 +20,8 @@ default_opts = [
     cfg.StrOpt('region_name', default=None, help='the openstack region name'),
     cfg.StrOpt('cluster_work_dir', default='/var/lib/dingo-command', help='the openstack region name'),
     cfg.StrOpt('harbor_url', default=None, help='harbor url'),
-    cfg.StrOpt('fileserver_url', default=None, help='fileserver url'),
+    cfg.StrOpt('ubuntu_repo', default=None, help='repo url'),
+    cfg.StrOpt('fileserver_url', default=None, help='fileserver url')
 ]
 
 CONF.register_group(default_group)

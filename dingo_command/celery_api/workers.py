@@ -38,6 +38,7 @@ ANSIBLE_DIR = os.path.join(BASE_DIR, "templates", "ansible-deploy")
 WORK_DIR = CONF.DEFAULT.cluster_work_dir
 HARBOR_URL = CONF.DEFAULT.harbor_url
 FILESERVER_URL = CONF.DEFAULT.fileserver_url
+UBUNTU_REPO = CONF.DEFAULT.ubuntu_repo
 
 TIMEOUT = 600
 SERVER_TIMEOUT = 600
@@ -309,7 +310,8 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
         template_file = "offline.yml.j2"
         context = {
             'harbor_url': HARBOR_URL,
-            'fileserver_url': FILESERVER_URL
+            'fileserver_url': FILESERVER_URL,
+            'ubuntu_repo': UBUNTU_REPO
         }
         target_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "group_vars", "all")
         os.makedirs(target_dir, exist_ok=True)
@@ -846,6 +848,32 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         max_retry_time = 600  # 10分钟超时
         retry_interval = 5    # 5秒重试间隔
         connection_success = False
+
+        while not connection_success and (time.time() - start_time) < max_retry_time:
+            nodes_result = check_nodes_connectivity(host_file, key_file_path)
+            
+            if nodes_result["all_nodes_reachable"]:
+                connection_success = True
+                print(f"all node connect sussess {task_id}")    
+                break
+            else:
+                unreachable_nodes = ", ".join(nodes_result["unreachable_nodes"])
+                print(f"some node can not connect: {unreachable_nodes}，{retry_interval}s after retry...")
+                # 记录日志，显示哪些节点不可达
+                with open(os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tf_dict["id"], "connection_check.log"), "a") as log_file:
+                    log_file.write(f"{datetime.now()}: unreachable nodes: {unreachable_nodes}\n")
+                    log_file.write(f"错误输出: {nodes_result['error']}\n\n")
+                
+                time.sleep(retry_interval)
+
+        # 如果超时后仍然无法连接所有节点，则抛出错误
+        if not connection_success:
+            error_msg = f"{int(time.time() - start_time)}s retry node can not connect: {', '.join(nodes_result['unreachable_nodes'])}"
+            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "failed"
+            task_info.detail = error_msg
+            update_task_state(task_info)
+            raise Exception(error_msg)
 
         while not connection_success and (time.time() - start_time) < max_retry_time:
             nodes_result = check_nodes_connectivity(host_file, key_file_path)

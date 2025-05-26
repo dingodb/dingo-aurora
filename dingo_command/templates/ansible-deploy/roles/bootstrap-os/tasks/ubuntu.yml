@@ -1,4 +1,21 @@
 ---
+- name: Backup sources.list
+  shell:
+    cmd: if [ -e sources.list -a ! -e sources.list.original ]; then /bin/mv sources.list sources.list.original; fi
+    chdir: /etc/apt/
+
+- name: Delete sources.list
+  file:
+    path: /etc/apt/sources.list
+    state: absent
+
+- name: Install offline apt repo
+  apt_repository:
+    repo: deb [trusted=yes] {{ ubuntu_repo }}/local/ ./
+    filename: offline
+    state: present
+    update_cache: yes
+
 - name: Import Debian bootstrap
   import_tasks: debian.yml
 
