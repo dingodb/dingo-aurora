@@ -132,9 +132,8 @@ class NovaClient:
         :return: 虚拟机创建响应数据
         """
         # 1. 参数预验证
-        self.glance_get_image(image_id)  # 确认镜像存在
-        self.nova_get_flavor(flavor_id)  # 确认规格存在
-
+        # self.glance_get_image(image_id)
+        # self.nova_get_flavor(flavor_id)
         # 2. 构造请求体
         request_body = {
             "server": {

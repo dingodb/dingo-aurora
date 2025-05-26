@@ -188,6 +188,7 @@ class InstanceService:
                     instance_db.security_group = node.security_group
                     instance_db.flavor_id = node.flavor_id
                     instance_db.status = "creating"
+                    instance_db.status_msg = ""
                     instance_db.project_id = ""
                     instance_db.server_id = ""
                     instance_db.openstack_id = ""
@@ -224,6 +225,7 @@ class InstanceService:
                     instance_db.security_group = node.security_group
                     instance_db.flavor_id = node.flavor_id
                     instance_db.status = "creating"
+                    instance_db.status_msg = ""
                     instance_db.project_id = ""
                     instance_db.server_id = ""
                     instance_db.openstack_id = ""
@@ -415,6 +417,7 @@ class InstanceService:
             instance_info_db.id = str(uuid.uuid4())
             instance_info_db.name = instance_info.name
             instance_info_db.status = "creating"
+            instance_info_db.status_msg = ""
             instance_info_db.server_id = ""
             instance_info_db.openstack_id = ""
             instance_info_db.ip_address = ""
@@ -443,6 +446,7 @@ class InstanceService:
                 instance_info_db.id = str(uuid.uuid4())
                 instance_info_db.name = instance_info.name + "-" + str(i)
                 instance_info_db.status = "creating"
+                instance_info_db.status_msg = ""
                 instance_info_db.server_id = ""
                 instance_info_db.openstack_id = ""
                 instance_info_db.ip_address = ""

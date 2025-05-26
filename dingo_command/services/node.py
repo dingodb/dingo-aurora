@@ -184,6 +184,7 @@ class NodeService:
                     instance_db.security_group = node.security_group
                     instance_db.flavor_id = node.flavor_id
                     instance_db.status = "creating"
+                    instance_db.status_msg = ""
                     instance_db.project_id = ""
                     instance_db.server_id = ""
                     instance_db.openstack_id = ""
@@ -219,6 +220,7 @@ class NodeService:
                     node_db.security_group = node.security_group
                     node_db.flavor_id = node.flavor_id
                     node_db.status = "creating"
+                    node_db.status_msg = ""
                     node_db.admin_address = ""
                     node_db.name = cluster_info.name + f"-node-{int(node_index)}"
                     node_db.bus_address = ""
@@ -248,6 +250,7 @@ class NodeService:
                     instance_db.security_group = node.security_group
                     instance_db.flavor_id = node.flavor_id
                     instance_db.status = "creating"
+                    instance_db.status_msg = ""
                     instance_db.project_id = ""
                     instance_db.server_id = ""
                     instance_db.openstack_id = ""
@@ -278,6 +281,7 @@ class NodeService:
                     node_db.security_group = node.security_group
                     node_db.flavor_id = node.flavor_id
                     node_db.status = "creating"
+                    node_db.status_msg = ""
                     node_db.admin_address = ""
                     node_db.name = cluster_info.name + f"-node-{int(node_index)}"
                     node_db.bus_address = ""

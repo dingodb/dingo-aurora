@@ -79,6 +79,7 @@ class ClusterService:
                     instance_db.security_group = node.security_group
                     instance_db.flavor_id = node.flavor_id
                     instance_db.status = "creating"
+                    instance_db.status_msg = ""
                     instance_db.project_id = ""
                     instance_db.server_id = ""
                     instance_db.openstack_id = ""
@@ -114,6 +115,7 @@ class ClusterService:
                     node_db.mem = mem
                     node_db.disk = disk
                     node_db.status = "creating"
+                    node_db.status_msg = ""
                     node_db.admin_address = ""
                     node_db.name = cluster.name + f"-master-{int(master_index)}"
                     node_db.bus_address = ""
@@ -142,6 +144,7 @@ class ClusterService:
                     instance_db.security_group = node.security_group
                     instance_db.flavor_id = node.flavor_id
                     instance_db.status = "creating"
+                    instance_db.status_msg = ""
                     instance_db.project_id = ""
                     instance_db.server_id = ""
                     instance_db.openstack_id = ""
@@ -177,6 +180,7 @@ class ClusterService:
                     node_db.mem = mem
                     node_db.disk = disk
                     node_db.status = "creating"
+                    node_db.status_msg = ""
                     node_db.admin_address = ""
                     node_db.name = cluster.name + f"-node-{int(node_index)}"
                     node_db.bus_address = ""
@@ -205,6 +209,7 @@ class ClusterService:
                     instance_db.security_group = node.security_group
                     instance_db.flavor_id = node.flavor_id
                     instance_db.status = "creating"
+                    instance_db.status_msg = ""
                     instance_db.project_id = ""
                     instance_db.server_id = ""
                     instance_db.openstack_id = ""
@@ -240,6 +245,7 @@ class ClusterService:
                     node_db.mem = mem
                     node_db.disk = disk
                     node_db.status = "creating"
+                    node_db.status_msg = ""
                     node_db.admin_address = ""
                     node_db.name = cluster.name + f"-node-{int(node_index)}"
                     node_db.bus_address = ""

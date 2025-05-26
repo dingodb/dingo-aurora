@@ -3,7 +3,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from dingo_command.api import api_router
-from dingo_command.jobs import bigscreen_metrics_syncer,asset_resource_relation_syncer,rabbitmq_config_init
+from dingo_command.jobs import (bigscreen_metrics_syncer, asset_resource_relation_syncer,
+                                rabbitmq_config_init, instance_status_syncer)
 
 PROJECT_NAME = "dingo-command"
 
@@ -32,6 +33,7 @@ async def lifespan(app: FastAPI):
     #from dingo_command.jobs import asset_resource_relation_syncer
     asset_resource_relation_syncer.start()
     rabbitmq_config_init.start()
+    instance_status_syncer.start()
     yield
     # Add any shutdown logic here if needed
 
