@@ -29,6 +29,7 @@ class NodeInfo(Base):
     region = Column(String(length=128), nullable= False)
     image = Column(String(length=128), nullable= False)
     status = Column(String(length=128), nullable= False)
+    status_msg = Column(Text, nullable=True)
     flavor_id = Column(String(length=128), nullable= True)
     security_group = Column(String(length=128), nullable= True)
     private_key = Column(Text, nullable=True)

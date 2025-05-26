@@ -31,6 +31,7 @@ class Instance(Base):
     node_type = Column(String(length=128), nullable= False)
     region = Column(String(length=128), nullable= False)
     status = Column(String(length=128), nullable= False)
+    status_msg = Column(Text, nullable= True)
     cidr = Column(String(length=128), nullable= True)
     private_key = Column(Text, nullable=True)
     user = Column(String(length=128), nullable= True)

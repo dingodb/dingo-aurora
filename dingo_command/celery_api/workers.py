@@ -252,6 +252,10 @@ def create_cluster(self, cluster_tf: ClusterTFVarsObject, cluster_dict: ClusterO
         # todo 添加节点时，需要将节点信息写入到inventory/inventory.yaml文件中
         # 如果是密码登录与master节点1做免密
         hosts_data = json.loads(hosts)
+        terraform_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "terraform")
+        output_file = os.path.join(terraform_dir, "output.tfvars.json")
+        with open (output_file) as f:
+            content = json.loads(f.read())
         session = get_session()
         # 更新集群instance的状态为running
         with session.begin():
@@ -262,6 +266,7 @@ def create_cluster(self, cluster_tf: ClusterTFVarsObject, cluster_dict: ClusterO
                     if db_instance.name == k:
                         db_instance.server_id = v.get("id")
                         db_instance.status = "running"
+                        db_instance.cidr = content.get("subnet_cidr")
                         db_instance.ip_address = v.get("ip")
                         db_instance.floating_ip = v.get("public_ipv4")
         query_params = {}
@@ -563,7 +568,7 @@ def delete_vm_instance(conn, instance):
         with session.begin():
             db_instance = session.get(Instance, instance.get("id"))
             db_instance.status = "error"
-            db_instance.extra = e
+            db_instance.status_msg = e
         raise ValueError(e)
 
 
@@ -686,7 +691,7 @@ def create_bm_instance(conn, instance_info: InstanceCreateObject, instance_list)
     meta_data = {
         "baremetal": "true",
         "capabilities": "boot_option:local"
-    },
+    }
     # 在这里使用openstack的api接口，直接创建vm
     if instance_info.user and instance_info.password:
         # 在这里使用openstack的api接口，直接创建bm
@@ -877,6 +882,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                     if db_node.name == k:
                         db_node.server_id = v.get("id")
                         db_node.status = "running"
+                        db_node.cidr = content.get("subnet_cidr")
                         db_node.admin_address = v.get("ip")
                         db_node.floating_ip = v.get("public_ipv4")
                         break
@@ -890,6 +896,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                     if db_instance.name == k:
                         db_instance.server_id = v.get("id")
                         db_instance.status = "running"
+                        db_instance.cidr = content.get("subnet_cidr")
                         db_instance.ip_address = v.get("ip")
                         db_instance.floating_ip = v.get("public_ipv4")
                         break
@@ -1257,6 +1264,7 @@ def create_instance(self, instance, instance_list):
 
         # 2、判断server的状态，如果都成功就将instance的信息写入数据库中的表中
         server_id_active = []
+        server_id_error = []
         session = get_session()
         start_time = time.time()
         handle_time = 0
@@ -1282,6 +1290,10 @@ def create_instance(self, instance, instance_list):
                                 db_instance.status = "running"
                                 db_instance.cidr = "10.0.0.0/16"
                     server_id_active.append(server_id)
+                elif server.status == "ERROR":
+                    server_id_error.append(server_id)
+                    if server_id_error == server_id_list:
+                        break
             time.sleep(5)
             handle_time = time.time() - start_time
         difference = list(set(server_id_list) - set(server_id_active))
@@ -1294,7 +1306,7 @@ def create_instance(self, instance, instance_list):
                             db_instance = session.get(Instance, instance.get("id"))
                             db_instance.server_id = server.id
                             db_instance.status = "error"
-                            db_instance.extra = server.fault.get("details")
+                            db_instance.status_msg = server.fault.get("details")
     except Exception as e:
         print(f"create instance error: {e}")
         raise ValueError(e)
