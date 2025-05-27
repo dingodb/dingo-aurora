@@ -81,12 +81,11 @@ class CloudKittyClient:
 
 
     # 添加Nova服务调用
-    def get_storage_dataframes(self):
+    def get_storage_dataframes(self, filters=None):
         endpoint = self.get_service_endpoint('rating')
-        print(f"{endpoint}")
-        response = self.session.get(f"{endpoint}/v1/storage/dataframes")
+        response = self.session.get(f"{endpoint}/v1/storage/dataframes", params=filters)
         if response.status_code != 200:
-            raise Exception(f"cloudkitty请求失败: {response.text}")
+            raise Exception(f"cloudkitty[{endpoint}]请求失败: {response.text}")
         print(f"{endpoint}/v1/storage/dataframes 返回数据大小: {len(response.json()['dataframes'])}")
         return response.json()['dataframes']
 

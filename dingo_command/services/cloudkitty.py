@@ -13,6 +13,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import SimpleDocTemplate, Table
 from dingo_command.utils.constant import RATING_SUMMARY_TEMPLATE_FILE_DIR
 from dingo_command.common.cloudkitty_client import CloudKittyClient
+import platform
 
 LOG = log.getLogger(__name__)
 
@@ -26,7 +27,7 @@ thin_border = Border(
 
 class CloudKittyService:
 
-    def download_rating_summary_excel(self, result_file_path):
+    def download_rating_summary_excel(self, result_file_path, query_params):
         # 模板路径
         current_template_file = os.getcwd() + RATING_SUMMARY_TEMPLATE_FILE_DIR
         # 对应类型的模板不存在
@@ -37,19 +38,19 @@ class CloudKittyService:
             # 复制模板文件到临时目录
             shutil.copy2(current_template_file, result_file_path)
             # 计费汇总的文件
-            self.query_data_and_create_rating_summary_excel(result_file_path)
+            self.query_data_and_create_rating_summary_excel(result_file_path, query_params)
 
         except Exception as e:
             import traceback
             traceback.print_exc()
             raise e
 
-    def query_data_and_create_rating_summary_excel(self, result_file_path):
+    def query_data_and_create_rating_summary_excel(self, result_file_path, query_params):
         try:
             # 导出的excel数据
             excel_rating_summary_data = []
             # 读取数据数据
-            storage_dataFrames = CloudKittyClient().get_storage_dataframes()
+            storage_dataFrames = CloudKittyClient().get_storage_dataframes(query_params)
             # 类型是空
             if storage_dataFrames is not None:
                 # 写入数据
@@ -155,13 +156,28 @@ class CloudKittyService:
 
             # 创建PDF文档
             doc = SimpleDocTemplate(filename, pagesize=A4)
-            # 注册中文字体
-            pdfmetrics.registerFont(TTFont('SimSun', 'simsun.ttc'))
+
+            if platform.system() == "Windows":
+                # 注册中文字体
+                pdfmetrics.registerFont(TTFont('SimSun', 'simsun.ttc'))
+                font_name = 'SimSun'
+                print(f"system: {platform.system()}, font_name: {font_name}")
+            else:
+                try:
+                    # 尝试注册系统可能存在的字体
+                    pdfmetrics.registerFont(TTFont('SysSans', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
+                    font_name = 'SysSans'
+                    print(f"system: {platform.system()}, font_name: {font_name}")
+                except Exception as e:
+                    font_name = 'Helvetica'
+                    print(f"system: {platform.system()}, font_name: {font_name}")
+                    import traceback
+                    traceback.print_exc()
 
             # 定义表格样式（包含列宽设置）
             col_widths = [100, 250]  # 第一列100pt，第二列250pt
             table = Table(table_data, colWidths=col_widths)
-            table.setStyle([('FONTNAME', (0, 0), (-1, -1), 'SimSun')])  # 设置字体
+            table.setStyle([('FONTNAME', (0, 0), (-1, -1), font_name)])  # 设置字体
             table.setStyle([('ALIGN', (0, 0), (-1, -1), 'LEFT')]) # 靠左对齐
             table.setStyle([('GRID', (0, 0), (-1, -1), 1, colors.black)])  # 添加网格线
 
