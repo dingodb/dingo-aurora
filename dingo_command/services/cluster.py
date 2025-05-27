@@ -696,20 +696,31 @@ class ClusterService:
         return cluster_info_db
 
     def convert_instance_todb(self, cluster:ClusterObject, k8s_nodes):
+        forward_float_ip_id = ""
+        if cluster.forward_float_ip_id:
+            forward_float_ip_id = cluster.forward_float_ip_id
         if cluster.type != "baremental":
             return [], []
         instance_db_list = []
         node_index = 1
+        cluster_new = copy.deepcopy(cluster)
         for idx, node in enumerate(cluster.node_config):
             if node.role == "worker" and node.type == "vm":
                 cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
                 operation_system = self.get_image_info(node.image)
                 for i in range(node.count):
+                    if cluster.port_forwards != None:
+                        for index, port_forward in enumerate(cluster.port_forwards):
+                            if (port_forward.external_port == None or port_forward.external_port == ""):
+                                cluster_new.port_forwards[index].external_port = self.generate_random_port()
+                                cluster_new.port_forwards[index].internal_port = port_forward.internal_port
+                                cluster_new.port_forwards[index].protocol = port_forward.protocol
                     k8s_nodes[f"node-{int(node_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
                         flavor=node.flavor_id,
                         floating_ip=False,
-                        etcd=False
+                        etcd=False,
+                        port_forwards=cluster_new.port_forwards
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
@@ -727,21 +738,31 @@ class ClusterService:
                     instance_db.mem = mem
                     instance_db.disk = disk
                     instance_db.status = "creating"
+                    instance_db.floating_forward_ip = forward_float_ip_id
+                    instance_db.ip_forward_rule = cluster_new.dict().get("port_forwards")
                     instance_db.ip_address = ""
                     instance_db.name = cluster.name + f"-node-{int(node_index)}"
                     instance_db.floating_ip = ""
                     instance_db.create_time = datetime.now()
                     instance_db_list.append(instance_db)
+                    cluster_new = copy.deepcopy(cluster)
                     node_index = node_index + 1
             if node.role == "worker" and node.type == "baremental":
                 cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
                 operation_system = self.get_image_info(node.image)
                 for i in range(node.count):
+                    if cluster.port_forwards != None:
+                        for index, port_forward in enumerate(cluster.port_forwards):
+                            if (port_forward.external_port == None or port_forward.external_port == ""):
+                                cluster_new.port_forwards[index].external_port = self.generate_random_port()
+                                cluster_new.port_forwards[index].internal_port = port_forward.internal_port
+                                cluster_new.port_forwards[index].protocol = port_forward.protocol
                     k8s_nodes[f"node-{int(node_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
                         flavor=node.flavor_id,
                         floating_ip=False,
-                        etcd=False
+                        etcd=False,
+                        port_forwards=cluster_new.port_forwards
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
@@ -759,11 +780,14 @@ class ClusterService:
                     instance_db.mem = mem
                     instance_db.disk = disk
                     instance_db.status = "creating"
+                    instance_db.floating_forward_ip = forward_float_ip_id
+                    instance_db.ip_forward_rule = cluster_new.dict().get("port_forwards")
                     instance_db.ip_address = ""
                     instance_db.name = cluster.name + f"-node-{int(node_index)}"
                     instance_db.floating_ip = ""
                     instance_db.create_time = datetime.now()
                     instance_db_list.append(instance_db)
+                    cluster_new = copy.deepcopy(cluster)
                     node_index = node_index + 1
 
         instance_list_dict = []
