@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy import Column, String, DateTime, Integer, Text
+from sqlalchemy.dialects.mysql import JSON
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -45,3 +46,5 @@ class Instance(Base):
     update_time = Column(DateTime, nullable=True)
     description = Column(String(length=255), nullable=True)
     extra = Column(Text, nullable=True)
+    floating_forward_ip = Column(String(length=128), nullable= True)
+    ip_forward_rule = Column(JSON, nullable= True)

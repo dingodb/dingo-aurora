@@ -18,8 +18,13 @@ class NetworkConfigObject(BaseModel):
     vip: Optional[str] = Field(None, description="管理网访问地址")
     floating_ip: Optional[bool] = Field(None, description="是否启用浮动ip")
 
-    
-    
+
+class Port_forwards(BaseModel):
+    internal_port: Optional[int] = Field(None, description="转发的内部端口")
+    external_port: Optional[int] = Field(None, description="转发的外部端口")
+    protocol: Optional[str] = Field(None, description="协议")
+
+
 class NodeConfigObject(BaseModel):
     count: Optional[int] = Field(None, description="项目id")
     image: Optional[str] = Field(None, description="用户id")
@@ -41,9 +46,7 @@ class NodeGroup(BaseModel):
     floating_ip: Optional[bool] = Field(None, description="浮动ip")
     etcd: Optional[bool] = Field(None, description="是否是etcd节点")
     image_id: Optional[str] = Field(None, description="镜像id")
-    forward_float_ip_id: Optional[str] = Field(None, description="集群浮动ip的id")
-    #forward_float_ip: Optional[str] = Field(None, description="集群浮动ip")
-    forward_inport: Optional[List[int]] = Field(None, description="转发的内部端口")
+    port_forwards: Optional[List[Port_forwards]] = Field(None, description="端口转发配置")
 
 class KubeClusterObject(BaseModel):
     kube_lb_address: Optional[str] = Field(None, description="负载均衡器的浮动ip")
@@ -57,11 +60,7 @@ class KubeClusterObject(BaseModel):
     cni: Optional[str] = Field(None, description="cni")
     pod_cidr: Optional[str] = Field(None, description="pod的cidr")
     number_master: Optional[int] = Field(0, description="master节点数量")
-  
-class Port_forwards(BaseModel):
-    internal_port: Optional[int] = Field(None, description="转发的内部端口")
-    external_port: Optional[int] = Field(None, description="转发的外部端口")
-    protocol: Optional[str] = Field(None, description="协议")
+
         
 class ClusterObject(DingoopsObject):
     name: str = Field(..., description="集群名称")
@@ -149,7 +148,6 @@ class ClusterTFVarsObject(BaseModel):
     auth_url: Optional[str] = Field(None, description="鉴权url")
     token: Optional[str] = Field(None, description="token")
     forward_float_ip_id: Optional[str] = Field("", description="集群浮动ip的id")
-    port_forwards: Optional[List[Port_forwards]] = Field(None, description="端口转发配置")
     image_master: Optional[str] = Field(None, description="master节点的镜像")
 
 class NodeRemoveObject(BaseModel):
