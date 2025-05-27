@@ -58,3 +58,30 @@ class MySqlUtils:
             print(f"Error inserting data: {e}")
             connection.rollback()
             raise e
+
+    def list_messages(self, table_name, query_params, page, page_size, sort_keys, sort_dirs):
+        try:
+            with self.connect() as connection:
+                with connection.cursor() as cursor:
+                    # 构建查询条件
+                    conditions = []
+                    for key, value in query_params.items():
+                        conditions.append(f"{key} = %s")
+                    where_clause = " AND ".join(conditions) if conditions else "1=1"
+                    # 构建排序条件
+                    sort_clause = ""
+                    if sort_keys and sort_dirs:
+                        sort_clause = f"ORDER BY {sort_keys} {sort_dirs}"
+                    # 构建分页条件
+                    offset = (page - 1) * page_size
+                    limit_clause = f"LIMIT {offset}, {page_size}"
+                    # sql语句
+                    sql = f"SELECT * FROM {table_name} WHERE {where_clause} {sort_clause} {limit_clause}"
+                    print(f"Executing SQL: {sql} ")
+                    cursor.execute(sql, list(query_params.values()))
+                    columns = [col[0] for col in cursor.description]
+                    data = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            return data
+        except Exception as e:
+            print(f"Error listing messages: {e}")
+            raise e

@@ -1,5 +1,5 @@
 # 接收消息的api接口定义类
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query, Request
 from oslo_log import log
 
 from dingo_command.services.custom_exception import Fail
@@ -24,3 +24,32 @@ async def create_external_message(message: dict):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail="create external message error")
+
+
+@router.get("/messages/external/{message_type}", summary="查询消息报送后的消息数据", description="查询消息报送后的消息数据")
+async def list_external_message_data(
+        message_type: str,
+        request: Request,
+        page: int = Query(1, description="页码"),
+        page_size: int = Query(10, description="页数量大小"),
+        sort_keys:str = Query(None, description="排序字段"),
+        sort_dirs:str = Query("asc", description="排序方式"),):
+    # 创建消息
+    try:
+        # 接收到的数据
+        LOG.info("查询的数据类型: %s", message_type)
+        # 读取request中的请求参数，删掉固定参数
+        query_params = dict(request.query_params) if hasattr(request, 'query_params') else {}
+        query_params.pop("page", None)
+        query_params.pop("page_size", None)
+        query_params.pop("sort_keys", None)
+        query_params.pop("sort_dirs", None)
+        # 查询阿里云的dingodb数据库
+        result = message_service.list_messages_from_dingodb(message_type, query_params, page, page_size, sort_keys, sort_dirs)
+        return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail="query message error")
