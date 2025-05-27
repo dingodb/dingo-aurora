@@ -5,7 +5,7 @@ from sqlalchemy import  DateTime
 from pydantic import BaseModel, Field
 from dingo_command.api.model.base import DingoopsObject
 
-
+    
 class NetworkConfigObject(BaseModel):
     admin_subnet_id: Optional[str] = Field(None, description="管理网id")
     admin_network_name: Optional[str] = Field(None, description="管理网络id")
@@ -60,7 +60,6 @@ class KubeClusterObject(BaseModel):
     cni: Optional[str] = Field(None, description="cni")
     pod_cidr: Optional[str] = Field(None, description="pod的cidr")
     number_master: Optional[int] = Field(0, description="master节点数量")
-
         
 class ClusterObject(DingoopsObject):
     name: str = Field(..., description="集群名称")

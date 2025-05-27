@@ -161,6 +161,12 @@ variable "nodes" {
     az                     = string
     flavor                 = string
     floating_ip            = bool
+    port_forwards          = optional(list(object({
+    external_port = number
+    internal_port = number
+    protocol = string
+  })))
+
     reserved_floating_ip   = optional(string)
     extra_groups           = optional(string)
     image_id               = optional(string)
@@ -298,4 +304,3 @@ variable "tenant_id" {
 }
 
 variable "forward_float_ip_id" {}
-variable "port_forwards" {}

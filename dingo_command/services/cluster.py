@@ -451,8 +451,12 @@ class ClusterService:
         query_params["project_id"] = cluster.project_id
         res = self.list_clusters(query_params, 1, -1, None, None)
         if res.get("total") > 0:
-            raise Fail("集群名称已存在")
+            for c in res.get("data"):
+                if c.status != "deleted":
+                    raise Fail("集群名称已存在")
+                # 如果查询结果不为空，说明集群名称已存在+
         return True
+    
     def generate_random_cidr(self):
         import random
         
@@ -478,6 +482,7 @@ class ClusterService:
         import random
         return random.randint(20000, 40000)
     def create_cluster(self, cluster: ClusterObject, token):
+        # 验证token
         # 数据校验 todo
         self.check_cluster_param(cluster)
         try:
@@ -504,10 +509,10 @@ class ClusterService:
             
             res = ClusterSQL.create_cluster(cluster_info_db)
             #设置端口转发的外部端口 
-            if cluster.port_forwards != None:
-                for p in cluster.port_forwards:
-                    if p.external_port == None or p.external_port == "":
-                        p.external_port = self.generate_random_port()
+            # if cluster.port_forwards != None:
+            #     for p in cluster.port_forwards:
+            #         if p.external_port == None or p.external_port == "":
+            #             p.external_port = self.generate_random_port()
             if cluster.forward_float_ip_id == None:
                 cluster.forward_float_ip_id = ""
             tfvars = ClusterTFVarsObject(
@@ -529,7 +534,6 @@ class ClusterService:
                 token = token,
                 auth_url = auth_url,
                 tenant_id=cluster.project_id,
-                port_forwards=cluster.port_forwards,
                 forward_float_ip_id = cluster.forward_float_ip_id,
                 image_master = image_master
                 )
@@ -672,22 +676,22 @@ class ClusterService:
             if node.role == "worker" and node.type == "vm":
                 flavor = nova_client.nova_get_flavor(node.flavor_id)
                 if flavor is not None:
-                    cpu_total += flavor['vcpus']
-                    mem_total += flavor['ram']
+                    cpu_total = cpu_total + flavor['vcpus'] * node.count
+                    mem_total = mem_total + flavor['ram'] * node.count
                     if "extra_specs" in flavor and "pci_passthrough:alias" in flavor["extra_specs"]:
                         pci_alias = flavor['extra_specs']['pci_passthrough:alias']
                         if ':' in pci_alias:
                             gpu_value = pci_alias.split(':')[1].strip("'")
-                            gpu_total += int(gpu_value)
+                            gpu_total = gpu_total + int(gpu_value) *  node.count
                     #gpu_mem_total += flavor['extra_specs']['gpu_mem']
                 #查询flavor信息
             elif node.role == "worker" and node.type == "baremental":
                 flavor = nova_client.nova_get_flavor(node.flavor_id)
-                cpu_total += flavor['vcpus']
-                mem_total += flavor['ram']
+                cpu_total = cpu_total + flavor['vcpus'] * node.count
+                mem_total = mem_total + flavor['ram'] * node.count
                 if "extra_specs" in flavor and "resources:GPU" in flavor["extra_specs"]:
                     gpu_value = int(flavor["extra_specs"])
-                    gpu_total += int(gpu_value)
+                    gpu_total = gpu_total + int(gpu_value) *  node.count
         cluster_info_db.gpu = gpu_total
         cluster_info_db.cpu = cpu_total
         cluster_info_db.mem = mem_total

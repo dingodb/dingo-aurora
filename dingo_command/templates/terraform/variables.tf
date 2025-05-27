@@ -492,19 +492,3 @@ variable "forward_float_ip_id" {
 #variable "forward_out_port" {
 #  default = 0
 #}
-
-variable "port_forwards" {
-  description = "端口转发配置列表，每个元素包含外部端口和内部端口映射"
-  type = list(object({
-    external_port = number
-    internal_port = number
-    protocol = string
-  }))
-  default = [
-    {
-      external_port = 22
-      internal_port = 22
-      protocol = "tcp"
-    }
-  ]
-}

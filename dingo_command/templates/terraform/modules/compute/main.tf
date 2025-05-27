@@ -447,24 +447,30 @@ locals {
     var.forward_float_ip_id != ""
   )
   
-  # 根据条件决定是生成映射还是返回空映射
-  port_forwarding_mappings = local.should_create_port_forwarding ? {
-    for pair in flatten([
-      for node_key, node in var.nodes : [
-        for idx, port_mapping in var.port_forwards : {
-          node_key     = node_key
-          mapping_key  = "${node_key}-${idx}"
-          external_port = port_mapping.external_port
-          internal_port = port_mapping.internal_port
-          protocol     = port_mapping.protocol
-          internal_ip = openstack_compute_instance_v2.nodes[node_key].network[0].fixed_ip_v4
-        }
-      ]
-    ]) : pair.mapping_key => pair
-  } : {}
+  # 创建所有节点的所有端口转发的映射
+  port_forwarding_mappings = flatten([
+    for node_key, node in var.nodes : [
+      # 判断节点是否有 port_forwards 配置
+      for port_mapping in (node.port_forwards != null ? node.port_forwards : []) : {
+        node_key      = node_key             # 节点标识
+        mapping_key   = "${node_key}-${port_mapping.internal_port}"  # 创建唯一键
+        external_port = port_mapping.external_port                   # 外部端口
+        internal_port = port_mapping.internal_port                   # 内部端口
+        protocol      = port_mapping.protocol                        # 协议
+        internal_ip   = openstack_compute_instance_v2.nodes[node_key].network[0].fixed_ip_v4  # 内部IP
+      }
+    ]
+  ])
+  
+  # 转换为 for_each 所需的 map 格式
+  port_forwarding_map = {
+    for mapping in local.port_forwarding_mappings : 
+      mapping.mapping_key => mapping
+    if var.forward_float_ip_id != "" && var.forward_float_ip_id != null
+  }
 }
 resource "openstack_networking_portforwarding_v2" "pf_multi" {
-  for_each = local.port_forwarding_mappings
+  for_each = local.port_forwarding_map
 
   floatingip_id    = var.forward_float_ip_id
   external_port    = each.value.external_port

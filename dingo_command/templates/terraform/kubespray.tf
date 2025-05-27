@@ -133,8 +133,7 @@ module "compute" {
   ]
   key_pair                                     = var.key_pair
   password                                     = var.password
-  forward_float_ip_id                      = var.forward_float_ip_id
-  port_forwards                                = var.port_forwards
+  forward_float_ip_id                          = var.forward_float_ip_id
   token = var.token
   auth_url = var.auth_url
   tenant_id = var.tenant_id

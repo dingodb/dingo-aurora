@@ -973,8 +973,10 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         # 获取集群的kube_config
         kube_config = get_cluster_kubeconfig(cluster_tfvars,lb_ip,master_ip,float_ip)
         # 更新集群状态为running
-        count, db_cluster = ClusterSQL.list_cluster(cluster_dict["id"])
-        c = db_cluster[0]
+        query_params = {}
+        query_params["id"] = cluster_dict["id"]
+        count, db_clusters = ClusterSQL.list_cluster(query_params)
+        c = db_clusters[0]
         kube_info = json.loads(c.kube_info)
         kube_info["kube_config"] = kube_config
         c.kube_info = json.dumps(kube_info)
@@ -990,7 +992,9 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
     except Exception as e:
         # 发生错误时更新集群状态为"失败"
         print(f"deploy k8s cluster error")
-        count, db_clusters = ClusterSQL.list_cluster(cluster_dict["id"])
+        query_params = {}
+        query_params["id"] = cluster_dict["id"]
+        count, db_clusters = ClusterSQL.list_cluster(query_params)
         c = db_clusters[0]
         c.status = 'error'
         c.status_msg = str(e.__str__())
@@ -1066,15 +1070,8 @@ def load_tfvars_to_object(tfvars_path):
 
 @celery_app.task(bind=True)
 def delete_cluster(self, cluster_id, region_name, token):
-    # 进入到terraform目录
     cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_id)
-    terraform_dir = os.path.join(cluster_dir, "terraform")
-    print(f"Terraform dir: {terraform_dir}")
-    print(f"Terraform dir: {region_name}")
-
-    os.chdir(terraform_dir)
-    # 删除集群
-    #os.environ['OS_CLOUD'] = region_name
+    # 进入到terraform目录、
     if not os.path.exists(cluster_dir):
         print(f"集群目录不存在: {cluster_dir}")
         # 更新集群状态为已删除，因为目录不存在意味着可能已被删除或从未创建成功
@@ -1086,7 +1083,31 @@ def delete_cluster(self, cluster_id, region_name, token):
             c.status = 'deleted'
             c.status_msg = ""
             ClusterSQL.update_cluster(c)
+        query_params = {"cluster_id": cluster_id}
+        count, instances = InstanceSQL.list_instances(query_params, 1, -1, None, None)
+        for instance in instances:
+            session = get_session()
+            with session.begin():
+                db_instance = session.get(Instance, instance.id)
+                session.delete(db_instance)
+
+        # 1. 查询与该集群关联的所有实例
+        query_params = {"cluster_id": cluster_id}
+        count, nodes = NodeSQL.list_nodes(query_params, 1, -1, None, None)
+        for n in nodes:
+            session = get_session()
+            with session.begin():
+                db_node = session.get(NodeInfo, n.id)
+                session.delete(db_node)
         return True
+    
+    terraform_dir = os.path.join(cluster_dir, "terraform")
+    print(f"Terraform dir: {terraform_dir}")
+
+    os.chdir(terraform_dir)
+    # 删除集群
+    #os.environ['OS_CLOUD'] = region_name
+    
     res = subprocess.run(["terraform", "destroy", "-auto-approve", "-var-file=output.tfvars.json"], capture_output=True)
     # 获取 tfvars 文件路径
     tfvars_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_id, "terraform", "output.tfvars.json")
@@ -1120,7 +1141,25 @@ def delete_cluster(self, cluster_id, region_name, token):
         c.status_msg = ""
         ClusterSQL.update_cluster(c)
         print("Terraform destroy succeeded")
+        # delete instance
+        # 1. 查询与该集群关联的所有实例
+        query_params = {"cluster_id": cluster_id}
+        count, instances = InstanceSQL.list_instances(query_params, 1, -1, None, None)
+        for instance in instances:
+            session = get_session()
+            with session.begin():
+                db_instance = session.get(Instance, instance.id)
+                session.delete(db_instance)
 
+        # 1. 查询与该集群关联的所有实例
+        query_params = {"cluster_id": cluster_id}
+        count, nodes = NodeSQL.list_nodes(query_params, 1, -1, None, None)
+        for n in nodes:
+            session = get_session()
+            with session.begin():
+                db_node = session.get(Instance, n.id)
+                session.delete(db_node)
+                
 
 @celery_app.task(bind=True)
 def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extravars):
