@@ -23,6 +23,7 @@ async def get_token(x_auth_token: str = Header(None, alias="X-Auth-Token")):
 async def list_instances(cluster_id: str = Query(None, description="集群id"),
                          cluster_name: str = Query(None, description="集群名称"),
                          type: str = Query(None, description="instance类型"),
+                         name: str = Query(None, description="instance名称"),
                          status: str = Query(None, description="status状态"),
                          page: int = Query(1, description="页码"),
                          page_size: int = Query(10, description="页数量大小"),
@@ -34,6 +35,8 @@ async def list_instances(cluster_id: str = Query(None, description="集群id"),
         # 查询条件组装
         if cluster_name:
             query_params['cluster_name'] = cluster_name
+        if name:
+            query_params['name'] = name
         if type:
             query_params['type'] = type
         if status:

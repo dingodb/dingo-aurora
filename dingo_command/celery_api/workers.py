@@ -52,18 +52,21 @@ control_plane_task_name = "Check control plane status"
 work_node_task_name = "Check k8s nodes status"
 
 
+class Port_forwards(BaseModel):
+    internal_port: Optional[int] = Field(None, description="转发的内部端口")
+    external_port: Optional[int] = Field(None, description="转发的外部端口")
+    protocol: Optional[str] = Field(None, description="协议")
+
+
 class NodeGroup(BaseModel):
     az: Optional[str] = Field(None, description="可用域")
     flavor: Optional[str] = Field(None, description="规格")
     floating_ip: Optional[bool] = Field(None, description="浮动ip")
     etcd: Optional[bool] = Field(None, description="是否是etcd节点")
     image_id: Optional[str] = Field(None, description="镜像id")
+    port_forwards: Optional[List[Port_forwards]] = Field(None, description="端口转发配置")
 
-class Port_forwards(BaseModel):
-    internal_port: Optional[int] = Field(None, description="转发的内部端口")
-    external_port: Optional[int] = Field(None, description="转发的外部端口")
-    protocol: Optional[str] = Field(None, description="协议")
-    
+
 class ClusterTFVarsObject(BaseModel):
     id: Optional[str] = Field(None, description="集群id")
     cluster_name: Optional[str] = Field(None, description="集群id")
@@ -269,7 +272,7 @@ def create_cluster(self, cluster_tf: ClusterTFVarsObject, cluster_dict: ClusterO
                         db_instance.status = "running"
                         db_instance.cidr = content.get("subnet_cidr")
                         db_instance.ip_address = v.get("ip")
-                        db_instance.security_group = str(cluster.name)
+                        db_instance.security_group = cluster.name
                         if v.get("public_ipv4") != v.get("ip"):
                             db_instance.floating_ip = v.get("public_ipv4")
         query_params = {}
@@ -1326,6 +1329,7 @@ def create_instance(self, instance, instance_list):
                                 db_instance.server_id = server.id
                                 db_instance.private_key = content
                                 db_instance.status = "running"
+                                db_instance.security_group = "default"
                                 db_instance.cidr = "10.0.0.0/16"
                     server_id_active.append(server_id)
                 elif server.status == "ERROR":
