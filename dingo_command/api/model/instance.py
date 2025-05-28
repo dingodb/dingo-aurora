@@ -1,7 +1,8 @@
 from typing import Optional, List
 from pydantic import BaseModel, Field
 from dingo_command.api.model.base import DingoopsObject
-from dingo_command.api.model.cluster import NetworkConfigObject
+from dingo_command.api.model.cluster import NetworkConfigObject, Port_forwards
+
 
 class OpenStackConfigObject(BaseModel):
     openstack_auth_url: Optional[str] = Field(None, description="openstack的url")
@@ -13,6 +14,7 @@ class OpenStackConfigObject(BaseModel):
     user_domain_name: Optional[str] = Field(None, description="openstack用户的域")
     project_domain_name: Optional[str] = Field(None, description="openstack租户的域")
     region: Optional[str] = Field(None, description="region信息")
+
 
 class InstanceConfigObject(DingoopsObject):
     cluster_id: Optional[str] = Field(None, description="集群id")
@@ -36,9 +38,11 @@ class InstanceConfigObject(DingoopsObject):
     mem: Optional[str] = Field(None, description="server的mem")
     disk: Optional[str] = Field(None, description="server的disk")
 
+
 class InstanceRemoveObject(BaseModel):
     openstack_info: Optional[OpenStackConfigObject] = Field(None, description="openstack中的信息")
     instance_list: Optional[List[InstanceConfigObject]] = Field(None, description="instance列表")
+
 
 class InstanceCreateObject(BaseModel):
     cluster_id: Optional[str] = Field(None, description="集群id")
@@ -53,4 +57,7 @@ class InstanceCreateObject(BaseModel):
     security_group: Optional[str] = Field(None, description="security_group信息")
     user: Optional[str] = Field(None, description="user信息")
     password: Optional[str] = Field(None, description="password信息")
+    forward_float_ip_id: Optional[str] = Field(None, description="集群浮动ip的id")
+    forward_float_ip: Optional[str] = Field(None, description="集群浮动ip")
+    port_forwards: Optional[List[Port_forwards]] = Field(None, description="端口转发配置")
     openstack_info: Optional[OpenStackConfigObject] = Field(None, description="openstack中的信息")

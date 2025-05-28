@@ -135,7 +135,7 @@ class ClusterService:
                     # 设置端口转发的外部端口
                     if cluster.port_forwards != None:
                         for index, port_forward in enumerate(cluster.port_forwards):
-                            if (port_forward.external_port == None or port_forward.external_port == ""):
+                            if port_forward.external_port == None or port_forward.external_port == "":
                                 cluster_new.port_forwards[index].external_port = self.generate_random_port()
                                 cluster_new.port_forwards[index].internal_port = port_forward.internal_port
                                 cluster_new.port_forwards[index].protocol = port_forward.protocol
@@ -212,12 +212,11 @@ class ClusterService:
                 for i in range(node.count):
                     # 设置端口转发的外部端口
                     if cluster.port_forwards != None:
-                        for k in range(len(cluster.port_forwards)):
-                            if cluster.port_forwards[k].external_port == None or cluster.port_forwards[
-                                k].external_port == "":
-                                cluster_new.port_forwards[k].external_port = self.generate_random_port()
-                                cluster_new.port_forwards[k].internal_port = cluster.port_forwards[k].internal_port
-                                cluster_new.port_forwards[k].protocol = cluster.port_forwards[k].protocol
+                        for index, port_forward in enumerate(cluster.port_forwards):
+                            if port_forward.external_port == None or port_forward.external_port == "":
+                                cluster_new.port_forwards[index].external_port = self.generate_random_port()
+                                cluster_new.port_forwards[index].internal_port = port_forward.internal_port
+                                cluster_new.port_forwards[index].protocol = port_forward.protocol
                     k8s_nodes[f"node-{int(node_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
                         flavor=node.flavor_id,

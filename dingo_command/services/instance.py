@@ -96,13 +96,17 @@ class InstanceService:
             if number == 0:
                 return ErrorResponse(code=400, status="fail", message="number parameter is 0, no instance is created",
                                      error=ErrorDetail(type="ValidationError"))
+            neutron_api = neutron.API()  # 创建API类的实例
+            external_net = neutron_api.list_external_networks()
+            (floatingip_pool, public_floatingip_pool, public_subnetids,
+             external_subnetids, external_net_id) = self.get_floatip_pools(neutron_api, external_net)
             # 写入instance信息到数据库中
             instance_info_db_list, instance_list = self.convert_instance_todb(instance)
             InstanceSQL.create_instance_list(instance_info_db_list)
             # 获取openstack的参数，传入到create_instance的方法中，由这create_instance创建vm或者裸金属
             # 调用celery_app项目下的work.py中的create_instance方法
             result = celery_app.send_task("dingo_command.celery_api.workers.create_instance",
-                                          args=[instance.dict(), instance_list])
+                                          args=[instance.dict(), instance_list, external_net_id])
             return BaseResponse(data=result.id)
         except Fail as e:
             raise e
@@ -161,20 +165,35 @@ class InstanceService:
                 operation_system = image.get("name")
         return operation_system
 
-    def generate_k8s_nodes(self, cluster_info, cluster, k8s_nodes):
+    def generate_random_port(self):
+        """从 20000 到 40000 范围内随机生成一个端口号"""
+        import random
+        return random.randint(20000, 40000)
+
+    def generate_k8s_nodes(self, cluster_info, cluster, k8s_nodes, forward_rules, forward_float_ip_id):
         node_db_list, instance_db_list = [], []
-        node_index = len(k8s_nodes) + 1
+        max_key = max(k8s_nodes, key=lambda k: int(k.split('-')[-1]))
+        node_index = int(max_key.split('-')[-1]) + 1
         for idx, node in enumerate(cluster.node_config):
             if node.role == "worker" and node.type == "vm":
                 cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
                 operation_system = self.get_image_info(node.image)
                 for i in range(node.count):
+                    forward_rules_new = []
+                    if forward_rules:
+                        for index, port_forward in enumerate(forward_rules):
+                            cluster_new = {}
+                            cluster_new["external_port"] = self.generate_random_port()
+                            cluster_new["internal_port"] = port_forward.get("internal_port")
+                            cluster_new["protocol"] = port_forward.get("protocol")
+                            forward_rules_new.append(cluster_new)
                     k8s_nodes[f"node-{int(node_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
                         flavor=node.flavor_id,
                         floating_ip=False,
                         etcd=False,
-                        image_id=node.image
+                        image_id=node.image,
+                        port_forwards=forward_rules_new
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
@@ -187,6 +206,8 @@ class InstanceService:
                     instance_db.security_group = node.security_group
                     instance_db.flavor_id = node.flavor_id
                     instance_db.status = "creating"
+                    instance_db.floating_forward_ip = forward_float_ip_id
+                    instance_db.ip_forward_rule = forward_rules_new
                     instance_db.status_msg = ""
                     instance_db.project_id = ""
                     instance_db.server_id = ""
@@ -206,12 +227,21 @@ class InstanceService:
                 cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
                 operation_system = self.get_image_info(node.image)
                 for i in range(node.count):
+                    forward_rules_new = []
+                    if forward_rules:
+                        for index, port_forward in enumerate(forward_rules):
+                            cluster_new = {}
+                            cluster_new["external_port"] = self.generate_random_port()
+                            cluster_new["internal_port"] = port_forward.get("internal_port")
+                            cluster_new["protocol"] = port_forward.get("protocol")
+                            forward_rules_new.append(cluster_new)
                     k8s_nodes[f"node-{int(node_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
                         flavor=node.flavor_id,
                         floating_ip=False,
                         etcd=False,
-                        image_id=node.image
+                        image_id=node.image,
+                        port_forwards=forward_rules_new
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
@@ -224,6 +254,8 @@ class InstanceService:
                     instance_db.security_group = node.security_group
                     instance_db.flavor_id = node.flavor_id
                     instance_db.status = "creating"
+                    instance_db.floating_forward_ip = forward_float_ip_id
+                    instance_db.ip_forward_rule = forward_rules_new
                     instance_db.status_msg = ""
                     instance_db.project_id = ""
                     instance_db.server_id = ""
@@ -311,13 +343,18 @@ class InstanceService:
             ClusterSQL.update_cluster(cluster_info_db)
             k8s_nodes = content["nodes"]
             subnet_cidr = content.get("subnet_cidr")
-            port_forwards = content.get("port_forwards")
             forward_float_ip_id = content.get("forward_float_ip_id")
             neutron_api = neutron.API()  # 创建API类的实例
             external_net = neutron_api.list_external_networks()
             (floatingip_pool, public_floatingip_pool, public_subnetids,
              external_subnetids, external_net_id) = self.get_floatip_pools(neutron_api, external_net)
-            instance_list = self.generate_k8s_nodes(cluster_info, cluster, k8s_nodes)
+            forward_rules = []
+            for k, v in k8s_nodes.items():
+                if v.get("port_forwards"):
+                    forward_rules = v.get("port_forwards")
+                    break
+            instance_list = self.generate_k8s_nodes(cluster_info, cluster, k8s_nodes,
+                                                    forward_rules, forward_float_ip_id)
 
             # 创建terraform变量
             tfvars = ClusterTFVarsObject(
@@ -336,7 +373,6 @@ class InstanceService:
                 token=token,
                 auth_url=auth_url,
                 tenant_id=cluster_info.project_id,
-                port_forwards=port_forwards,
                 forward_float_ip_id=forward_float_ip_id,
                 image_master=image_master,
             )

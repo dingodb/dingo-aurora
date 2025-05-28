@@ -1,5 +1,7 @@
 from datetime import datetime
 import json
+import random
+import ipaddress
 import base64
 import os
 import subprocess
@@ -41,10 +43,11 @@ FILESERVER_URL = CONF.DEFAULT.fileserver_url
 UBUNTU_REPO = CONF.DEFAULT.ubuntu_repo
 
 TIMEOUT = 600
-SERVER_TIMEOUT = 600
+SERVER_TIMEOUT = 1200
 NOVA_AUTH_URL = CommonConf.nova.auth_url
 SSH_KEY_NAME = "instance_key"
 INSTANCE_NET_NAME = "instance_network"
+INSTANCE_ROUTER_NAME = "instance_router"
 INSTANCE_SUBNET_NAME = "instance_subnet"
 
 etcd_task_name = "Check etcd cluster status"
@@ -640,19 +643,46 @@ def create_network_id(conn, network_name=INSTANCE_NET_NAME):
     else:
         return existing_network
 
+
+def create_router_id(conn, external_net_id, subnet_id, router_name=INSTANCE_ROUTER_NAME):
+    existing_router = conn.network.find_router(router_name)
+    if not existing_router:
+        router = conn.network.create_router(
+            name=router_name,
+            **{"external_gateway_info": {"network_id": external_net_id}},
+        )
+        router.add_interface(conn.network, subnet_id=subnet_id)
+
+
+def get_subnet_info():
+    # 生成随机CIDR（格式：10.x.x.0/16）
+    cidr = f"10.{random.randint(150, 200)}.0.0/16"
+    # 解析CIDR并获取网络对象
+    network = ipaddress.ip_network(cidr, strict=False)
+    # 计算第一个可用IP（网络地址+1）
+    first_ip = network.network_address + 1
+    second_ip = network.network_address + 2
+    last_ip = network.broadcast_address - 1
+    return cidr, str(first_ip), str(second_ip), str(last_ip)
+
+
 def create_subnet_id(conn, network, subnet_name=INSTANCE_SUBNET_NAME):
     existing_subnet = conn.network.find_subnet(subnet_name)
     if not existing_subnet:
-        conn.network.create_subnet(
+        cidr, first_ip, second_ip, last_ip = get_subnet_info()
+        subnet = conn.network.create_subnet(
             name=subnet_name,
             network_id=network.id,
             ip_version=4,
-            cidr="10.0.0.0/16",
-            gateway_ip="10.0.0.1",
-            allocation_pools=[{"start": "10.0.1.2", "end": "10.0.255.254"}],
-            dns_nameservers=["8.8.8.8", "114.114.114.114"],
+            cidr=cidr,
+            gateway_ip=first_ip,
+            allocation_pools=[{"start": second_ip, "end": last_ip}],
+            dns_nameservers=["114.114.114.114", "8.8.8.8"],
             enable_dhcp=True
         )
+        return subnet
+    else:
+        return existing_subnet
 
 
 def create_vm_instance(conn, instance_info: InstanceCreateObject, instance_list):
@@ -740,7 +770,8 @@ def create_bm_instance(conn, instance_info: InstanceCreateObject, instance_list)
             # )
             server = nclient.nova_create_server(ins.get("name"), instance_info.image_id,
                                                 instance_info.flavor_id, instance_info.network_id,
-                                                key_name=instance_info.sshkey_name, config_drive=True, metadata=meta_data)
+                                                key_name=instance_info.sshkey_name, config_drive=True,
+                                                metadata=meta_data)
             server_list.append(server.get("id"))
     return server_list
 
@@ -1300,7 +1331,7 @@ def delete_baremetal(self, cluster_id, cluster_name, instance_list, token):
         return False
 
 @celery_app.task(bind=True)
-def create_instance(self, instance, instance_list):
+def create_instance(self, instance, instance_list, external_net_id):
     try:
         instance = InstanceCreateObject(**instance)
         instance_list = json.loads(instance_list)
@@ -1324,11 +1355,14 @@ def create_instance(self, instance, instance_list):
         conn = connection.Connection(
             session = session
         )
+        cidr = ""
         if not instance.network_id:
             # 创建network_id
             network = create_network_id(conn)
-            create_subnet_id(conn, network)
+            subnet = create_subnet_id(conn, network)
+            cidr = subnet.cidr
             instance.network_id = network.id
+            create_router_id(conn, external_net_id, subnet.id)
         content = ""
         if not instance.sshkey_name:
             # 创建sshkey_name
@@ -1350,7 +1384,7 @@ def create_instance(self, instance, instance_list):
         handle_time = 0
         while len(server_id_active) < len(server_id_list) and handle_time < SERVER_TIMEOUT:
             for server_id in server_id_list:
-                if server_id in server_id_active:
+                if server_id in server_id_active or server_id in server_id_error:
                     continue
                 server = conn.get_server(server_id)
                 if server.status == "ACTIVE":
@@ -1368,15 +1402,23 @@ def create_instance(self, instance, instance_list):
                                 db_instance.server_id = server.id
                                 db_instance.private_key = content
                                 db_instance.status = "running"
-                                db_instance.security_group = "default"
-                                db_instance.cidr = "10.0.0.0/16"
+                                db_instance.security_group = instance.security_group
+                                db_instance.cidr = cidr
                     server_id_active.append(server_id)
                 elif server.status == "ERROR":
+                    for instance in instance_list:
+                        if instance.get("name") == server.name:
+                            with session.begin():
+                                db_instance = session.get(Instance, instance.get("id"))
+                                db_instance.status = "error"
+                                db_instance.status_msg = server.fault.get("details")
                     server_id_error.append(server_id)
                     if server_id_error == server_id_list:
                         break
-            time.sleep(5)
+            time.sleep(3)
             handle_time = time.time() - start_time
+            if handle_time > SERVER_TIMEOUT:
+                print("Execution time exceeds 20 minutes with check server's status")
         difference = list(set(server_id_list) - set(server_id_active))
         if difference:
             with session.begin():
@@ -1388,6 +1430,52 @@ def create_instance(self, instance, instance_list):
                             db_instance.server_id = server.id
                             db_instance.status = "error"
                             db_instance.status_msg = server.fault.get("details")
+
+        success_server = []
+        handle_time = 0
+        start_time = time.time()
+        if instance.forward_float_ip_id and instance.port_forwards:
+            while len(success_server) < len(server_id_list) and handle_time < SERVER_TIMEOUT:
+                for server_id in server_id_list:
+                    if server_id in success_server:
+                        continue
+                    server = conn.get_server(server_id)
+                    ports = list(conn.network.ports(device_id=server.id))
+                    internal_ip = ports[0].fixed_ips[0]["ip_address"]
+                    internal_port_id = ports[0].id
+                    try:
+                        list_dict_forward = []
+                        for port_forward in instance.port_forwards:
+                            dict_forward = {}
+                            random_port = random.randint(10000, 50000)
+                            conn.network.create_port_forwarding(
+                                floatingip_id=instance.forward_float_ip_id,
+                                internal_port_id=internal_port_id,
+                                internal_ip_address=internal_ip,
+                                internal_port=port_forward.internal_port,
+                                external_port=random_port,
+                                protocol=port_forward.protocol,
+                                description=f"{server.name} use forward rule",
+                            )
+                            dict_forward["dict_forward"] = port_forward.internal_port
+                            dict_forward["protocol"] = port_forward.protocol
+                            dict_forward["external_port"] = random_port
+                            list_dict_forward.append(dict_forward)
+                        with session.begin():
+                            for instance in instance_list:
+                                if instance.get("name") == server.name:
+                                    db_instance = session.get(Instance, instance.get("id"))
+                                    db_instance.ip_forward_rule = list_dict_forward
+                                    db_instance.floating_forward_ip = instance.forward_float_ip_id
+                        success_server.append(server_id)
+                    except Exception as e:
+                        if "port collision with the internal_port_range" in str(e):
+                            continue
+                        raise ValueError(e)
+                time.sleep(3)
+                handle_time = time.time() - start_time
+                if handle_time > SERVER_TIMEOUT:
+                    print("Execution time exceeds 20 minutes with create port forward rule")
     except Exception as e:
         print(f"create instance error: {e}")
         raise ValueError(e)

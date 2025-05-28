@@ -18,6 +18,7 @@ async def get_token(x_auth_token: str = Header(None, alias="X-Auth-Token")):
 async def list_nodes(cluster_id: str = Query(None, description="集群id"),
                      cluster_name: str = Query(None, description="集群名称"),
                      type: str = Query(None, description="节点类型"),
+                     name: str = Query(None, description="节点名称"),
                      status: str = Query(None, description="status状态"),
                      page: int = Query(1, description="页码"),
                      page_size: int = Query(10, description="页数量大小"),
@@ -38,6 +39,8 @@ async def list_nodes(cluster_id: str = Query(None, description="集群id"),
             query_params['cluster_id'] = cluster_id
         if type:
             query_params['type'] = type
+        if name:
+            query_params['name'] = name
         result = node_service.list_nodes(query_params, page, page_size, sort_keys, sort_dirs)
         return result
     except Exception as e:
