@@ -29,7 +29,7 @@ from dingo_command.db.engines.mysql import get_engine, get_session
 
 from dingo_command.services.custom_exception import Fail
 from dingo_command.services.system import SystemService
-from dingo_command.common.nova_client import nova_client
+from dingo_command.common.nova_client import NovaClient
 from dingo_command.services import CONF
 
 LOG = log.getLogger(__name__)
@@ -696,6 +696,7 @@ class NodeService:
         return instance_list, instance_list_json
 
     def get_flavor_info(self, flavor_id):
+        nova_client = NovaClient()
         flavor = nova_client.nova_get_flavor(flavor_id)
         cpu = 0
         gpu = 0
@@ -713,6 +714,7 @@ class NodeService:
 
     def get_image_info(self, image_id):
         operation_system = ""
+        nova_client = NovaClient()
         image = nova_client.glance_get_image(image_id)
         if image is not None:
             if image.get("os_version"):

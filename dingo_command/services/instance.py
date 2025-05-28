@@ -21,7 +21,7 @@ from dingo_command.db.engines.mysql import get_engine, get_session
 from dingo_command.common import neutron
 
 from dingo_command.services.custom_exception import Fail
-from dingo_command.common.nova_client import nova_client
+from dingo_command.common.nova_client import NovaClient
 
 from dingo_command.services import CONF
 
@@ -138,6 +138,7 @@ class InstanceService:
         return db_cluster
 
     def get_flavor_info(self, flavor_id):
+        nova_client = NovaClient()
         flavor = nova_client.nova_get_flavor(flavor_id)
         cpu = 0
         gpu = 0
@@ -155,6 +156,7 @@ class InstanceService:
 
     def get_image_info(self, image_id):
         operation_system = ""
+        nova_client = NovaClient()
         image = nova_client.glance_get_image(image_id)
         if image is not None:
             if image.get("os_version"):
@@ -413,6 +415,7 @@ class InstanceService:
 
     def convert_instance_todb(self, instance_info):
         instance_info_db_list = []
+        nova_client = NovaClient()
         flavor = nova_client.nova_get_flavor(instance_info.flavor_id)
         operation_system = ""
         image = nova_client.glance_get_image(instance_info.image_id)

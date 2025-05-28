@@ -24,7 +24,7 @@ from dingo_command.db.models.cluster.models import Cluster as ClusterDB
 from dingo_command.db.models.node.models import NodeInfo as NodeDB
 from dingo_command.db.models.instance.models import Instance as InstanceDB
 from dingo_command.common import neutron
-from dingo_command.common.nova_client import NovaClient, nova_client
+from dingo_command.common.nova_client import NovaClient
 from dingo_command.services.custom_exception import Fail
 from dingo_command.services.system import SystemService
 from dingo_command.services import CONF
@@ -823,6 +823,7 @@ class ClusterService:
         return res[1]
 
     def get_flavor_info(self, flavor_id):
+        nova_client = NovaClient()
         flavor = nova_client.nova_get_flavor(flavor_id)
         cpu = 0
         gpu = 0

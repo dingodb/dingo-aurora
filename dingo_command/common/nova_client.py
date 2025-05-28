@@ -170,5 +170,3 @@ class NovaClient:
             raise Exception(f"创建失败[HTTP {response.status_code}]: {response.text}")
         return response.json()['server']
 
-# 声明nova的client
-nova_client = NovaClient()

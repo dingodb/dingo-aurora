@@ -8,7 +8,7 @@ import time
 from dingo_command.db.models.cluster.sql import ClusterSQL
 from dingo_command.db.models.node.sql import NodeSQL
 from dingo_command.db.models.instance.sql import InstanceSQL
-from dingo_command.common.nova_client import nova_client
+from dingo_command.common.nova_client import NovaClient
 from oslo_log import log
 
 LOG = log.getLogger(__name__)
@@ -47,6 +47,7 @@ def check_instance_status():
 
                 # 检查实例状态
                 if server_id:
+                    nova_client = NovaClient()
                     server = nova_client.nova_get_server_detail(server_id)
 
                     # 如果状态发生变化，更新集群状态
@@ -86,6 +87,7 @@ def check_node_status():
 
                 # 检查实例状态
                 if server_id:
+                    nova_client = NovaClient()
                     server = nova_client.nova_get_server_detail(server_id)
 
                     # 如果状态发生变化，更新集群状态

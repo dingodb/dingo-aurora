@@ -4,7 +4,7 @@ import json
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from dingo_command.common.ironic_client import ironic_client
-from dingo_command.common.nova_client import nova_client
+from dingo_command.common.nova_client import NovaClient
 from dingo_command.db.models.asset_resoure_relation.models import AssetResourceRelationInfo
 from dingo_command.db.models.asset_resoure_relation.sql import AssetResourceRelationSQL
 from dingo_command.db.models.asset.sql import AssetSQL
@@ -55,6 +55,7 @@ def fetch_relation_info():
             server_detail = None
             if temp_node.get('instance_uuid'):
                 try:
+                    nova_client = NovaClient()
                     server_detail = nova_client.nova_get_server_detail(temp_node.get('instance_uuid'))
                     print(f"虚拟机详情数据: {server_detail}")
                 except Exception as e:
