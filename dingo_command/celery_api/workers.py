@@ -1389,10 +1389,10 @@ def create_instance(self, instance, instance_list, external_net_id):
                 server = conn.get_server(server_id)
                 if server.status == "ACTIVE":
                     # 写入数据库中
-                    for instance in instance_list:
-                        if instance.get("name") == server.name:
+                    for ins in instance_list:
+                        if ins.get("name") == server.name:
                             with session.begin():
-                                db_instance = session.get(Instance, instance.get("id"))
+                                db_instance = session.get(Instance, ins.get("id"))
                                 for k, v in server.addresses.items():
                                     for i in v:
                                         if i.get("OS-EXT-IPS:type") == "floating":
@@ -1402,14 +1402,13 @@ def create_instance(self, instance, instance_list, external_net_id):
                                 db_instance.server_id = server.id
                                 db_instance.private_key = content
                                 db_instance.status = "running"
-                                db_instance.security_group = instance.security_group
                                 db_instance.cidr = cidr
                     server_id_active.append(server_id)
                 elif server.status == "ERROR":
-                    for instance in instance_list:
-                        if instance.get("name") == server.name:
+                    for ins in instance_list:
+                        if ins.get("name") == server.name:
                             with session.begin():
-                                db_instance = session.get(Instance, instance.get("id"))
+                                db_instance = session.get(Instance, ins.get("id"))
                                 db_instance.status = "error"
                                 db_instance.status_msg = server.fault.get("details")
                     server_id_error.append(server_id)
@@ -1424,9 +1423,9 @@ def create_instance(self, instance, instance_list, external_net_id):
             with session.begin():
                 for server_id in difference:
                     server = conn.get_server(server_id)
-                    for instance in instance_list:
-                        if instance.get("name") == server.name:
-                            db_instance = session.get(Instance, instance.get("id"))
+                    for ins in instance_list:
+                        if ins.get("name") == server.name:
+                            db_instance = session.get(Instance, ins.get("id"))
                             db_instance.server_id = server.id
                             db_instance.status = "error"
                             db_instance.status_msg = server.fault.get("details")
