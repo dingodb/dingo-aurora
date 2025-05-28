@@ -841,6 +841,7 @@ class ClusterService:
 
     def get_image_info(self, image_id):
         operation_system = ""
+        nova_client = NovaClient()
         image = nova_client.glance_get_image(image_id)
         if image is not None:
             if image.get("os_version"):
