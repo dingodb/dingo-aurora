@@ -85,3 +85,22 @@ class MySqlUtils:
         except Exception as e:
             print(f"Error listing messages: {e}")
             raise e
+
+    def count_messages(self, table_name, query_params):
+        try:
+            with self.connect() as connection:
+                with connection.cursor() as cursor:
+                    # 构建查询条件
+                    conditions = []
+                    for key, value in query_params.items():
+                        conditions.append(f"{key} = %s")
+                    where_clause = " AND ".join(conditions) if conditions else "1=1"
+                    # sql语句
+                    sql = f"SELECT COUNT(*) FROM {table_name} WHERE {where_clause}"
+                    print(f"Executing SQL: {sql} ")
+                    cursor.execute(sql, list(query_params.values()))
+                    number = cursor.fetchone()[0] # 提取计数结果
+            return number
+        except Exception as e:
+            print(f"Error listing messages: {e}")
+            raise e

@@ -1,4 +1,6 @@
 # 接收消息的api接口定义类
+from math import ceil
+
 from fastapi import APIRouter, HTTPException, Query, Request
 from oslo_log import log
 
@@ -45,7 +47,18 @@ async def list_external_message_data(
         query_params.pop("sort_keys", None)
         query_params.pop("sort_dirs", None)
         # 查询阿里云的dingodb数据库
-        result = message_service.list_messages_from_dingodb(message_type, query_params, page, page_size, sort_keys, sort_dirs)
+        count_number = message_service.count_messages_from_dingodb(message_type, query_params)
+        data_list = message_service.list_messages_from_dingodb(message_type, query_params, page, page_size, sort_keys, sort_dirs)
+        # 定义数据
+        result = {}
+        # 页数相关信息
+        if page and page_size:
+            result['currentPage'] = page
+            result['pageSize'] = page_size
+            result['totalPages'] = ceil(count_number / int(page_size))
+        result['total'] = count_number
+        result['data'] = data_list
+        # 返回数据
         return result
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)

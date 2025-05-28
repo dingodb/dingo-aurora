@@ -353,3 +353,20 @@ class MessageService:
             import traceback
             traceback.print_exc()
             raise e
+
+    def count_messages_from_dingodb(self, message_type, query_params):
+        try:
+            # 判空
+            if not message_type:
+                raise Fail("message type is empty", error_message="消息类型不能为空")
+            # 未知消息类型
+            if message_type not in MESSAGE_TYPE_TABLE:
+                raise Fail("message type not exists", error_message="消息类型不存在")
+            # 获取数据
+            return aliyun_dingodb_utils.count_messages(MESSAGE_TYPE_TABLE[message_type], query_params)
+        except Fail as e:
+            raise e
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
