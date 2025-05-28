@@ -1,0 +1,101 @@
+pipeline {
+    agent none
+    environment {
+      SOURCE_DIR = '/data/pipeline_demo'
+      BUILD_DATE = sh(script: 'date +%Y%m%d', returnStdout: true).trim()
+      IMAGE_TAG = "${branch}-${BUILD_DATE}"
+    }
+    triggers {
+        GenericTrigger (
+            causeString: 'Triggered', 
+            genericVariables: [
+              [key: 'ref', value: '$.ref'],
+              [key: 'action', value: '$.action'],
+              [key: 'merge_commit', value: '$.pull_request.merge_commit_sha'],
+              [key: 'branch', value: '$.workflow_run.head_branch'],
+              [key: 'repo', value: '$.repository.name'],
+              [key: 'pull_request_title', value: '$.pull_request.title'],
+              [key: 'result', value: '$.workflow_run.conclusion']
+            ], 
+            printContributedVariables: true, 
+            printPostContent: true,
+            regexpFilterExpression: 'completed\\sdevelop\\ssuccess',
+            regexpFilterText: '$action $branch $result',
+            token: 'dingo-command'
+        )
+    }
+
+    stages {
+        stage('Pull and Tag Images') {
+            agent {
+              node {
+                label "dingo_stack"
+              }
+            }
+            
+            steps {
+                echo "预先拉取并标记镜像"
+                sh 'podman pull dockerproxy.zetyun.cn/docker.io/dingodatabase/dingo-command:latest'
+                sh 'podman tag dockerproxy.zetyun.cn/docker.io/dingodatabase/dingo-command:latest harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG} && podman push harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}'
+            }
+        }
+        stage('Deploy to test'){
+            when {
+                branch 'main'
+            }
+            parallel {
+               
+                stage('pull image') {
+                    agent {
+                      node {
+                        label "dingo_stack"
+                      }
+                    }
+            
+                    steps {
+                        echo "pull dingo-command images to test"
+                        sh 'ansible-playbook --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e CONFIG_DIR=/home/cicd/envs/test-regionone -e kolla_action=pull ../ansible/site.yml  --inventory /home/cicd/envs/test-regionone/multinode -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
+                        echo 'deploy images to develop '
+                        sh 'ansible-playbook --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e CONFIG_DIR=/home/cicd/envs/test-regionone -e kolla_action=upgrade ../ansible/site.yml  --inventory /home/cicd/envs/test-regionone/multinode -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
+                    }
+                }
+                stage('pull image on second node') {
+                    agent {
+                        node {
+                            label "dingo_stack"  // 请替换为实际的第二个节点标签
+                        }
+                    }
+
+                    steps {
+                        echo "pull dingo-command images to test on second node"
+                        sh 'ansible-playbook --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e CONFIG_DIR=/home/cicd/envs/test-regiontwo -e kolla_action=pull ../ansible/site.yml  --inventory /cicd/envs/test-regiontwo/multinode -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
+                        echo 'deploy images to develop on second node'
+                        sh 'ansible-playbook --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e CONFIG_DIR=/home/cicd/envs/test-regiontwo -e kolla_action=upgrade ../ansible/site.yml  --inventory /cicd/envs/test-regiontwo/multinode -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
+                    }
+                }
+            }
+        }
+        stage('deploy dingoOps to dev'){
+            when {
+                anyOf { branch 'develop'; branch 'stable/2023.2' }
+            }
+
+            parallel {
+              
+                stage('pull cinder') {
+                    agent {
+                      node {
+                        label "dingo_stack"
+                      }
+                    }
+                    steps {
+                        echo "pull cinder images to dev"
+                        sh 'kolla-ansible -i /root/multinode pull --tag cinder -e openstack_tag=${branch}'
+                        echo 'deploy images to develop '
+                        sh 'kolla-ansible -i /root/multinode upgrade --tag cinder -e openstack_tag=${branch}'
+                    }
+                }
+            }
+        }
+    }
+}

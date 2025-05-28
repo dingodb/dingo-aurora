@@ -1,13 +1,13 @@
-resource "openstack_networking_router_v2" "cluster" {
-  name                = "${var.cluster_name}-router"
-  count               = var.use_neutron == 1 && var.router_id == null ? 1 : 0
-  admin_state_up      = "true"
-  external_network_id = var.external_net
+data "openstack_networking_router_v2" "cluster" {
+  name      = "cluster-router"
+  count     = var.use_neutron == 1 && var.router_id != null ? 1 : 0
 }
 
-data "openstack_networking_router_v2" "cluster" {
-  router_id = var.router_id
-  count     = var.use_neutron == 1 && var.router_id != null ? 1 : 0
+resource "openstack_networking_router_v2" "cluster" {
+  name                = "cluster-router"
+  count               = length(data.openstack_networking_router_v2.cluster) == 0 ? 1 : 0
+  admin_state_up      = "true"
+  external_network_id = var.external_net
 }
 
 resource "openstack_networking_network_v2" "cluster" {
@@ -42,6 +42,6 @@ resource "openstack_networking_subnet_v2" "bussiness" {
 
 resource "openstack_networking_router_interface_v2" "cluster" {
   count     = var.use_neutron
-  router_id = "%{if openstack_networking_router_v2.cluster != []}${openstack_networking_router_v2.cluster[count.index].id}%{else}${var.router_id}%{endif}"
+  router_id = "%{if length(data.openstack_networking_router_v2.cluster) == 0}${openstack_networking_router_v2.cluster[count.index].id}%{else}${data.openstack_networking_router_v2.cluster[count.index].id}%{endif}"
   subnet_id = openstack_networking_subnet_v2.cluster[count.index].id
 }
