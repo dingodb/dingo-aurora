@@ -57,14 +57,15 @@ async def download_rating_summary_execl(begin: str = Query(None, description="�
     raise HTTPException(status_code=400, detail="Execl file not found")
 
 @router.post("/cloudkitty/download/ratingSummaryDetail/pdf", summary="下载计费汇总详情PDF", description="下载计费汇总详情PDF")
-async def download_rating_summary_detail_pdf(detail: List[CloudKittyRatingSummaryDetail]):
+async def download_rating_summary_detail_pdf(detail: List[CloudKittyRatingSummaryDetail],
+                                             language: str = Query(None, description="当前环境语言")):
     result_file_pdf_name = "rating_summary_detail_" + format_d8q_timestamp() + ".pdf"
     # 导出文件路径
     result_file_pdf_path = EXCEL_TEMP_DIR + result_file_pdf_name
 
     # 1. 生成Excel文件
     try:
-        cloudkitty_service.download_rating_summary_detail_pdf(result_file_pdf_path, detail)
+        cloudkitty_service.download_rating_summary_detail_pdf(result_file_pdf_path, detail, language)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -80,5 +81,31 @@ async def download_rating_summary_detail_pdf(detail: List[CloudKittyRatingSummar
             background=BackgroundTask(file_utils.cleanup_temp_file, result_file_pdf_path)
         )
     raise HTTPException(status_code=400, detail="PDf file not found")
+
+@router.post("/cloudkitty/download/ratingSummaryDetail/execl", summary="下载计费汇总详情execl", description="下载计费汇总详情execl")
+async def download_rating_summary_detail_execl(detail: List[CloudKittyRatingSummaryDetail],
+                                             language: str = Query(None, description="当前环境语言")):
+    result_file_execl_name = "rating_summary_detail_" + format_d8q_timestamp() + ".xlsx"
+    # 导出文件路径
+    result_file_execl_path = EXCEL_TEMP_DIR + result_file_execl_name
+
+    # 1. 生成Excel文件
+    try:
+        cloudkitty_service.download_rating_summary_detail_execl(result_file_execl_path, detail, language)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        file_utils.cleanup_temp_file(result_file_execl_path)
+        raise HTTPException(status_code=400, detail="generate execl file error")
+
+    # 文件存在则下载
+    if os.path.exists(result_file_execl_path):
+        return FileResponse(
+            path=result_file_execl_path,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename=result_file_execl_name,  # 下载时显示的文件名
+            background=BackgroundTask(file_utils.cleanup_temp_file, result_file_execl_path)
+        )
+    raise HTTPException(status_code=400, detail="Execl file not found")
 
 
