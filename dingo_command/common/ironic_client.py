@@ -104,6 +104,3 @@ class IronicClient:
         if response.status_code != 200:
             raise Exception(f"project请求失败: {response.text}")
         return response.json()['project']
-
-# 声明裸金属的client
-ironic_client = IronicClient()

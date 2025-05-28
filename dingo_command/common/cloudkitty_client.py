@@ -88,7 +88,3 @@ class CloudKittyClient:
             raise Exception(f"cloudkitty[{endpoint}]请求失败: {response.text}")
         print(f"{endpoint}/v1/storage/dataframes 返回数据大小: {len(response.json()['dataframes'])}")
         return response.json()['dataframes']
-
-
-# 声明裸金属的client
-cloudkitty_client = CloudKittyClient()

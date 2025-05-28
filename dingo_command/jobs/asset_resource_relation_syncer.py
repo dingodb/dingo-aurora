@@ -3,7 +3,7 @@ import json
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from dingo_command.common.ironic_client import ironic_client
+from dingo_command.common.ironic_client import IronicClient
 from dingo_command.common.nova_client import NovaClient
 from dingo_command.db.models.asset_resoure_relation.models import AssetResourceRelationInfo
 from dingo_command.db.models.asset_resoure_relation.sql import AssetResourceRelationSQL
@@ -28,13 +28,13 @@ def fetch_relation_info():
     print(f"同步资源与资产的关联关系开始时间: {datatime_util.get_now_time_in_timestamp_format()}")
     try:
         # 1、读取裸金属列表
-        node_list = ironic_client.ironic_list_nodes()
+        node_list = IronicClient().ironic_list_nodes()
         # print(f"裸金属列表数据: {node_list}")
         # 2、读取所有的资产数据
         asset_list = get_all_asset_list()
         print(f"资产数据数目：{len(asset_list)}, 裸机节点数目：{len(node_list)}")
         # 3、查询所有虚拟机
-        # server_list = nova_client.nova_list_servers()
+        # server_list = NovaClient().nova_list_servers()
         # print(f"虚拟机列表数据: {server_list}")
         # 数据判空
         if not node_list:
@@ -144,6 +144,7 @@ def update_asset_resource_relation(db_relation, temp_relation):
 # 追加资源的用户和项目名称
 def attach_user_and_project(temp_relation):
     # 追加资源的用户和项目名称
+    ironic_client = IronicClient()
     if temp_relation.resource_user_id:
         user = ironic_client.keystone_get_user_by_id(temp_relation.resource_user_id)
         if user:
