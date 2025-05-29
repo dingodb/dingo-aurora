@@ -10,7 +10,7 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends apt-utils \
 RUN wget -O - https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list \
     && apt-get update -y \
-    && apt-get install -y terraform  
+    && apt-get install -y terraform
 
 COPY . /opt/dingo-aurora
 
@@ -30,6 +30,11 @@ COPY ./etc/.terraformrc /root/.terraformrc
 COPY ./etc/gunicorn.py /etc/dingo-command/gunicorn.py
 COPY ./etc/dingo-command.conf /etc/dingo-command/dingo-command.conf
 COPY ./etc/supervisord.conf /etc/dingo-command/supervisord.conf
+
+# 检查并创建中文字体目录
+RUN mkdir -p /usr/share/fonts/chinese && chmod 755 /usr/share/fonts/chinese
+COPY ./share/fonts/simsun.ttc /usr/share/fonts/chinese/simsun.ttc
+RUN chmod 644 /usr/share/fonts/chinese/simsun.ttc
 
 COPY ./docker/start_service.sh /usr/local/bin/start_service.sh
 RUN chmod +x /usr/local/bin/start_service.sh

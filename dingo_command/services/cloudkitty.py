@@ -1,19 +1,22 @@
 import json
 import os
+import platform
 import shutil
 from datetime import datetime
-from oslo_log import log
+
 import pandas as pd
 from openpyxl.reader.excel import load_workbook
 from openpyxl.styles import Border, Side
+from oslo_log import log
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import  A4
+from reportlab.lib.pagesizes import A4
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import SimpleDocTemplate, Table
-from dingo_command.utils.constant import RATING_SUMMARY_TEMPLATE_FILE_DIR, RATING_SUMMARY_DETAIL_EN_TEMPLATE_FILE_DIR, RATING_SUMMARY_DETAIL_ZH_TEMPLATE_FILE_DIR
+
 from dingo_command.common.cloudkitty_client import CloudKittyClient
-import platform
+from dingo_command.utils.constant import RATING_SUMMARY_TEMPLATE_FILE_DIR, RATING_SUMMARY_DETAIL_EN_TEMPLATE_FILE_DIR, \
+    RATING_SUMMARY_DETAIL_ZH_TEMPLATE_FILE_DIR
 
 LOG = log.getLogger(__name__)
 
@@ -243,18 +246,18 @@ class CloudKittyService:
                 print(f"system: {platform.system()}, font_name: {font_name}")
             else:
                 try:
-                    # 尝试注册系统可能存在的字体
-                    pdfmetrics.registerFont(TTFont('SysSans', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
-                    font_name = 'SysSans'
+                    # 尝试注册系统可能存在的中文字体
+                    pdfmetrics.registerFont(TTFont('SimSun', '/usr/share/fonts/chinese/simsun.ttc'))
+                    font_name = 'SimSun'
                     print(f"system: {platform.system()}, font_name: {font_name}")
                 except Exception as e:
                     font_name = 'Helvetica'
                     print(f"system: {platform.system()}, font_name: {font_name}")
                     import traceback
                     traceback.print_exc()
-
+            print(f"registered font:{pdfmetrics.getRegisteredFontNames()}, font_name:{font_name}")
             # 定义表格样式（包含列宽设置）
-            col_widths = [150, 250]  # 第一列100pt，第二列250pt
+            col_widths = [150, 200]  # 第一列150pt，第二列250pt
             table = Table(table_data, colWidths=col_widths)
             table.setStyle([('FONTNAME', (0, 0), (-1, -1), font_name)])  # 设置字体
             table.setStyle([('ALIGN', (0, 0), (-1, -1), 'LEFT')]) # 靠左对齐
