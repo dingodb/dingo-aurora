@@ -1,15 +1,12 @@
-import json
-
+import time
+from datetime import datetime, timedelta
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.schedulers.background import BackgroundScheduler
-from datetime import datetime, timedelta
-import time
+from oslo_log import log
 
-from dingo_command.db.models.cluster.sql import ClusterSQL
 from dingo_command.db.models.node.sql import NodeSQL
 from dingo_command.db.models.instance.sql import InstanceSQL
 from dingo_command.common.nova_client import NovaClient
-from oslo_log import log
 
 LOG = log.getLogger(__name__)
 

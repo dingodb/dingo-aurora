@@ -12,12 +12,12 @@ from dingo_command.db.models.instance.sql import InstanceSQL
 from math import ceil
 from oslo_log import log
 from dingo_command.api.model.instance import InstanceCreateObject, OpenStackConfigObject
-from dingo_command.api.model.cluster import ClusterTFVarsObject, NodeGroup, ScaleNodeObject, NodeRemoveObject
+from dingo_command.api.model.cluster import ClusterTFVarsObject, NodeGroup, ScaleNodeObject
 from dingo_command.api.model.base import BaseResponse, ErrorResponse, ErrorDetail
 from dingo_command.db.models.instance.models import Instance as InstanceDB
 from dingo_command.db.models.cluster.models import Cluster as ClusterDB
 from dingo_command.db.models.cluster.sql import ClusterSQL
-from dingo_command.db.engines.mysql import get_engine, get_session
+from dingo_command.db.engines.mysql import get_session
 from dingo_command.common import neutron
 
 from dingo_command.services.custom_exception import Fail
@@ -320,7 +320,7 @@ class InstanceService:
                     public_subnetids = public_subnetids.append(subnet_id)
         if public_floatingip_pool == "":
             public_floatingip_pool = floatingip_pool
-        if public_subnetids == []:
+        if not public_subnetids:
             public_subnetids = external_subnetids
         return floatingip_pool,public_floatingip_pool,public_subnetids,external_subnetids,external_net_id
 

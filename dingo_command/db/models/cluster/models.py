@@ -35,7 +35,7 @@ class Cluster(Base):
     extra = Column(Text, nullable=True)
     private_key = Column(Text, nullable=True)
 
-class Cluster_Params(Base):
+class ClusterParams(Base):
     __tablename__ = "ops_cluster_params"
 
 #     image = Column(String(length=128), primary_key= True, nullable=False, index=True, unique=False)

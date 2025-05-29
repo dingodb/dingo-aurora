@@ -393,7 +393,7 @@ class NodeService:
                     public_subnetids = public_subnetids.append(subnet_id)
         if public_floatingip_pool == "":
             public_floatingip_pool = floatingip_pool
-        if public_subnetids == []:
+        if not public_subnetids:
             public_subnetids = external_subnetids
         return floatingip_pool,public_floatingip_pool,public_subnetids,external_subnetids,external_net_id
 

@@ -133,9 +133,9 @@ class ClusterService:
                 operation_system = self.get_image_info(node.image)
                 for i in range(node.count):
                     # 设置端口转发的外部端口
-                    if cluster.port_forwards != None:
+                    if cluster.port_forwards is not None:
                         for index, port_forward in enumerate(cluster.port_forwards):
-                            if port_forward.external_port == None or port_forward.external_port == "":
+                            if not port_forward.external_port or port_forward.external_port == "":
                                 cluster_new.port_forwards[index].external_port = self.generate_random_port()
                                 cluster_new.port_forwards[index].internal_port = port_forward.internal_port
                                 cluster_new.port_forwards[index].protocol = port_forward.protocol
@@ -211,9 +211,9 @@ class ClusterService:
                 operation_system = self.get_image_info(node.image)
                 for i in range(node.count):
                     # 设置端口转发的外部端口
-                    if cluster.port_forwards != None:
+                    if cluster.port_forwards is not None:
                         for index, port_forward in enumerate(cluster.port_forwards):
-                            if port_forward.external_port == None or port_forward.external_port == "":
+                            if not port_forward.external_port or port_forward.external_port == "":
                                 cluster_new.port_forwards[index].external_port = self.generate_random_port()
                                 cluster_new.port_forwards[index].internal_port = port_forward.internal_port
                                 cluster_new.port_forwards[index].protocol = port_forward.protocol
@@ -480,6 +480,7 @@ class ClusterService:
         """从 20000 到 40000 范围内随机生成一个端口号"""
         import random
         return random.randint(20000, 40000)
+
     def create_cluster(self, cluster: ClusterObject, token):
         # 验证token
         # 数据校验 todo
@@ -512,7 +513,7 @@ class ClusterService:
             #     for p in cluster.port_forwards:
             #         if p.external_port == None or p.external_port == "":
             #             p.external_port = self.generate_random_port()
-            if cluster.forward_float_ip_id == None:
+            if not cluster.forward_float_ip_id:
                 cluster.forward_float_ip_id = ""
             tfvars = ClusterTFVarsObject(
                 id = cluster_info_db.id,
@@ -582,7 +583,7 @@ class ClusterService:
                     public_subnetids = public_subnetids.append(subnet_id)
         if public_floatingip_pool == "":
             public_floatingip_pool = floatingip_pool
-        if public_subnetids == []:
+        if not public_subnetids:
             public_subnetids = external_subnetids     
         return floatingip_pool,public_floatingip_pool,public_subnetids,external_subnetids,external_net_id
 
@@ -712,9 +713,9 @@ class ClusterService:
                 cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
                 operation_system = self.get_image_info(node.image)
                 for i in range(node.count):
-                    if cluster.port_forwards != None:
+                    if cluster.port_forwards is not None:
                         for index, port_forward in enumerate(cluster.port_forwards):
-                            if (port_forward.external_port == None or port_forward.external_port == ""):
+                            if not port_forward.external_port or port_forward.external_port == "":
                                 cluster_new.port_forwards[index].external_port = self.generate_random_port()
                                 cluster_new.port_forwards[index].internal_port = port_forward.internal_port
                                 cluster_new.port_forwards[index].protocol = port_forward.protocol
@@ -754,9 +755,9 @@ class ClusterService:
                 cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
                 operation_system = self.get_image_info(node.image)
                 for i in range(node.count):
-                    if cluster.port_forwards != None:
+                    if cluster.port_forwards is not None:
                         for index, port_forward in enumerate(cluster.port_forwards):
-                            if (port_forward.external_port == None or port_forward.external_port == ""):
+                            if not port_forward.external_port or port_forward.external_port == "":
                                 cluster_new.port_forwards[index].external_port = self.generate_random_port()
                                 cluster_new.port_forwards[index].internal_port = port_forward.internal_port
                                 cluster_new.port_forwards[index].protocol = port_forward.protocol
@@ -854,7 +855,7 @@ class ClusterService:
 
     def get_key_file(self, cluster_id:str, instance_id:str):
         # 根据id查询集群
-        if  instance_id != None and cluster_id == None:
+        if  instance_id is not None and not cluster_id:
             # 如果传入了instance_id，则根据instance_id查询集群
             instance_query_params = {}
             instance_query_params["id"] = instance_id
@@ -864,10 +865,10 @@ class ClusterService:
                 return None
             # 返回第一条数据
             instance = instance_res[1]
-            if instance[0].private_key != None and instance[0].private_key != "":
+            if instance[0].private_key is not None and instance[0].private_key != "":
                 return instance[0].private_key
             cluster_id = instance.cluster_id
-        if cluster_id == "" or cluster_id == None:
+        if cluster_id == "" or not cluster_id:
             return None
         query_params = {}
         query_params["id"] = cluster_id

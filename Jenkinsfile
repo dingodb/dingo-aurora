@@ -1,9 +1,13 @@
 pipeline {
-    agent none
+    agent {
+        node {
+            label "dingo_stack"
+        }
+    }
     environment {
       SOURCE_DIR = '/data/pipeline_demo'
       BUILD_DATE = sh(script: 'date +%Y%m%d', returnStdout: true).trim()
-      IMAGE_TAG = "${branch}-${BUILD_DATE}"
+      IMAGE_TAG = "${branch ? branch : 'main'}-${BUILD_DATE}"
     }
     triggers {
         GenericTrigger (
@@ -27,17 +31,23 @@ pipeline {
 
     stages {
         stage('Pull and Tag Images') {
+            
             agent {
-              node {
-                label "dingo_stack"
-              }
+                node {
+                    label "dingo_stack"
+                }
+            }
+            steps {
+                echo "Pulling dingo-command image from harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}"
+                withCredentials([usernamePassword(credentialsId: 'harbor_credential', usernameVariable: 'HARBOR_USERNAME', passwordVariable: 'HARBOR_PASSWORD')]) {
+                    sh 'podman login harbor.zetyun.cn -u $HARBOR_USERNAME -p $HARBOR_PASSWORD'
+                }
+                sh 'podman pull dockerproxy.zetyun.cn/docker.io/dingodatabase/dingo-command:latest'
+                echo "Tagging dingo-command image as harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}"
+                sh 'podman tag dockerproxy.zetyun.cn/docker.io/dingodatabase/dingo-command:latest harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}'
+                sh 'podman push harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}'
             }
             
-            steps {
-                echo "预先拉取并标记镜像"
-                sh 'podman pull dockerproxy.zetyun.cn/docker.io/dingodatabase/dingo-command:latest'
-                sh 'podman tag dockerproxy.zetyun.cn/docker.io/dingodatabase/dingo-command:latest harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG} && podman push harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}'
-            }
         }
         stage('Deploy to test'){
             when {
@@ -47,9 +57,9 @@ pipeline {
                
                 stage('pull image') {
                     agent {
-                      node {
-                        label "dingo_stack"
-                      }
+                        node {
+                            label "dingo_stack"
+                        }
                     }
             
                     steps {
@@ -84,9 +94,9 @@ pipeline {
               
                 stage('pull cinder') {
                     agent {
-                      node {
-                        label "dingo_stack"
-                      }
+                        node {
+                            label "dingo_stack"
+                        }
                     }
                     steps {
                         echo "pull cinder images to dev"

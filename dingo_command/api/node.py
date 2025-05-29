@@ -1,10 +1,9 @@
 from fastapi import Query, Header, Depends
+from fastapi import APIRouter, HTTPException
 from dingo_command.api.model.cluster import ScaleNodeObject, NodeRemoveObject
-
 from dingo_command.services.cluster import ClusterService
 from dingo_command.services.node import NodeService
 from dingo_command.services.custom_exception import Fail
-from fastapi import APIRouter, HTTPException
 
 router = APIRouter()
 node_service = NodeService()

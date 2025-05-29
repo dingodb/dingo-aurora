@@ -1,14 +1,13 @@
 import os
 import tempfile
-from fastapi import BackgroundTasks, Query
+from fastapi import Query
 from fastapi.responses import FileResponse
 from dingo_command.api.model.cluster import ClusterObject
 
 from dingo_command.services.cluster import ClusterService,TaskService
 from dingo_command.services.custom_exception import Fail
-from fastapi import APIRouter, HTTPException, Depends,Header
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-    
+from fastapi import APIRouter, HTTPException, Depends, Header
+
 router = APIRouter()
 cluster_service = ClusterService()
 task_service = TaskService()
@@ -23,7 +22,7 @@ async def get_token(x_auth_token: str = Header(None, alias="X-Auth-Token")):
 @router.post("/cluster", summary="创建k8s集群", description="创建k8s集群")
 async def create_cluster(cluster_object:ClusterObject,token: str = Depends(get_token)):
     try:
-        
+
         cluster_id = cluster_service.create_cluster(cluster_object,token)
         # 操作日志
         #SystemService.create_system_log(OperateLogApiModel(operate_type="create", resource_type="flow", resource_id=cluster_id, resource_name=cluster_object.name, operate_flag=True))
@@ -125,7 +124,7 @@ async def list_params():
         raise HTTPException(status_code=400, detail="get cluster param error")
     
 @router.get("/cluster/{cluster_id}", summary="获取k8s集群详情", description="获取k8s集群详情")
-async def get_cluster(cluster_id:str, token: str = Depends(get_token)):
+async def get_cluster(cluster_id:str):
     try:
         # 集群信息存入数据库
         result = cluster_service.get_cluster(cluster_id)

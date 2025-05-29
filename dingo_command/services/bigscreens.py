@@ -76,7 +76,7 @@ class BigScreensService:
                 if json_response['status'] == 'success':
                     json_data = json_response['data']
                     json_data_result = json_data['result']
-                    if json_data_result == []:
+                    if not json_data_result:
                         return 0
                     if not sequence:
                         return json_data_result[0]['value'][1]

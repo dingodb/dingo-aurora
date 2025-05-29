@@ -55,7 +55,7 @@ control_plane_task_name = "Check control plane status"
 work_node_task_name = "Check k8s nodes status"
 
 
-class Port_forwards(BaseModel):
+class PortForwards(BaseModel):
     internal_port: Optional[int] = Field(None, description="转发的内部端口")
     external_port: Optional[int] = Field(None, description="转发的外部端口")
     protocol: Optional[str] = Field(None, description="协议")
@@ -67,7 +67,7 @@ class NodeGroup(BaseModel):
     floating_ip: Optional[bool] = Field(None, description="浮动ip")
     etcd: Optional[bool] = Field(None, description="是否是etcd节点")
     image_id: Optional[str] = Field(None, description="镜像id")
-    port_forwards: Optional[List[Port_forwards]] = Field(None, description="端口转发配置")
+    port_forwards: Optional[List[PortForwards]] = Field(None, description="端口转发配置")
 
 
 class ClusterTFVarsObject(BaseModel):
@@ -104,10 +104,10 @@ class ClusterTFVarsObject(BaseModel):
     auth_url: Optional[str] = Field(None, description="鉴权url")
     token: Optional[str] = Field(None, description="token")
     forward_float_ip_id: Optional[str] = Field("", description="集群浮动ip的id")
-    port_forwards: Optional[list[Port_forwards]] = Field(None, description="端口转发配置")
+    port_forwards: Optional[list[PortForwards]] = Field(None, description="端口转发配置")
     image_master: Optional[str] = Field(None, description="master节点的镜像")
     
-def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, region_name:str = "regionOne"):
+def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
     """使用Terraform创建基础设施"""
     try:
 
@@ -224,7 +224,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, regio
 @celery_app.task(bind=True)
 def create_cluster(self, cluster_tf: ClusterTFVarsObject, cluster_dict: ClusterObject, instance_bm_list):
     try:
-        task_id = self.request.id.__str__()
+        task_id = str(self.request.id)
         cluster_id = cluster_tf["id"]
         print(f"Task ID: {task_id}, Cluster ID: {cluster_id}")
         cluster_tfvars = ClusterTFVarsObject(**cluster_tf)
@@ -292,7 +292,7 @@ def create_cluster(self, cluster_tf: ClusterTFVarsObject, cluster_dict: ClusterO
         count, db_clusters = ClusterSQL.list_cluster(query_params)
         db_cluster = db_clusters[0]
         db_cluster.status = 'error'
-        db_cluster.status_msg = str(e.__str__())
+        db_cluster.status_msg = str(e)
         ClusterSQL.update_cluster(db_cluster)
         raise
 
@@ -366,7 +366,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
                      # 处理 etcd 任务的特殊逻辑
                     print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
                     
-                    if task_name == etcd_task_name and host != None:    
+                    if task_name == etcd_task_name and host is not None:
                         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
                         task_info.state = "success"
                         task_info.detail = TaskService.TaskDetail.etcd_deploy.value
@@ -374,7 +374,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
                         # 写入下一个任务
                         task_info = control_plane_task
                         TaskSQL.insert(control_plane_task)
-                    if task_name == control_plane_task_name and host != None: 
+                    if task_name == control_plane_task_name and host is not None:
                         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
                         task_info.state = "success"
                         task_info.detail = TaskService.TaskDetail.controler_deploy.value
@@ -382,7 +382,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
                         # 写入下一个任务
                         task_info = worker_task
                         TaskSQL.insert(worker_task)
-                    if task_name == work_node_task_name and host != None and task_status != "failed":
+                    if task_name == work_node_task_name and host is not None and task_status != "failed":
                         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
                         task_info.state = "success"
                         task_info.detail = TaskService.TaskDetail.worker_deploy.value
@@ -443,7 +443,7 @@ def render_templatefile(template_file, cluster_file, context):
 
 
 def update_ansible_status(task_info, event, task_name, host, task_status):
-    if task_name == work_node_task_name and host != None:
+    if task_name == work_node_task_name and host is not None:
         # 处理 etcd 任务的特殊逻辑
         print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
         if task_status != "failed":
@@ -549,9 +549,9 @@ def get_cluster_kubeconfig(cluster: ClusterTFVarsObject, lb_ip, master_ip, float
 
         # 替换server地址为外部IP
         ip = "127.0.0.1"
-        if lb_ip != None and lb_ip != "":
+        if lb_ip is not None and lb_ip != "":
             ip = lb_ip
-        elif master_ip != None and master_ip != "":
+        elif master_ip is not None and master_ip != "":
             ip = master_ip
 
         kubeconfig = kubeconfig.replace(

@@ -1,7 +1,7 @@
 from typing import Optional, List
 from pydantic import BaseModel, Field
 from dingo_command.api.model.base import DingoopsObject
-from dingo_command.api.model.cluster import NetworkConfigObject, Port_forwards
+from dingo_command.api.model.cluster import NetworkConfigObject, PortForwards
 
 
 class OpenStackConfigObject(BaseModel):
@@ -59,5 +59,5 @@ class InstanceCreateObject(BaseModel):
     password: Optional[str] = Field(None, description="password信息")
     forward_float_ip_id: Optional[str] = Field(None, description="集群浮动ip的id")
     forward_float_ip: Optional[str] = Field(None, description="集群浮动ip")
-    port_forwards: Optional[List[Port_forwards]] = Field(None, description="端口转发配置")
+    port_forwards: Optional[List[PortForwards]] = Field(None, description="端口转发配置")
     openstack_info: Optional[OpenStackConfigObject] = Field(None, description="openstack中的信息")

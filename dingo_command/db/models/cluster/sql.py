@@ -7,7 +7,7 @@ from sqlalchemy import create_engine, func
 from typing_extensions import assert_type
 
 from dingo_command.db.engines.mysql import get_session
-from dingo_command.db.models.cluster.models import Cluster,Taskinfo,Cluster_Params
+from dingo_command.db.models.cluster.models import Cluster, Taskinfo, ClusterParams
 
 from enum import Enum
 
@@ -151,7 +151,7 @@ class  ParamSQL:
         session = get_session()
         with session.begin():
             # 根据query_params查询数据
-            query = session.query(Cluster_Params)
+            query = session.query(ClusterParams)
             count = query.count()
             params = query.all()
             # 返回

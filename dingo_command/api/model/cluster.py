@@ -19,7 +19,7 @@ class NetworkConfigObject(BaseModel):
     floating_ip: Optional[bool] = Field(None, description="是否启用浮动ip")
 
 
-class Port_forwards(BaseModel):
+class PortForwards(BaseModel):
     internal_port: Optional[int] = Field(None, description="转发的内部端口")
     external_port: Optional[int] = Field(None, description="转发的外部端口")
     protocol: Optional[str] = Field(None, description="协议")
@@ -46,7 +46,7 @@ class NodeGroup(BaseModel):
     floating_ip: Optional[bool] = Field(None, description="浮动ip")
     etcd: Optional[bool] = Field(None, description="是否是etcd节点")
     image_id: Optional[str] = Field(None, description="镜像id")
-    port_forwards: Optional[List[Port_forwards]] = Field(None, description="端口转发配置")
+    port_forwards: Optional[List[PortForwards]] = Field(None, description="端口转发配置")
 
 class KubeClusterObject(BaseModel):
     kube_lb_address: Optional[str] = Field(None, description="负载均衡器的浮动ip")
@@ -82,7 +82,7 @@ class ClusterObject(DingoopsObject):
     private_key: Optional[str] = Field(None, description="集群私钥")
     forward_float_ip_id: Optional[str] = Field(None, description="集群浮动ip的id")
     forward_float_ip: Optional[str] = Field(None, description="集群浮动ip")
-    port_forwards: Optional[List[Port_forwards]] = Field(None, description="端口转发配置")
+    port_forwards: Optional[List[PortForwards]] = Field(None, description="端口转发配置")
 
 
 class NodeObject(DingoopsObject):
