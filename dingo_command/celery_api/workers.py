@@ -828,7 +828,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                              msg=TaskService.TaskMessage.instructure_create.name)
         TaskSQL.insert(task_info)
 
-        terraform_result = create_infrastructure(cluster_tfvars, task_info, cluster.region_name)
+        terraform_result = create_infrastructure(cluster_tfvars, task_info)
 
         if not terraform_result:
             raise Exception("Terraform infrastructure creation failed")
@@ -843,13 +843,47 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                              start_time=datetime.fromtimestamp(datetime.now().timestamp()),
                              msg=TaskService.TaskMessage.pre_install.name)
         TaskSQL.insert(task_info)
-
-        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tf_dict["id"], "hosts")
         # Give execute permissions to the host file
+        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tf_dict["id"], "hosts")
         os.chmod(host_file, 0o755)  # rwxr-xr-x permission
+        master_ip, lb_ip, hosts_data = get_ips(cluster_tfvars, task_info, host_file)
+        output_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory",
+                                   str(cluster.id), "terraform", "output.tfvars.json")
+        with open(output_file) as f:
+            content = json.loads(f.read())
+        # 更新集群node的状态为running
+        session = get_session()
+        with session.begin():
+            for node in node_list:
+                db_node = session.get(NodeInfo, node.get("id"))
+                for k, v in hosts_data["_meta"]["hostvars"].items():
+                    if db_node.name == k:
+                        db_node.server_id = v.get("id")
+                        db_node.status = "running"
+                        db_node.cidr = content.get("subnet_cidr")
+                        db_node.security_group = cluster.name
+                        db_node.admin_address = v.get("ip")
+                        if v.get("public_ipv4") != v.get("ip"):
+                            db_node.floating_ip = v.get("public_ipv4")
+                        break
+
+        # 更新集群instance的状态为running
+        with session.begin():
+            for instance in instance_list:
+                db_instance = session.get(Instance, instance.get("id"))
+                for k, v in hosts_data["_meta"]["hostvars"].items():
+                    # 需要添加节点的ip地址等信息
+                    if db_instance.name == k:
+                        db_instance.server_id = v.get("id")
+                        db_instance.status = "running"
+                        db_instance.cidr = content.get("subnet_cidr")
+                        db_instance.security_group = cluster.name
+                        db_instance.ip_address = v.get("ip")
+                        if v.get("public_ipv4") != v.get("ip"):
+                            db_instance.floating_ip = v.get("public_ipv4")
+                        break
 
         print(f"config ssh no pass {task_id}")
-        master_ip, lb_ip, hosts_data = get_ips(cluster_tfvars, task_info, host_file)
         # ensure /root/.ssh/known_hosts exists
         if os.path.exists("/root/.ssh/known_hosts"):
             for i in range(1, cluster_tfvars.number_of_k8s_masters + 1):
@@ -936,42 +970,6 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             task_info.detail = error_msg
             update_task_state(task_info)
             raise Exception(error_msg)
-
-        output_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory",
-                                   str(cluster.id), "terraform", "output.tfvars.json")
-        with open(output_file) as f:
-            content = json.loads(f.read())
-        # 更新集群node的状态为running
-        session = get_session()
-        with session.begin():
-            for node in node_list:
-                db_node = session.get(NodeInfo, node.get("id"))
-                for k, v in hosts_data["_meta"]["hostvars"].items():
-                    if db_node.name == k:
-                        db_node.server_id = v.get("id")
-                        db_node.status = "running"
-                        db_node.cidr = content.get("subnet_cidr")
-                        db_node.security_group = cluster.name
-                        db_node.admin_address = v.get("ip")
-                        if v.get("public_ipv4") != v.get("ip"):
-                            db_node.floating_ip = v.get("public_ipv4")
-                        break
-
-        # 更新集群instance的状态为running
-        with session.begin():
-            for instance in instance_list:
-                db_instance = session.get(Instance, instance.get("id"))
-                for k, v in hosts_data["_meta"]["hostvars"].items():
-                    # 需要添加节点的ip地址等信息
-                    if db_instance.name == k:
-                        db_instance.server_id = v.get("id")
-                        db_instance.status = "running"
-                        db_instance.cidr = content.get("subnet_cidr")
-                        db_instance.security_group = cluster.name
-                        db_instance.ip_address = v.get("ip")
-                        if v.get("public_ipv4") != v.get("ip"):
-                            db_instance.floating_ip = v.get("public_ipv4")
-                        break
 
         res = subprocess.run(["python3", host_file, "--list"], capture_output=True, text=True)
         if res.returncode != 0:
@@ -1085,9 +1083,6 @@ def load_tfvars_to_object(tfvars_path):
     Returns:
         ClusterTFVarsObject 对象
     """
-    import json
-    from dingo_command.celery_api.workers import ClusterTFVarsObject
-    
     # 读取 tfvars 文件
     with open(tfvars_path, 'r') as f:
         tfvars_data = json.load(f)
@@ -1100,7 +1095,7 @@ def load_tfvars_to_object(tfvars_path):
 
 
 @celery_app.task(bind=True)
-def delete_cluster(self, cluster_id, region_name, token):
+def delete_cluster(self, cluster_id, token):
     cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_id)
     # 进入到terraform目录、
     if not os.path.exists(cluster_dir):
@@ -1136,9 +1131,7 @@ def delete_cluster(self, cluster_id, region_name, token):
     print(f"Terraform dir: {terraform_dir}")
 
     os.chdir(terraform_dir)
-    # 删除集群
-    #os.environ['OS_CLOUD'] = region_name
-    
+
     res = subprocess.run(["terraform", "destroy", "-auto-approve", "-var-file=output.tfvars.json"], capture_output=True)
     # 获取 tfvars 文件路径
     tfvars_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_id, "terraform", "output.tfvars.json")

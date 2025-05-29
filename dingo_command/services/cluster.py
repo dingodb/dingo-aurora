@@ -630,7 +630,7 @@ class ClusterService:
                     instance.update_time = datetime.now()
                     instance_list_db.append(instance)
                 InstanceSQL.update_instance_list(instance_list_db)
-            result = celery_app.send_task("dingo_command.celery_api.workers.delete_cluster", args=[cluster_id, region, token])
+            result = celery_app.send_task("dingo_command.celery_api.workers.delete_cluster", args=[cluster_id, token])
             # if result.get():
             #     # 删除成功，更新数据库状态
             #     cluster.status = "deleted"'
