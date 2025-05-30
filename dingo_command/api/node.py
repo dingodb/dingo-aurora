@@ -4,6 +4,7 @@ from dingo_command.api.model.cluster import ScaleNodeObject, NodeRemoveObject
 from dingo_command.services.cluster import ClusterService
 from dingo_command.services.node import NodeService
 from dingo_command.services.custom_exception import Fail
+from dingo_command.common.nova_client import NovaClient
 
 router = APIRouter()
 node_service = NodeService()
@@ -63,25 +64,29 @@ async def get_node(node_id: str):
 
 @router.post("/node", summary="扩容节点", description="扩容节点")
 async def create_node(cluster: ScaleNodeObject, token: str = Depends(get_token)):
-    # 先检查下是否有正在处于扩容的状态，如果是就直接返回
-    cluster_service = ClusterService()
-    cluster_info = cluster_service.get_cluster(cluster.id)
-    if not cluster_info:
-        raise HTTPException(status_code=400, detail="the cluster does not exist, please check")
-    if cluster_info.status == "creating":
-        raise HTTPException(status_code=400, detail="the cluster is creating, please wait")
-    if cluster_info.status == "scaling":
-        raise HTTPException(status_code=400, detail="the cluster is scaling, please wait")
-    if cluster_info.status == "deleting":
-        raise HTTPException(status_code=400, detail="the cluster is deleting, please wait")
-    if cluster_info.status == "removing":
-        raise HTTPException(status_code=400, detail="the cluster is removing, please wait")
     try:
+        NovaClient(token)
+        # 先检查下是否有正在处于扩容的状态，如果是就直接返回
+        cluster_service = ClusterService()
+        cluster_info = cluster_service.get_cluster(cluster.id)
+        if not cluster_info:
+            raise HTTPException(status_code=400, detail="the cluster does not exist, please check")
+        if cluster_info.status == "creating":
+            raise HTTPException(status_code=400, detail="the cluster is creating, please wait")
+        if cluster_info.status == "scaling":
+            raise HTTPException(status_code=400, detail="the cluster is scaling, please wait")
+        if cluster_info.status == "deleting":
+            raise HTTPException(status_code=400, detail="the cluster is deleting, please wait")
+        if cluster_info.status == "removing":
+            raise HTTPException(status_code=400, detail="the cluster is removing, please wait")
+
         # 创建节点（扩容节点）
         result = node_service.create_node(cluster_info, cluster, token)
         return {"data": result}
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
+    except  HTTPException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
         import traceback
         traceback.print_exc()

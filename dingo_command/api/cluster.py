@@ -3,7 +3,7 @@ import tempfile
 from fastapi import Query
 from fastapi.responses import FileResponse
 from dingo_command.api.model.cluster import ClusterObject
-
+from dingo_command.common.nova_client import NovaClient
 from dingo_command.services.cluster import ClusterService,TaskService
 from dingo_command.services.custom_exception import Fail
 from fastapi import APIRouter, HTTPException, Depends, Header
@@ -20,15 +20,17 @@ async def get_token(x_auth_token: str = Header(None, alias="X-Auth-Token")):
     return x_auth_token
 
 @router.post("/cluster", summary="创建k8s集群", description="创建k8s集群")
-async def create_cluster(cluster_object:ClusterObject,token: str = Depends(get_token)):
+async def create_cluster(cluster_object:ClusterObject, token: str = Depends(get_token)):
     try:
-
+        NovaClient(token)
         cluster_id = cluster_service.create_cluster(cluster_object,token)
         # 操作日志
         #SystemService.create_system_log(OperateLogApiModel(operate_type="create", resource_type="flow", resource_id=cluster_id, resource_name=cluster_object.name, operate_flag=True))
         return cluster_id
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
+    except  HTTPException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -141,6 +143,7 @@ async def get_cluster(cluster_id:str):
 @router.delete("/cluster/{cluster_id}", summary="删除k8s集群", description="删除k8s集群")
 async def delete_cluster(cluster_id:str, token: str = Depends(get_token)):
     try:
+        NovaClient(token)
         # 集群信息存入数据库
         result = cluster_service.delete_cluster(cluster_id, token)
         # 操作日志
@@ -148,6 +151,8 @@ async def delete_cluster(cluster_id:str, token: str = Depends(get_token)):
         return result
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
+    except  HTTPException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
         import traceback
         traceback.print_exc()

@@ -7,6 +7,7 @@ from dingo_command.services.instance import InstanceService
 from dingo_command.services.custom_exception import Fail
 from dingo_command.db.engines.mysql import get_session
 from dingo_command.db.models.instance.models import Instance
+from dingo_command.common.nova_client import NovaClient
 
 router = APIRouter()
 instance_service = InstanceService()
@@ -68,6 +69,7 @@ async def get_instance(instance_id: str):
 @router.post("/instance", summary="创建instance", description="创建instance")
 async def create_instance(instance: InstanceCreateObject, token: str = Depends(get_token)):
     try:
+        NovaClient(token)
         # 创建instance，创建openstack种的虚拟机或者裸金属服务器，如果属于某个cluster就写入cluster_id
         if not instance.openstack_info.token:
             instance.openstack_info.token = token
@@ -75,6 +77,8 @@ async def create_instance(instance: InstanceCreateObject, token: str = Depends(g
         return result
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
+    except  HTTPException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -84,6 +88,7 @@ async def create_instance(instance: InstanceCreateObject, token: str = Depends(g
 @router.delete("/instance/{instance_id}", summary="删除instance", description="删除instance")
 async def delete_instance(instance_id: str, token: str = Depends(get_token)):
     try:
+        NovaClient(token)
         # 获取某个节点的信息
         instance = instance_service.get_instance(instance_id)
         if not instance.get("data"):
@@ -104,6 +109,8 @@ async def delete_instance(instance_id: str, token: str = Depends(get_token)):
         return result
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
+    except  HTTPException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -112,25 +119,28 @@ async def delete_instance(instance_id: str, token: str = Depends(get_token)):
 
 @router.post("/baremetal", summary="扩容baremetal集群", description="扩容baremetal集群")
 async def create_baremetal(baremetal: ScaleNodeObject, token: str = Depends(get_token)):
-    # 先检查下是否有正在处于扩容的状态，如果是就直接返回
-    cluster_service = ClusterService()
-    cluster_info = cluster_service.get_cluster(baremetal.id)
-    if not cluster_info:
-        raise HTTPException(status_code=400, detail="the cluster does not exist, please check")
-    if cluster_info.status == "creating":
-        raise HTTPException(status_code=400, detail="the cluster is creating, please wait")
-    if cluster_info.status == "scaling":
-        raise HTTPException(status_code=400, detail="the cluster is scaling, please wait")
-    if cluster_info.status == "deleting":
-        raise HTTPException(status_code=400, detail="the cluster is deleting, please wait")
-    if cluster_info.status == "removing":
-        raise HTTPException(status_code=400, detail="the cluster is removing, please wait")
     try:
+        NovaClient(token)
+        # 先检查下是否有正在处于扩容的状态，如果是就直接返回
+        cluster_service = ClusterService()
+        cluster_info = cluster_service.get_cluster(baremetal.id)
+        if not cluster_info:
+            raise HTTPException(status_code=400, detail="the cluster does not exist, please check")
+        if cluster_info.status == "creating":
+            raise HTTPException(status_code=400, detail="the cluster is creating, please wait")
+        if cluster_info.status == "scaling":
+            raise HTTPException(status_code=400, detail="the cluster is scaling, please wait")
+        if cluster_info.status == "deleting":
+            raise HTTPException(status_code=400, detail="the cluster is deleting, please wait")
+        if cluster_info.status == "removing":
+            raise HTTPException(status_code=400, detail="the cluster is removing, please wait")
         # 创建instance，创建openstack种的虚拟机或者裸金属服务器，如果属于某个cluster就写入cluster_id
         result = instance_service.create_baremetal(cluster_info, baremetal, token)
         return result
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
+    except  HTTPException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -140,6 +150,7 @@ async def create_baremetal(baremetal: ScaleNodeObject, token: str = Depends(get_
 @router.post("/baremetal/remove", summary="缩容baremetal", description="缩容baremetal")
 async def delete_node(node_info: NodeRemoveObject, token: str = Depends(get_token)):
     try:
+        NovaClient(token)
         # 先检查下是否有正在处于缩容的状态，如果是就直接返回
         cluster_service = ClusterService()
         result = cluster_service.get_cluster(node_info.cluster_id)
@@ -168,6 +179,8 @@ async def delete_node(node_info: NodeRemoveObject, token: str = Depends(get_toke
             return {"data": result}
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
+    except  HTTPException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
         import traceback
         traceback.print_exc()

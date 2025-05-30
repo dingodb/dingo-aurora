@@ -1,7 +1,7 @@
 # dingo-command的nova的client
 import requests
 import json
-
+from fastapi import HTTPException
 from dingo_command.common import CONF
 
 # 配置nova信息
@@ -61,14 +61,14 @@ class NovaClient:
         else:
             headers = {'X-Auth-Token': self.token, 'X-Subject-Token': self.token}
             response = requests.get(f"{NOVA_AUTH_URL}/v3/auth/tokens", headers=headers)
-            if response.status_code != 200:
-                print(f"nova获取token失败: {response.text}")
-            else:
-                # self.token = response.headers['X-Subject-Token']
+            if response.status_code == 200:
                 self.service_catalog = response.json()['token']['catalog']
                 self.session.headers.update({'X-Auth-Token': self.token})
-                self.session.headers.update({'X-OpenStack-Nova-API-Version': "latest" })
-
+                self.session.headers.update({'X-OpenStack-Nova-API-Version': "latest"})
+            elif response.status_code == 401:
+                raise HTTPException(status_code=401, detail="The request you have made requires authentication.")
+            else:
+                print(f"nova获取token失败: {response.text}")
 
     def get_service_endpoint(self, service_type, interface='public', region='RegionOne'):
         """根据服务类型获取Endpoint"""
