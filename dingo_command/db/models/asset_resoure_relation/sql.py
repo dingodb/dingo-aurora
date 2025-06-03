@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, asc, desc
+from sqlalchemy import func, asc, desc, or_, and_
 
 from dingo_command.db.engines.mysql import get_session
 from dingo_command.db.models.asset.models import AssetBasicInfo
@@ -215,14 +215,23 @@ class AssetResourceRelationSQL:
                                  AssetResourceRelationInfo.resource_project_name,
                                  AssetResourceRelationInfo.resource_id,
                                  AssetResourceRelationInfo.resource_name,
-                                 AssetResourceRelationInfo.resource_status).all()
+                                 AssetResourceRelationInfo.resource_status,
+                                 AssetResourceRelationInfo.node_name).all()
 
     @classmethod
-    def get_asset_id_empty_resource_count(cls):
+    def get_unassigned_asset_count(cls):
         session = get_session()
         with session.begin():
             return session.query(AssetResourceRelationInfo). \
-                filter(AssetResourceRelationInfo.asset_id.is_(None)).count()
+                filter(
+                or_(
+                    AssetResourceRelationInfo.asset_id.is_(None),
+                    and_(
+                        AssetResourceRelationInfo.asset_id.isnot(None),
+                        AssetResourceRelationInfo.resource_name.is_(None)
+                    )
+                )
+            ).count()
 
     @classmethod
     def get_asset_id_not_empty_list(cls):

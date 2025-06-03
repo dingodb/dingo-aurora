@@ -63,7 +63,7 @@ async def download_rating_summary_detail_pdf(detail: List[CloudKittyRatingSummar
     # 导出文件路径
     result_file_pdf_path = EXCEL_TEMP_DIR + result_file_pdf_name
 
-    # 1. 生成Excel文件
+    # 1. 生成PDF文件
     try:
         cloudkitty_service.download_rating_summary_detail_pdf(result_file_pdf_path, detail, language)
     except Exception as e:
@@ -76,7 +76,7 @@ async def download_rating_summary_detail_pdf(detail: List[CloudKittyRatingSummar
     if os.path.exists(result_file_pdf_path):
         return FileResponse(
             path=result_file_pdf_path,
-            media_type="application/pdf",
+            media_type="application/octet-stream",
             filename=result_file_pdf_name,  # 下载时显示的文件名
             background=BackgroundTask(file_utils.cleanup_temp_file, result_file_pdf_path)
         )

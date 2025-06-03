@@ -92,7 +92,8 @@ class AssetSQL:
                                   AssetResourceRelationInfo.resource_user_name.label("resource_user_name"),
                                   AssetResourceRelationInfo.resource_project_id.label("resource_project_id"),
                                   AssetResourceRelationInfo.resource_project_name.label("resource_project_name"),
-                                  AssetBasicInfo.asset_relation_resource_flag.label("asset_relation_resource_flag")
+                                  AssetBasicInfo.asset_relation_resource_flag.label("asset_relation_resource_flag"),
+                                  AssetResourceRelationInfo.node_name.label("node_name"),
                                   )
             # 外连接
             query = query.outerjoin(AssetManufactureRelationInfo, AssetManufactureRelationInfo.asset_id == AssetBasicInfo.id). \

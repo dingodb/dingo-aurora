@@ -16,6 +16,7 @@ class AssetResourceRelationInfo(Base):
     resource_id = Column(String(length=128), nullable=True)
     resource_type = Column(String(length=128), nullable=True)
     resource_name = Column(String(length=128), nullable=True)
+    node_name = Column(String(length=128), nullable=True)
     resource_status = Column(String(length=128), nullable=True)
     resource_project_id = Column(String(length=128), nullable=True)
     resource_project_name = Column(String(length=128), nullable=True)

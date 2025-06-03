@@ -146,7 +146,10 @@ class AssetsService:
                 # 资源信息
                 temp_resource_info = {}
                 temp_resource_info['resource_id'] = None if r.resource_id is None else r.resource_id
-                temp_resource_info['resource_name'] = r.resource_name
+                if r.resource_name is None:
+                    temp_resource_info['resource_name'] = r.node_name
+                else:
+                    temp_resource_info['resource_name'] = r.resource_name
                 temp_resource_info['resource_status'] = r.resource_status
                 temp_resource_info['resource_user_id'] = r.resource_user_id
                 temp_resource_info['resource_user_name'] = r.resource_user_name

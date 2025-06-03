@@ -111,8 +111,7 @@ def fetch_relation_info():
 # 初始化资源与资产关联关系
 def init_asset_resource_relation(temp_node, asset_id, server_detail):
     resource_name = temp_node.get('instance_info').get('display_name') if temp_node.get('instance_info') else None
-    if resource_name is None: # 裸机节点未创建云主机时，取裸机节点的名称
-       resource_name = temp_node.get('name')
+    node_name = temp_node.get('name')
     # 初始化然后返回
     return AssetResourceRelationInfo(
         id=uuid.uuid4().hex,
@@ -120,6 +119,7 @@ def init_asset_resource_relation(temp_node, asset_id, server_detail):
         asset_id=asset_id,
         resource_type='baremetal',
         resource_name=resource_name,
+        node_name=node_name,
         resource_status=temp_node.get('provision_state'),
         resource_ip=temp_node.get('driver_info').get('ipmi_address') if temp_node.get('driver_info') else None,
         resource_user_id=server_detail.get('user_id') if server_detail else None,
@@ -132,6 +132,7 @@ def update_asset_resource_relation(db_relation, temp_relation):
     # 数据更新
     db_relation.asset_id = temp_relation.asset_id
     db_relation.resource_name = temp_relation.resource_name
+    db_relation.node_name = temp_relation.node_name
     db_relation.resource_status = temp_relation.resource_status
     db_relation.resource_ip = temp_relation.resource_ip
     db_relation.resource_user_id = temp_relation.resource_user_id
@@ -144,7 +145,9 @@ def update_asset_resource_relation(db_relation, temp_relation):
 # 追加资源的用户和项目名称
 def attach_user_and_project(temp_relation):
     # 追加资源的用户和项目名称
-    ironic_client = IronicClient()
+    ironic_client = None
+    if temp_relation.resource_user_id is not None or temp_relation.resource_project_id is not None:
+        ironic_client = IronicClient()
     if temp_relation.resource_user_id:
         user = ironic_client.keystone_get_user_by_id(temp_relation.resource_user_id)
         if user:
