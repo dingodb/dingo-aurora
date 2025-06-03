@@ -459,6 +459,8 @@ class NodeService:
                 tfvars.password = cluster.node_config[0].password
             elif cluster.node_config[0].auth_type == "keypair":
                 tfvars.password = ""
+            else:
+                tfvars.password = ""
             # 调用celery_app项目下的work.py中的create_cluster方法
             result = celery_app.send_task("dingo_command.celery_api.workers.create_k8s_cluster",
                                           args=[tfvars.dict(), cluster_info.dict(), node_list, instance_list, ",".join(scale_nodes), scale])
