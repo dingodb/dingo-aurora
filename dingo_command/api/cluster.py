@@ -39,6 +39,7 @@ async def create_cluster(cluster_object:ClusterObject, token: str = Depends(get_
 @router.get("/cluster/list", summary="k8s集群列表", description="k8s集群列表")
 async def list_cluster(id:str = Query(None, description="集群id"),
         name:str = Query(None, description="集群名称"),
+        project_id: str = Query(None, description="项目id"),
         type:str = Query(None, description="集群类型"),
         page: int = Query(1, description="页码"),
         page_size: int = Query(10, description="页数量大小"),
@@ -50,6 +51,8 @@ async def list_cluster(id:str = Query(None, description="集群id"),
         # 查询条件组装
         if name:
             query_params['name'] = name
+        if project_id:
+            query_params['project_id'] = project_id
         if type:
             query_params['type'] = type
         query_params = {}
@@ -60,7 +63,7 @@ async def list_cluster(id:str = Query(None, description="集群id"),
             query_params['name'] = name
         if type:
             query_params['type'] = type
-        result = ClusterService.list_clusters(id, query_params, page,page_size, sort_keys,sort_dirs)
+        result = cluster_service.list_clusters(query_params, page,page_size, sort_keys,sort_dirs)
         return result
     except Exception as e:
         return None
@@ -73,8 +76,7 @@ async def get_cluster_private_key(cluster_id:str = Query(None, description="集�
         return None
     try:
         # 根据id查询集群
-        cs=ClusterService()
-        private_key = cs.get_key_file(cluster_id, instance_id)
+        private_key = cluster_service.get_key_file(cluster_id, instance_id)
         if private_key is None:
             raise HTTPException(status_code=400, detail="Key not found")
         filename = "id_rsa.pem"
