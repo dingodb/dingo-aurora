@@ -166,10 +166,17 @@ class CloudKittyService:
             temp_data = []
             # 项目ID
             tenant_id = None if ratingSummaryDetailList is None else ratingSummaryDetailList[0].tenant_id
+            tenant_name = None if ratingSummaryDetailList is None else ratingSummaryDetailList[0].tenant_name
             if language is None or language == "EN":
-                temp_data.append({'Tenant ID': tenant_id})
+                if tenant_name is None:
+                    temp_data.append({'Tenant ID': tenant_id})
+                else:
+                    temp_data.append({'Tenant Name': tenant_name})
             else:
-                temp_data.append({'项目ID':tenant_id})
+                if tenant_name is None:
+                    temp_data.append({'项目ID':tenant_id})
+                else:
+                    temp_data.append({'项目名称':tenant_name})
             # 开始时间
             begin_datatime = None if ratingSummaryDetailList is None or ratingSummaryDetailList[0].flavor is None \
                              or ratingSummaryDetailList[0].flavor is None or ratingSummaryDetailList[0].flavor[0] is None \
@@ -209,11 +216,11 @@ class CloudKittyService:
                     temp_instance_flavor_data.append({'instance':ratingSummaryDetail.total})
                     if ratingSummaryDetail.flavor is not None:
                         if language is None or language == "EN":
-                            temp_instance_flavor_data.append({'VM Type': 'Rate'})
+                            temp_instance_flavor_data.append({'  VM Type': 'Rate'})
                         else:
-                            temp_instance_flavor_data.append({'云主机类型': '费率'})
+                            temp_instance_flavor_data.append({'  云主机类型': '费率'})
                         for flavor in ratingSummaryDetail.flavor:
-                            temp_instance_flavor_data.append({flavor.flavor_name: flavor.rate})
+                            temp_instance_flavor_data.append({"  " + flavor.flavor_name: flavor.rate})
                 else:
                     temp_non_instance_data.append({ratingSummaryDetail.service:ratingSummaryDetail.total})
 

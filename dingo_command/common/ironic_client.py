@@ -2,6 +2,7 @@
 # self.region_name = region_name
 import uuid
 from datetime import datetime, timedelta
+from oslo_utils import timeutils
 from functools import wraps
 import requests
 
@@ -47,7 +48,7 @@ class IronicClient:
             print(f"ironic client single instance id: {instance._singleton_instance_uuid}, token[{instance._current_token}]无效，token过期阈值：{cls.TOKEN_EXPIRY_THRESHOLD}")
             return False
 
-        remaining_time = instance._token_expiry - datetime.utcnow()
+        remaining_time = instance._token_expiry - timeutils.utcnow()
         #print(f"ironic client single instance id: {instance._singleton_instance_uuid}, token[{instance._current_token}]剩余时间：{remaining_time}, token过期阈值：{cls.TOKEN_EXPIRY_THRESHOLD}， 当前token是否有效：{remaining_time > cls.TOKEN_EXPIRY_THRESHOLD}")
         return remaining_time > cls.TOKEN_EXPIRY_THRESHOLD
 

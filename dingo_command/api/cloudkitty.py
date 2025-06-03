@@ -3,6 +3,7 @@ import os
 from typing import List
 
 from fastapi.responses import FileResponse
+from urllib.parse import unquote
 from starlette.background import BackgroundTask
 from dingo_command.api.model.cloudkitty import CloudKittyRatingSummaryDetail
 from dingo_command.services.cloudkitty import CloudKittyService
@@ -56,7 +57,7 @@ async def download_rating_summary_execl(begin: str = Query(None, description="�
         )
     raise HTTPException(status_code=400, detail="Execl file not found")
 
-@router.post("/cloudkitty/download/ratingSummaryDetail/pdf", summary="下载计费汇总详情PDF", description="下载计费汇总详情PDF")
+@router.post("/cloudkitty/download/ratingSummaryDetail/pdf/preprocessing", summary="预处理下载计费汇总详情需要的PDF文件", description="预处理下载计费汇总详情需要的PDF文件")
 async def download_rating_summary_detail_pdf(detail: List[CloudKittyRatingSummaryDetail],
                                              language: str = Query(None, description="当前环境语言")):
     result_file_pdf_name = "rating_summary_detail_" + format_d8q_timestamp() + ".pdf"
@@ -66,18 +67,22 @@ async def download_rating_summary_detail_pdf(detail: List[CloudKittyRatingSummar
     # 1. 生成PDF文件
     try:
         cloudkitty_service.download_rating_summary_detail_pdf(result_file_pdf_path, detail, language)
+        return os.path.basename(result_file_pdf_path)
     except Exception as e:
         import traceback
         traceback.print_exc()
         file_utils.cleanup_temp_file(result_file_pdf_path)
         raise HTTPException(status_code=400, detail="generate pdf file error")
 
+@router.get("/cloudkitty/download/ratingSummaryDetail/pdf", summary="下载计费汇总详情PDF", description="下载计费汇总详情PDF")
+async def download_rating_summary_detail_pdf(filePath: str = Query(None, description="下载PDF文件名称")):
     # 文件存在则下载
-    if os.path.exists(result_file_pdf_path):
+    result_file_pdf_path = EXCEL_TEMP_DIR + unquote(filePath)
+    if filePath is not None and os.path.exists(result_file_pdf_path):
         return FileResponse(
             path=result_file_pdf_path,
             media_type="application/octet-stream",
-            filename=result_file_pdf_name,  # 下载时显示的文件名
+            filename=unquote(filePath),  # 下载时显示的文件名
             background=BackgroundTask(file_utils.cleanup_temp_file, result_file_pdf_path)
         )
     raise HTTPException(status_code=400, detail="PDf file not found")
