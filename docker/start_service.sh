@@ -1,6 +1,15 @@
-
 #!/usr/bin/bash
 set -ex
+
+# copy dir
+TARGET_DIR="/var/lib/dingo-command/ansible-deploy"
+if [ ! -d "$TARGET_DIR" ]; then
+    echo "the taget dir is not exist, copying dir"
+    mkdir -p /var/lib/dingo-command
+    cp -LRpf /opt/dingo-aurora/dingo_command/templates/ansible-deploy /var/lib/dingo-command
+else
+    echo "the taget dir is exist"
+fi
 
 # kolla_set_configs
 echo "/usr/bin/supervisord -c /etc/dingo-command/supervisord.conf" >/run_command
