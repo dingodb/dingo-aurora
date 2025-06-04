@@ -12,7 +12,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import SimpleDocTemplate, Table
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
 
 from dingo_command.common.cloudkitty_client import CloudKittyClient
 from dingo_command.utils.constant import RATING_SUMMARY_TEMPLATE_FILE_DIR, RATING_SUMMARY_DETAIL_EN_TEMPLATE_FILE_DIR, \
@@ -97,7 +97,7 @@ class CloudKittyService:
             raise e
 
 
-    def download_rating_summary_detail_pdf(self, result_file_pdf_path, detail, language):
+    def generate_rating_summary_detail_pdf(self, result_file_pdf_path, detail, language):
         try:
             # 生成计费汇总租户详情数据
             temp_data = self.generate_rating_summary_detail_data(detail, language)
@@ -165,18 +165,11 @@ class CloudKittyService:
                 return None
             temp_data = []
             # 项目ID
-            tenant_id = None if ratingSummaryDetailList is None else ratingSummaryDetailList[0].tenant_id
             tenant_name = None if ratingSummaryDetailList is None else ratingSummaryDetailList[0].tenant_name
             if language is None or language == "EN":
-                if tenant_name is None:
-                    temp_data.append({'Tenant ID': tenant_id})
-                else:
-                    temp_data.append({'Tenant Name': tenant_name})
+                temp_data.append({'Tenant Name': tenant_name})
             else:
-                if tenant_name is None:
-                    temp_data.append({'项目ID':tenant_id})
-                else:
-                    temp_data.append({'项目名称':tenant_name})
+                temp_data.append({'项目名称':tenant_name})
             # 开始时间
             begin_datatime = None if ratingSummaryDetailList is None or ratingSummaryDetailList[0].flavor is None \
                              or ratingSummaryDetailList[0].flavor is None or ratingSummaryDetailList[0].flavor[0] is None \
@@ -215,12 +208,8 @@ class CloudKittyService:
                 elif ratingSummaryDetail.service == "instance":
                     temp_instance_flavor_data.append({'instance':ratingSummaryDetail.total})
                     if ratingSummaryDetail.flavor is not None:
-                        if language is None or language == "EN":
-                            temp_instance_flavor_data.append({'  VM Type': 'Rate'})
-                        else:
-                            temp_instance_flavor_data.append({'  云主机类型': '费率'})
                         for flavor in ratingSummaryDetail.flavor:
-                            temp_instance_flavor_data.append({"  " + flavor.flavor_name: flavor.rate})
+                            temp_instance_flavor_data.append({"instance-flavor-" + flavor.flavor_name: flavor.rate})
                 else:
                     temp_non_instance_data.append({ratingSummaryDetail.service:ratingSummaryDetail.total})
 
@@ -241,7 +230,23 @@ class CloudKittyService:
     def create_rating_summary_detail_pdf_with_table(self, input_data, filename):
         try:
             # 转换数据为二维数组
-            table_data = [[list(item.keys())[0], list(item.values())[0]] for item in input_data]
+            # table_data = [[list(item.keys())[0], list(item.values())[0]] for item in input_data]
+
+            table_data = []
+            instance_total_value = 0
+            for i, item in enumerate(input_data):
+                key = list(item.keys())[0]
+                value = list(item.values())[0]
+
+                if i < 3:  # 前三行
+                    table_data.append([key, value, "", ""])  # 添加空列占位
+                elif key.startswith('instance'):  # instance前缀行
+                    if key == "instance":
+                        instance_total_value = value
+                    else:
+                        table_data.append(["instance", key.removeprefix("instance-flavor-"), value, instance_total_value])  # 同样四列
+                else:
+                    table_data.append([key, value, "", ""])
 
             # 创建PDF文档
             doc = SimpleDocTemplate(filename, pagesize=A4)
@@ -263,12 +268,47 @@ class CloudKittyService:
                     import traceback
                     traceback.print_exc()
             print(f"registered font:{pdfmetrics.getRegisteredFontNames()}, font_name:{font_name}")
+
             # 定义表格样式（包含列宽设置）
-            col_widths = [150, 200]  # 第一列150pt，第二列250pt
+            col_widths = [100, 150, 100, 100] if len(table_data[0]) > 2 else [100, 150]
+
+            # print(f"table data:{table_data}")
             table = Table(table_data, colWidths=col_widths)
-            table.setStyle([('FONTNAME', (0, 0), (-1, -1), font_name)])  # 设置字体
-            table.setStyle([('ALIGN', (0, 0), (-1, -1), 'LEFT')]) # 靠左对齐
-            table.setStyle([('GRID', (0, 0), (-1, -1), 1, colors.black)])  # 添加网格线
+            # 基础样式
+            style = [
+                ('FONTNAME', (0, 0), (-1, -1), font_name),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT')
+            ]
+
+            # 前三行不显示网格线
+            style.append(('GRID', (0, 3), (-1, -1), 1, colors.black))
+
+            # 处理instance行的特殊合并
+            first_instance_row = None
+            fourth_instance_row = None
+            for i, row in enumerate(table_data):
+                if row[0] != "instance":
+                    # 合并非instance行的后三列
+                    style.append(('SPAN', (1, i), (3, i)))
+                    # 重置instance行标记
+                    first_instance_row = None
+                    fourth_instance_row = None
+                else:
+                    # 处理第一列合并
+                    if first_instance_row is None:
+                        first_instance_row = i
+                    else:
+                        style.append(('SPAN', (0, first_instance_row), (0, i)))
+                        table_data[i][0] = ""  # 清空后续行内容
+
+                    # 处理第四列合并
+                    if fourth_instance_row is None:
+                        fourth_instance_row = i
+                    else:
+                        style.append(('SPAN', (3, fourth_instance_row), (3, i)))
+                        table_data[i][3] = ""  # 清空后续行内容
+
+            table.setStyle(style)
 
             # 构建PDF
             doc.build([table])
