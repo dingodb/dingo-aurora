@@ -17,7 +17,7 @@ class Cluster(Base):
     user_id = Column(String(length=128), nullable=True)
     labels = Column(String(length=128), nullable=True)
     status = Column(String(length=128), nullable=True)
-    status_msg = Column(String(length=128), nullable=True)
+    status_msg = Column(Text, nullable=True)
     region_name = Column(String(length=128), nullable=True)
     admin_network_id = Column(String(length=128), nullable=True)
     admin_subnet_id = Column(String(length=128), nullable=True)

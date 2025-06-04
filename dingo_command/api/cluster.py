@@ -34,7 +34,7 @@ async def create_cluster(cluster_object:ClusterObject, token: str = Depends(get_
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail="cluster create error")
+        raise HTTPException(status_code=400, detail=str(e))
     
 @router.get("/cluster/list", summary="k8s集群列表", description="k8s集群列表")
 async def list_cluster(id:str = Query(None, description="集群id"),

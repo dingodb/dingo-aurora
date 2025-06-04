@@ -409,7 +409,8 @@ class NodeService:
             # cluster_service = ClusterService()
             # clust_dbinfo = cluster_service.get_cluster(cluster.id)
 
-            output_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "terraform", "output.tfvars.json")
+            output_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id),
+                                       "terraform", "output.tfvars.json")
             with open(output_file) as f:
                 content = json.loads(f.read())
 
@@ -463,7 +464,8 @@ class NodeService:
                 tfvars.password = ""
             # 调用celery_app项目下的work.py中的create_cluster方法
             result = celery_app.send_task("dingo_command.celery_api.workers.create_k8s_cluster",
-                                          args=[tfvars.dict(), cluster_info.dict(), node_list, instance_list, ",".join(scale_nodes), scale])
+                                          args=[tfvars.dict(), cluster_info.dict(), node_list, instance_list,
+                                                ",".join(scale_nodes), scale])
             return result.id
         except Fail as e:
             raise e

@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime
 
 from openpyxl.styles import Border, Side
+from fastapi import HTTPException
 
 from dingo_command.celery_api.celery_app import celery_app
 
@@ -452,7 +453,7 @@ class ClusterService:
         if res.get("total") > 0:
             for c in res.get("data"):
                 if c.status != "deleted":
-                    raise Fail("集群名称已存在")
+                    raise Fail(error_code=405, error_message="集群名称已存在")
                 # 如果查询结果不为空，说明集群名称已存在+
         return True
     
@@ -601,6 +602,15 @@ class ClusterService:
             # 空
             if not res or not res.get("data"):
                 return None
+            cluster_info = res.get("data")[0]
+            if cluster_info.status == "creating":
+                raise HTTPException(status_code=400, detail="the cluster is creating, please wait")
+            if cluster_info.status == "scaling":
+                raise HTTPException(status_code=400, detail="the cluster is scaling, please wait")
+            if cluster_info.status == "deleting":
+                raise HTTPException(status_code=400, detail="the cluster is deleting, please wait")
+            if cluster_info.status == "removing":
+                raise HTTPException(status_code=400, detail="the cluster is removing, please wait")
             # 返回第一条数据
             cluster = res.get("data")[0]
             cluster.status = "deleting"

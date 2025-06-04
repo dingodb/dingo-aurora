@@ -127,7 +127,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
             else:
                 res = subprocess.run(
                     ["ssh-keygen", "-t", "rsa", "-b", "4096", "-C", "", "-f", os.path.join(str(cluster_dir), "id_rsa"),
-                     "-N", ""], capture_output=True)
+                     "-N", ""], capture_output=True, text=True)
                 if res.returncode != 0:
                     # 发生错误时更新任务状态为"失败"
                     task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
@@ -135,7 +135,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
                     task_info.detail = res.stderr
                     update_task_state(task_info)
                     print(f"ssh-keygen error: {res.stderr}")
-                    return False
+                    return False, res.stderr
                 cluster.private_key_path = os.path.join(cluster_dir, "id_rsa")
                 cluster.public_key_path = os.path.join(cluster_dir, "id_rsa.pub")
 
@@ -145,7 +145,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
             f.write(tfvars_str)
             
         os.environ['CURRENT_CLUSTER_DIR']=cluster_dir
-        res = subprocess.run(["terraform", "init"], capture_output=True)
+        res = subprocess.run(["terraform", "init"], capture_output=True, text=True)
         if res.returncode != 0:
             # 发生错误时更新任务状态为"失败"
             task_info.end_time =datetime.fromtimestamp(datetime.now().timestamp())
@@ -153,7 +153,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
             task_info.detail = res.stderr
             update_task_state(task_info)
             print(f"Terraform init error: {res.stderr}")
-            return False
+            return False, res.stderr
        
         # 执行terraform apply
         # os.environ['OS_CLOUD']=cluster.region_name
@@ -172,7 +172,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
             task_info.detail = res.stderr
             update_task_state(task_info)
             print(f"Terraform apply error: {res.stderr}")
-            return False
+            return False, res.stderr
         key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory",str(cluster.id), "id_rsa")
         private_key_content = ""
         if os.path.exists(key_file_path):
@@ -201,7 +201,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
             task_info.detail = res.stderr
             update_task_state(task_info)
             print(f"Terraform error: {res.stderr}")
-            return False
+            return False, res.stderr
         else:
             # 更新任务状态为"成功"
             task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
@@ -209,7 +209,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
             task_info.detail = res.stdout
             update_task_state(task_info)
             print("Terraform apply succeeded")
-        return res
+            return True, ""
 
     except subprocess.CalledProcessError as e:
         # 发生错误时更新任务状态为"失败"
@@ -218,11 +218,11 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
         task_info.detail = str(e)
         update_task_state(task_info)
         print(f"Terraform error: {e}")
-        return False
+        return False, str(e)
 
 
 @celery_app.task(bind=True)
-def create_cluster(self, cluster_tf: ClusterTFVarsObject, cluster_dict: ClusterObject, instance_bm_list):
+def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list):
     try:
         task_id = str(self.request.id)
         cluster_id = cluster_tf["id"]
@@ -236,10 +236,10 @@ def create_cluster(self, cluster_tf: ClusterTFVarsObject, cluster_dict: ClusterO
                                     msg=TaskService.TaskMessage.instructure_create.name)
         TaskSQL.insert(instructure_task)
 
-        terraform_result = create_infrastructure(cluster_tfvars, instructure_task, cluster.region_name)
+        terraform_result = create_infrastructure(cluster_tfvars, instructure_task)
 
-        if not terraform_result:
-            raise Exception("Terraform infrastructure creation failed")
+        if not terraform_result[0]:
+            raise Exception(f"Terraform infrastructure creation failed, reason: {terraform_result[1]}")
         instructure_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
         instructure_task.state = "success"
         instructure_task.detail = TaskService.TaskDetail.instructure_create.value
@@ -254,7 +254,7 @@ def create_cluster(self, cluster_tf: ClusterTFVarsObject, cluster_dict: ClusterO
             instructure_task.state = "failed"
             instructure_task.detail = str(res.stderr)
             update_task_state(instructure_task)
-            raise Exception("Error generating Ansible inventory")
+            raise Exception(f"Error generating Ansible inventory: {str(res.stderr)}")
         hosts = res.stdout
         # todo 添加节点时，需要将节点信息写入到inventory/inventory.yaml文件中
         # 如果是密码登录与master节点1做免密
@@ -353,7 +353,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
                 private_key_content = key_file.read()
         
         print(f"start deploy kubernetes cluster: {ansible_dir}")
-        thread,runner = run_playbook(playbook_file, host_file, ansible_dir, ssh_key=private_key_content)
+        thread, runner = run_playbook(playbook_file, host_file, ansible_dir, ssh_key=private_key_content)
         # 处理并打印事件日志
         while runner.status not in ['canceled', 'successful', 'timeout', 'failed']:
             # 处理事件日志
@@ -403,17 +403,17 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
             task_info.state = "failed"
             task_info.detail = "ansible deploy kubernetes error"
             update_task_state(task_info)
-            raise Exception(f"Playbook execution failed: {runner.rc}")
+            raise Exception(f"Playbook execution failed: {runner.stdout.read()}")
 
         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
         task_info.state = "success"
         task_info.detail = TaskService.TaskDetail.component_deploy.value
         update_task_state(task_info)
-        return True
+        return True, ""
     
-    except subprocess.CalledProcessError as e:
+    except Exception as e:
         print(f"Ansible error: {e}")
-        return False
+        return False, str(e)
 
 def render_templatefile(template_file, cluster_file, context):
    
@@ -460,54 +460,44 @@ def update_ansible_status(task_info, event, task_name, host, task_status):
 
 def scale_kubernetes(cluster: ClusterObject, scale_nodes):
     """使用Ansible扩容K8s集群"""
-    try_count = 5
-    count = 0
-    while count < try_count:
-        try:
-            ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
-            os.chdir(ansible_dir)
-            host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "hosts")
-            playbook_file = os.path.join(WORK_DIR, "ansible-deploy", "scale.yml")
-            key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "id_rsa")
-            if os.path.exists(key_file_path):
-                with open(key_file_path, 'r') as key_file:
-                    private_key_content = key_file.read()
-            else:
-                private_key_content = None
+    try:
+        ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
+        os.chdir(ansible_dir)
+        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "hosts")
+        playbook_file = os.path.join(WORK_DIR, "ansible-deploy", "scale.yml")
+        key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "id_rsa")
+        if os.path.exists(key_file_path):
+            with open(key_file_path, 'r') as key_file:
+                private_key_content = key_file.read()
+        else:
+            private_key_content = None
 
-            thread, runner = run_playbook(playbook_file, host_file, ansible_dir,
-                                          ssh_key=private_key_content, limit=scale_nodes)
-            # 处理并打印事件日志
-            while runner.status not in ['canceled', 'successful', 'timeout', 'failed']:
-                for event in runner.events:
-                    # 检查事件是否包含 task 信息
-                    if 'event_data' in event and 'task' in event['event_data']:
-                        task_name = event['event_data'].get('task')
-                        host = event['event_data'].get('host')
-                        task_status = event['event'].split('_')[-1]  # 例如 runner_on_ok -> ok
-                        print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
-                        # 将结果输出到文件中
-                        with open("ansible_debug.log", "a") as log_file:
-                            log_file.write(f"Task: {task_name}, Status: {task_status}, host:  {host}\n")
-                time.sleep(0.01)
-                continue
-            log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "ansible_scale.log")
-            with open(log_file, "a") as log_file:
-                log_file.write(format(runner.stdout.read()))
-            thread.join()
-            if runner.rc != 0:
-                # 更新数据库的状态为failed
-                print("{}".format(runner.stderr.read()))
-                count += 1
-                continue
-            print("out: {}".format(runner.stdout.read()))
-            print("err: {}".format(runner.stderr.read()))
-            return True
-        except subprocess.CalledProcessError as e:
-            count += 1
-            print(f"Ansible error: {e}")
+        thread, runner = run_playbook(playbook_file, host_file, ansible_dir,
+                                      ssh_key=private_key_content, limit=scale_nodes)
+        # 处理并打印事件日志
+        while runner.status not in ['canceled', 'successful', 'timeout', 'failed']:
+            for event in runner.events:
+                # 检查事件是否包含 task 信息
+                if 'event_data' in event and 'task' in event['event_data']:
+                    task_name = event['event_data'].get('task')
+                    host = event['event_data'].get('host')
+                    task_status = event['event'].split('_')[-1]  # 例如 runner_on_ok -> ok
+                    print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
+                    # 将结果输出到文件中
+                    with open("ansible_debug.log", "a") as log_file:
+                        log_file.write(f"Task: {task_name}, Status: {task_status}, host:  {host}\n")
+            time.sleep(0.01)
             continue
-    return False
+        log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "ansible_scale.log")
+        with open(log_file, "a") as log_file:
+            log_file.write(format(runner.stdout.read()))
+        thread.join()
+        if runner.rc != 0:
+            raise Exception(f"Playbook execution with sacle node failed: {runner.stdout.read()}")
+        return True, ""
+    except Exception as e:
+        print(f"Ansible error: {e}")
+        return False, str(e)
 
 
 def get_cluster_kubeconfig(cluster: ClusterTFVarsObject, lb_ip, master_ip, float_ip):
@@ -830,8 +820,8 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
 
         terraform_result = create_infrastructure(cluster_tfvars, task_info)
 
-        if not terraform_result:
-            raise Exception("Terraform infrastructure creation failed")
+        if not terraform_result[0]:
+            raise Exception(f"Terraform infrastructure creation failed, reason: {terraform_result[1]}")
         # 打印日志
         print("Terraform infrastructure creation succeeded")
 
@@ -891,22 +881,23 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                 master_node_name = f"{cluster_tfvars.cluster_name}-k8s-master-{i}"
                 tmp_ip = hosts_data["_meta"]["hostvars"][master_node_name]["access_ip_v4"]
                 cmd = f'ssh-keygen -f "/root/.ssh/known_hosts" -R "{tmp_ip}"'
-                result = subprocess.run(cmd, shell=True, capture_output=True)
+                result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
                 if result.returncode != 0:
                     task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
                     task_info.state = "failed"
                     task_info.detail = str(result.stderr)
                     update_task_state(task_info)
-                    raise Exception("Ansible kubernetes deployment failed, configure ssh-keygen error")
+                    raise Exception(f"Ansible kubernetes deployment failed, "
+                                    f"configure ssh-keygen error {str(result.stderr)}")
         if cluster_tfvars.password != "":
             cmd = f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no {cluster_tfvars.ssh_user}@{master_ip}'
-            result = subprocess.run(cmd, shell=True, capture_output=True)
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             if result.returncode != 0:
                 task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
                 task_info.state = "failed"
                 task_info.detail = str(result.stderr)
                 update_task_state(task_info)
-                raise Exception("Ansible kubernetes deployment failed, configure sshpass error")
+                raise Exception(f"Ansible kubernetes deployment failed, configure sshpass error {str(result.stderr)}")
 
         # 执行ansible命令验证是否能够连接到所有节点
         print(f"check all node status {task_id}")
@@ -930,7 +921,8 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                 unreachable_nodes = ", ".join(nodes_result["unreachable_nodes"])
                 print(f"some node can not connect: {unreachable_nodes}，{retry_interval}s after retry...")
                 # 记录日志，显示哪些节点不可达
-                with open(os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tf_dict["id"], "connection_check.log"), "a") as log_file:
+                with open(os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tf_dict["id"],
+                                       "connection_check.log"), "a") as log_file:
                     log_file.write(f"{datetime.now()}: unreachable nodes: {unreachable_nodes}\n")
                     log_file.write(f"错误输出: {nodes_result['error']}\n\n")
                 
@@ -938,33 +930,8 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
 
         # 如果超时后仍然无法连接所有节点，则抛出错误
         if not connection_success:
-            error_msg = f"{int(time.time() - start_time)}s retry node can not connect: {', '.join(nodes_result['unreachable_nodes'])}"
-            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-            task_info.state = "failed"
-            task_info.detail = error_msg
-            update_task_state(task_info)
-            raise Exception(error_msg)
-
-        while not connection_success and (time.time() - start_time) < max_retry_time:
-            nodes_result = check_nodes_connectivity(host_file, key_file_path)
-            
-            if nodes_result["all_nodes_reachable"]:
-                connection_success = True
-                print(f"all node connect sussess {task_id}")    
-                break
-            else:
-                unreachable_nodes = ", ".join(nodes_result["unreachable_nodes"])
-                print(f"some node can not connect: {unreachable_nodes}，{retry_interval}s after retry...")
-                # 记录日志，显示哪些节点不可达
-                with open(os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tf_dict["id"], "connection_check.log"), "a") as log_file:
-                    log_file.write(f"{datetime.now()}: unreachable nodes: {unreachable_nodes}\n")
-                    log_file.write(f"错误输出: {nodes_result['error']}\n\n")
-                
-                time.sleep(retry_interval)
-
-        # 如果超时后仍然无法连接所有节点，则抛出错误
-        if not connection_success:
-            error_msg = f"{int(time.time() - start_time)}s retry node can not connect: {', '.join(nodes_result['unreachable_nodes'])}"
+            error_msg = (f"{int(time.time() - start_time)}s retry node can not connect:"
+                         f" {', '.join(nodes_result['unreachable_nodes'])}")
             task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
             task_info.state = "failed"
             task_info.detail = error_msg
@@ -978,7 +945,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             task_info.state = "failed"
             task_info.detail = str(res.stderr)
             update_task_state(task_info)
-            raise Exception("Error generating Ansible inventory")
+            raise Exception(f"Error generating Ansible inventory: {str(res.stderr)}")
         hosts = res.stdout
         hosts_data = json.loads(hosts)
         # 从_meta.hostvars中获取master节点的IP
@@ -996,8 +963,8 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             ansible_result = scale_kubernetes(cluster, scale_nodes)
         else:
             ansible_result = deploy_kubernetes(cluster, lb_ip, task_id)
-        if not ansible_result:
-            raise Exception("Ansible kubernetes deployment failed")
+        if not ansible_result[0]:
+            raise Exception(f"Ansible kubernetes deployment failed: {ansible_result[1]}")
         # 阻塞线程，直到ansible_client.get_playbook_result()返回结果
         # 获取集群的kube_config
         kube_config = get_cluster_kubeconfig(cluster_tfvars,lb_ip,master_ip,float_ip)
@@ -1026,7 +993,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         count, db_clusters = ClusterSQL.list_cluster(query_params)
         c = db_clusters[0]
         c.status = 'error'
-        c.status_msg = str(e.__str__())
+        c.status_msg = str(e)
         ClusterSQL.update_cluster(c)
         raise
 
@@ -1096,93 +1063,100 @@ def load_tfvars_to_object(tfvars_path):
 
 @celery_app.task(bind=True)
 def delete_cluster(self, cluster_id, token):
-    cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_id)
-    # 进入到terraform目录、
-    if not os.path.exists(cluster_dir):
-        print(f"集群目录不存在: {cluster_dir}")
-        # 更新集群状态为已删除，因为目录不存在意味着可能已被删除或从未创建成功
-        query_params = {}
-        query_params["id"] = cluster_id
-        count, db_clusters = ClusterSQL.list_cluster(query_params)
-        if count > 0:
+    try:
+        cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_id)
+        # 进入到terraform目录、
+        if not os.path.exists(cluster_dir):
+            print(f"集群目录不存在: {cluster_dir}")
+            # 更新集群状态为已删除，因为目录不存在意味着可能已被删除或从未创建成功
+            query_params = {}
+            query_params["id"] = cluster_id
+            count, db_clusters = ClusterSQL.list_cluster(query_params)
+            if count > 0:
+                c = db_clusters[0]
+                c.status = 'deleted'
+                c.status_msg = ""
+                ClusterSQL.update_cluster(c)
+            query_params = {"cluster_id": cluster_id}
+            count, instances = InstanceSQL.list_instances(query_params, 1, -1, None, None)
+            for instance in instances:
+                session = get_session()
+                with session.begin():
+                    db_instance = session.get(Instance, instance.id)
+                    session.delete(db_instance)
+
+            # 1. 查询与该集群关联的所有实例
+            query_params = {"cluster_id": cluster_id}
+            count, nodes = NodeSQL.list_nodes(query_params, 1, -1, None, None)
+            for n in nodes:
+                session = get_session()
+                with session.begin():
+                    db_node = session.get(NodeInfo, n.id)
+                    session.delete(db_node)
+            return True
+
+        terraform_dir = os.path.join(cluster_dir, "terraform")
+        print(f"Terraform dir: {terraform_dir}")
+
+        os.chdir(terraform_dir)
+
+        res = subprocess.run(["terraform", "destroy", "-auto-approve", "-var-file=output.tfvars.json"],
+                             capture_output=True, text=True)
+        # 获取 tfvars 文件路径
+        tfvars_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_id, "terraform", "output.tfvars.json")
+
+        # 加载为 ClusterTFVarsObject 对象
+        cluster_tfvars = load_tfvars_to_object(tfvars_path)
+        cluster_tfvars.token = token
+        tfvars_str = json.dumps(cluster_tfvars, default=lambda o: o.__dict__, indent=2)
+        with open("output.tfvars.json", "w") as f:
+            f.write(tfvars_str)
+        if res.returncode != 0:
+            # 发生错误时更新任务状态为"失败"
+            print(f"Terraform error: {res.stderr}")
+            query_params = {}
+            query_params["id"] = cluster_id
+            count, db_clusters = ClusterSQL.list_cluster(query_params)
+            c = db_clusters[0]
+            c.status = 'error'
+            c.status_msg = f"delete cluster error: {res.stderr}"
+            ClusterSQL.update_cluster(c)
+            return False
+        else:
+            # 更新任务状态为"成功"
+            query_params = {}
+            query_params["id"] = cluster_id
+            count, db_clusters = ClusterSQL.list_cluster(query_params)
             c = db_clusters[0]
             c.status = 'deleted'
             c.status_msg = ""
             ClusterSQL.update_cluster(c)
-        query_params = {"cluster_id": cluster_id}
-        count, instances = InstanceSQL.list_instances(query_params, 1, -1, None, None)
-        for instance in instances:
+            print("Terraform destroy succeeded")
+            # delete instance
+            # 1. 查询与该集群关联的所有实例
+            query_params = {"cluster_id": cluster_id}
+            count, instances = InstanceSQL.list_instances(query_params, 1, -1, None, None)
             session = get_session()
             with session.begin():
-                db_instance = session.get(Instance, instance.id)
-                session.delete(db_instance)
+                for instance in instances:
+                    db_instance = session.get(Instance, instance.id)
+                    session.delete(db_instance)
 
-        # 1. 查询与该集群关联的所有实例
-        query_params = {"cluster_id": cluster_id}
-        count, nodes = NodeSQL.list_nodes(query_params, 1, -1, None, None)
-        for n in nodes:
-            session = get_session()
+            # 1. 查询与该集群关联的所有实例
+            query_params = {"cluster_id": cluster_id}
+            count, nodes = NodeSQL.list_nodes(query_params, 1, -1, None, None)
             with session.begin():
-                db_node = session.get(NodeInfo, n.id)
-                session.delete(db_node)
-        return True
-    
-    terraform_dir = os.path.join(cluster_dir, "terraform")
-    print(f"Terraform dir: {terraform_dir}")
-
-    os.chdir(terraform_dir)
-
-    res = subprocess.run(["terraform", "destroy", "-auto-approve", "-var-file=output.tfvars.json"], capture_output=True)
-    # 获取 tfvars 文件路径
-    tfvars_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_id, "terraform", "output.tfvars.json")
-
-    # 加载为 ClusterTFVarsObject 对象
-    cluster_tfvars = load_tfvars_to_object(tfvars_path)
-    cluster_tfvars.token = token
-    tfvars_str = json.dumps(cluster_tfvars, default=lambda o: o.__dict__, indent=2)
-    with open("output.tfvars.json", "w") as f:
-        f.write(tfvars_str)
-    if res.returncode != 0:
-        # 发生错误时更新任务状态为"失败"
-
-        print(f"Terraform error: {res.stderr}")
+                for n in nodes:
+                    db_node = session.get(Instance, n.id)
+                    session.delete(db_node)
+    except Exception as e:
         query_params = {}
         query_params["id"] = cluster_id
         count, db_clusters = ClusterSQL.list_cluster(query_params)
         c = db_clusters[0]
-        c.status = 'delete_error'
-        c.status_msg = "delete cluster error"
+        c.status = 'error'
+        c.status_msg = f"delete cluster error: {str(e)}"
         ClusterSQL.update_cluster(c)
-        return False
-    else:
-        
-        # 更新任务状态为"成功"
-        query_params = {}
-        query_params["id"] = cluster_id
-        count, db_clusters = ClusterSQL.list_cluster(query_params)
-        c = db_clusters[0]
-        c.status = 'deleted'
-        c.status_msg = ""
-        ClusterSQL.update_cluster(c)
-        print("Terraform destroy succeeded")
-        # delete instance
-        # 1. 查询与该集群关联的所有实例
-        query_params = {"cluster_id": cluster_id}
-        count, instances = InstanceSQL.list_instances(query_params, 1, -1, None, None)
-        for instance in instances:
-            session = get_session()
-            with session.begin():
-                db_instance = session.get(Instance, instance.id)
-                session.delete(db_instance)
-
-        # 1. 查询与该集群关联的所有实例
-        query_params = {"cluster_id": cluster_id}
-        count, nodes = NodeSQL.list_nodes(query_params, 1, -1, None, None)
-        for n in nodes:
-            session = get_session()
-            with session.begin():
-                db_node = session.get(Instance, n.id)
-                session.delete(db_node)
                 
 
 @celery_app.task(bind=True)
@@ -1225,10 +1199,8 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
             log_file.write(format(runner.stdout.read()))
         thread.join()
         if runner.rc != 0:
-            print("{}".format(runner.stderr.read()))
-            raise Exception("Ansible remove node failed")
-        print("out: {}".format(runner.stdout.read()))
-        print("err: {}".format(runner.stderr.read()))
+            print("{}".format(runner.stdout.read()))
+            raise Exception(f"Ansible remove node failed: {runner.stdout.read()}")
 
         # # 2、执行完删除k8s这些节点之后，再执行terraform销毁这些节点（这里是单独修改output.json文件还是需要通过之前生成的output.json文件生成）
         # output_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id),
@@ -1262,6 +1234,7 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
         with session.begin():
             db_cluster = session.get(Cluster, (cluster_id, cluster_name))
             db_cluster.status = 'running'
+            db_cluster.status_msg = ''
             for node in node_list:
                 # 根据 node.id 删除节点
                 node = session.get(NodeInfo, node.get("id"))
@@ -1273,10 +1246,13 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
                 instance.status = "running"
                 instance.cluster_id = ""
                 instance.cluster_name = ""
-
-    except subprocess.CalledProcessError as e:
+    except Exception as e:
         print(f"Ansible error: {e}")
-        return False
+        session = get_session()
+        with session.begin():
+            db_cluster = session.get(Cluster, (cluster_id, cluster_name))
+            db_cluster.status = 'error'
+            db_cluster.status_msg = f"Ansible remove node error: {str(e)}"
 
 @celery_app.task(bind=True)
 def delete_baremetal(self, cluster_id, cluster_name, instance_list, token):
