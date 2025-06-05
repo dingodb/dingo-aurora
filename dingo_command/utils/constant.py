@@ -11,10 +11,6 @@ ASSET_NETWORK_TEMPLATE_FILE_DIR = "/dingo_command/api/template/network_template.
 ASSET_NETWORK_FLOW_TEMPLATE_FILE_DIR = "/dingo_command/api/template/network_flow_template.xlsx"
 # 计费汇总模板文件
 RATING_SUMMARY_TEMPLATE_FILE_DIR = "/dingo_command/api/template/rating_summary_template.xlsx"
-# 计费汇总详情英文模板文件
-RATING_SUMMARY_DETAIL_EN_TEMPLATE_FILE_DIR = "/dingo_command/api/template/rating_summary_detail_en_template.xlsx"
-# 计费汇总详情中文模板文件
-RATING_SUMMARY_DETAIL_ZH_TEMPLATE_FILE_DIR = "/dingo_command/api/template/rating_summary_detail_zh_template.xlsx"
 # 导入的资产设备类型
 ASSET_TEMPLATE_ASSET_TYPE = ("server", "network", "network_flow")
 # 资产设备sheet页名称

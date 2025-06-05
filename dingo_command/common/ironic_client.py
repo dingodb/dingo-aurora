@@ -49,7 +49,8 @@ class IronicClient:
             return False
 
         remaining_time = instance._token_expiry - timeutils.utcnow()
-        #print(f"ironic client single instance id: {instance._singleton_instance_uuid}, token[{instance._current_token}]剩余时间：{remaining_time}, token过期阈值：{cls.TOKEN_EXPIRY_THRESHOLD}， 当前token是否有效：{remaining_time > cls.TOKEN_EXPIRY_THRESHOLD}")
+        if remaining_time < cls.TOKEN_EXPIRY_THRESHOLD:
+            print(f"ironic client single instance id: {instance._singleton_instance_uuid}, token[{instance._current_token}]剩余时间：{remaining_time}, token过期阈值：{cls.TOKEN_EXPIRY_THRESHOLD}， 当前token是否有效：{remaining_time > cls.TOKEN_EXPIRY_THRESHOLD}")
         return remaining_time > cls.TOKEN_EXPIRY_THRESHOLD
 
     def _acquire_new_token(self):

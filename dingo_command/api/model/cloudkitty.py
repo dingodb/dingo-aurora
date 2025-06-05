@@ -16,3 +16,23 @@ class CloudKittyRatingSummaryDetail(BaseModel):
     end: Optional[str] = Field(None, description="结束时间")
     total: Optional[str] = Field(None, description="总计")
     flavor: Optional[List[FlavorObject]] = Field(None, description="描述信息")
+
+class RatingModuleConfigHashMapMapping(BaseModel):
+    mapping_id: Optional[str] = Field(None, description="映射ID")
+    cost: Optional[str] = Field(None, description="费用")
+    type: Optional[str] = Field(None, description="类型")
+    group_id: Optional[str] = Field(None, description="组ID")
+    tenant_id: Optional[str] = Field(None, description="项目ID")
+    value: Optional[str] = Field(None, description="值")
+    field_id: Optional[str] = Field(None, description="字段ID")
+    service_id: Optional[str] = Field(None, description="服务ID")
+
+class RatingModuleConfigHashMapThreshold(BaseModel):
+    threshold_id: Optional[str] = Field(None, description="阈值ID")
+    cost: Optional[str] = Field(None, description="费用")
+    type: Optional[str] = Field(None, description="类型")
+    group_id: Optional[str] = Field(None, description="组ID")
+    tenant_id: Optional[str] = Field(None, description="项目ID")
+    field_id: Optional[str] = Field(None, description="字段ID")
+    service_id: Optional[str] = Field(None, description="服务ID")
+    level: Optional[str] = Field(None, description="级别")

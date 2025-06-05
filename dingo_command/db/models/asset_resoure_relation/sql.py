@@ -114,26 +114,19 @@ class AssetResourceRelationSQL:
                         query = query.order_by(resource_detail_list_dir_dic[sort_keys].asc())
                     elif sort_dirs == "descend":
                         query = query.order_by(resource_detail_list_dir_dic[sort_keys].desc())
-                elif sort_keys == "resource_gpu_count":
+                else:
+                    from sqlalchemy import case, null
+                    metric_name = sort_keys.replace("resource_", "")
+
+                    # 构建case表达式处理空值
+                    order_expr = case(
+                (ResourceMetrics.name == metric_name, ResourceMetrics.data),
+                        else_=0  # 默认值为0，可根据业务需求调整
+                    )
                     if sort_dirs == "ascend" or sort_dirs is None:
-                        query = query.filter(ResourceMetrics.name == "gpu_count").order_by(ResourceMetrics.data.asc())
+                        query = query.order_by(order_expr.asc())
                     elif sort_dirs == "descend":
-                        query = query.filter(ResourceMetrics.name == "gpu_count").order_by(ResourceMetrics.data.desc())
-                elif sort_keys == "resource_gpu_power":
-                    if sort_dirs == "ascend" or sort_dirs is None:
-                        query = query.filter(ResourceMetrics.name == "gpu_power").order_by(ResourceMetrics.data.asc())
-                    elif sort_dirs == "descend":
-                        query = query.filter(ResourceMetrics.name == "gpu_power").order_by(ResourceMetrics.data.desc())
-                elif sort_keys == "resource_cpu_usage":
-                    if sort_dirs == "ascend" or sort_dirs is None:
-                        query = query.filter(ResourceMetrics.name == "cpu_usage").order_by(ResourceMetrics.data.asc())
-                    elif sort_dirs == "descend":
-                        query = query.filter(ResourceMetrics.name == "cpu_usage").order_by(ResourceMetrics.data.desc())
-                elif sort_keys == "resource_memory_usage":
-                    if sort_dirs == "ascend" or sort_dirs is None:
-                        query = query.filter(ResourceMetrics.name == "memory_usage").order_by(ResourceMetrics.data.asc())
-                    elif sort_dirs == "descend":
-                        query = query.filter(ResourceMetrics.name == "memory_usage").order_by(ResourceMetrics.data.desc())
+                        query = query.order_by(order_expr.desc())
             else:
                 query = query.order_by(AssetResourceRelationInfo.create_date.desc())
             # 分页条件

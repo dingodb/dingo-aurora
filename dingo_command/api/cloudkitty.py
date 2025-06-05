@@ -5,7 +5,7 @@ from typing import List
 from fastapi.responses import FileResponse
 from urllib.parse import unquote
 from starlette.background import BackgroundTask
-from dingo_command.api.model.cloudkitty import CloudKittyRatingSummaryDetail
+from dingo_command.api.model.cloudkitty import CloudKittyRatingSummaryDetail, RatingModuleConfigHashMapMapping, RatingModuleConfigHashMapThreshold
 from dingo_command.services.cloudkitty import CloudKittyService
 from dingo_command.utils import file_utils
 
@@ -87,30 +87,50 @@ async def download_rating_summary_detail_pdf(filePath: str = Query(None, descrip
         )
     raise HTTPException(status_code=400, detail="PDf file not found")
 
-@router.post("/cloudkitty/download/ratingSummaryDetail/execl", summary="下载计费汇总详情execl", description="下载计费汇总详情execl")
-async def download_rating_summary_detail_execl(detail: List[CloudKittyRatingSummaryDetail],
-                                             language: str = Query(None, description="当前环境语言")):
-    result_file_execl_name = "rating_summary_detail_" + format_d8q_timestamp() + ".xlsx"
-    # 导出文件路径
-    result_file_execl_path = EXCEL_TEMP_DIR + result_file_execl_name
+# @router.post("/cloudkitty/download/ratingSummaryDetail/execl", summary="下载计费汇总详情execl", description="下载计费汇总详情execl")
+# async def download_rating_summary_detail_execl(detail: List[CloudKittyRatingSummaryDetail],
+#                                              language: str = Query(None, description="当前环境语言")):
+#     result_file_execl_name = "rating_summary_detail_" + format_d8q_timestamp() + ".xlsx"
+#     # 导出文件路径
+#     result_file_execl_path = EXCEL_TEMP_DIR + result_file_execl_name
+#
+#     # 1. 生成Excel文件
+#     try:
+#         cloudkitty_service.download_rating_summary_detail_execl(result_file_execl_path, detail, language)
+#     except Exception as e:
+#         import traceback
+#         traceback.print_exc()
+#         file_utils.cleanup_temp_file(result_file_execl_path)
+#         raise HTTPException(status_code=400, detail="generate execl file error")
+#
+#     # 文件存在则下载
+#     if os.path.exists(result_file_execl_path):
+#         return FileResponse(
+#             path=result_file_execl_path,
+#             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+#             filename=result_file_execl_name,  # 下载时显示的文件名
+#             background=BackgroundTask(file_utils.cleanup_temp_file, result_file_execl_path)
+#         )
+#     raise HTTPException(status_code=400, detail="Execl file not found")
 
-    # 1. 生成Excel文件
+@router.put("/rating/module_config/hashmap/mappings/{mapping_id}", summary="编辑计费映射哈希字段或服务映射",description="编辑计费映射哈希字段或服务映射")
+async def edit_rating_module_config_hashmap_mappings(mapping_id: str, mapping: RatingModuleConfigHashMapMapping):
+    # 文件存在则下载
     try:
-        cloudkitty_service.download_rating_summary_detail_execl(result_file_execl_path, detail, language)
+        return cloudkitty_service.edit_rating_module_config_hashmap_mappings(mapping_id, mapping)
     except Exception as e:
         import traceback
         traceback.print_exc()
-        file_utils.cleanup_temp_file(result_file_execl_path)
-        raise HTTPException(status_code=400, detail="generate execl file error")
+        raise HTTPException(status_code=400, detail={e})
 
+@router.put("/rating/module_config/hashmap/thresholds/{threshold_id}", summary="编辑计费映射哈希服务阈值",description="编辑计费映射哈希服务阈值")
+async def edit_rating_module_config_hashmap_thresholdings(threshold_id: str, thresholding: RatingModuleConfigHashMapThreshold):
     # 文件存在则下载
-    if os.path.exists(result_file_execl_path):
-        return FileResponse(
-            path=result_file_execl_path,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            filename=result_file_execl_name,  # 下载时显示的文件名
-            background=BackgroundTask(file_utils.cleanup_temp_file, result_file_execl_path)
-        )
-    raise HTTPException(status_code=400, detail="Execl file not found")
+    try:
+        return cloudkitty_service.edit_rating_module_config_hashmap_thresholdings(threshold_id, thresholding)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail={e})
 
 

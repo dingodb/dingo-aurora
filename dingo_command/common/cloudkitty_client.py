@@ -8,7 +8,7 @@ import requests
 from dingo_command.common import CONF
 
 
-# 配置nova信息
+# 配置cloudkitty信息
 CLOUDKITTY_AUTH_URL = CONF.cloudkitty.auth_url
 CLOUDKITTY_AUTH_TYPE = CONF.cloudkitty.auth_type
 CLOUDKITTY_PROJECT_NAME = CONF.cloudkitty.project_name
@@ -26,7 +26,7 @@ class CloudKittyClient:
         if not cls._singleton_instance or not cls._is_token_valid():
             cls._singleton_instance = super().__new__(cls)
             cls._singleton_instance._init_client()
-            print("generate New Ironic instance client")
+            print("generate New CloudKitty instance client")
         return cls._singleton_instance
 
     def _init_client(self):
@@ -48,7 +48,8 @@ class CloudKittyClient:
             return False
 
         remaining_time = instance._token_expiry - timeutils.utcnow()
-        #print(f"cloudkitty client single instance id: {instance._singleton_instance_uuid}, token[{instance._current_token}]剩余时间：{remaining_time}, token过期阈值：{cls.TOKEN_EXPIRY_THRESHOLD}， 当前token是否有效：{remaining_time > cls.TOKEN_EXPIRY_THRESHOLD}")
+        if remaining_time < cls.TOKEN_EXPIRY_THRESHOLD:
+            print(f"cloudkitty client single instance id: {instance._singleton_instance_uuid}, token[{instance._current_token}]剩余时间：{remaining_time}, token过期阈值：{cls.TOKEN_EXPIRY_THRESHOLD}， 当前token是否有效：{remaining_time > cls.TOKEN_EXPIRY_THRESHOLD}")
         return remaining_time > cls.TOKEN_EXPIRY_THRESHOLD
 
     def _acquire_new_token(self):
@@ -126,19 +127,21 @@ class CloudKittyClient:
 
     # 添加cloudkitty服务编辑服务映射
     @_require_valid_token
-    def modify_rating_module_config_hashmap_mappings(self):
+    def modify_rating_module_config_hashmap_mappings(self, mapping_id, mapping):
         endpoint = self.get_service_endpoint('rating')
         headers = {'Content-Type': 'application/json'}
-        data = {
-              "mapping_id":"67588126-54a4-42a1-9e41-3d2e48484080",
-              "type":"flat",
-              "cost":"0.2000000000000000111022302463",
-              "tenant_id":"3e1f5092111841e6a3f70e072fcc8864",
-              "value":"1014f026-1a4e-455c-afaa-99e7f78a9e57",
-              "field_id":"822de49d-578e-426d-8157-2b6a96e58ad2"
-            }
-
-        response = self._session.put(f"{endpoint}/v1/rating/module_config/hashmap/mappings", data=json.dumps(data), headers=headers)
+        response = self._session.put(f"{endpoint}/v1/rating/module_config/hashmap/mappings/{mapping_id}", data=mapping.json(), headers=headers)
         if response.status_code != 200:
-            raise Exception(f"cloudkitty[{endpoint}/v1/rating/module_config/hashmap/mappings] status_code:{response.status_code}, 请求失败: {response.text}")
-        print(response)
+            print(f"cloudkitty[{endpoint}/v1/rating/module_config/hashmap/mappings/{mapping_id}] status_code:{response.status_code}, 请求失败: {response.text}")
+            raise Exception(f"{response.text}")
+        return response.json()
+
+    @_require_valid_token
+    def modify_rating_module_config_hashmap_thresholdings(self, threshold_id, thresholding):
+        endpoint = self.get_service_endpoint('rating')
+        headers = {'Content-Type': 'application/json'}
+        response = self._session.put(f"{endpoint}/v1/rating/module_config/hashmap/thresholds/{threshold_id}", data=thresholding.json(), headers=headers)
+        if response.status_code != 200:
+            print(f"cloudkitty[{endpoint}/v1/rating/module_config/hashmap/thresholds/{mapping_id}] status_code:{response.status_code}, 请求失败: {response.text}")
+            raise Exception(f"{response.text}")
+        return response.json()

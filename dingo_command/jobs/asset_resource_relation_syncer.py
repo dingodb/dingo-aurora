@@ -38,7 +38,7 @@ def fetch_relation_info():
         # print(f"虚拟机列表数据: {server_list}")
         # 数据判空
         if not node_list:
-            print("裸金属列表数据")
+            print("裸金属列表数据为空，清除资源相关数据")
             # 删除资源与资产关联表中的数据
             AssetResourceRelationSQL.delete_all_asset_resource_relation_data()
             # 删除资源metrics表中数据
@@ -48,15 +48,14 @@ def fetch_relation_info():
         asset_resource_relation_list = []
         resource_id_list = []
         for temp_node in node_list:
-            print(f"裸金属数据:{temp_node}")
+            # print(f"裸金属数据:{temp_node}")
             # uuid是裸金属的id  instance_uuid是对应的虚拟机的id
             resource_id_list.append(temp_node.get('uuid'))
             #print(f"裸金属列表数据:{temp_node.get('uuid')}")
             server_detail = None
             if temp_node.get('instance_uuid'):
                 try:
-                    nova_client = NovaClient()
-                    server_detail = nova_client.nova_get_server_detail(temp_node.get('instance_uuid'))
+                    server_detail = NovaClient().nova_get_server_detail(temp_node.get('instance_uuid'))
                     print(f"虚拟机详情数据: {server_detail}")
                 except Exception as e:
                     print(f"虚拟机[{temp_node.get('instance_uuid')}]详情数据失败: {e}")

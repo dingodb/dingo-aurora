@@ -15,8 +15,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
 
 from dingo_command.common.cloudkitty_client import CloudKittyClient
-from dingo_command.utils.constant import RATING_SUMMARY_TEMPLATE_FILE_DIR, RATING_SUMMARY_DETAIL_EN_TEMPLATE_FILE_DIR, \
-    RATING_SUMMARY_DETAIL_ZH_TEMPLATE_FILE_DIR
+from dingo_command.utils.constant import RATING_SUMMARY_TEMPLATE_FILE_DIR
 
 LOG = log.getLogger(__name__)
 
@@ -109,55 +108,55 @@ class CloudKittyService:
             traceback.print_exc()
             raise e
 
-    def download_rating_summary_detail_execl(self, result_file_execl_path, detail, language):
-        if language is None or language == "EN":
-            # 模板路径
-            current_template_file = os.getcwd() + RATING_SUMMARY_DETAIL_EN_TEMPLATE_FILE_DIR
-        else:
-             # 模板路径
-             current_template_file = os.getcwd() + RATING_SUMMARY_DETAIL_ZH_TEMPLATE_FILE_DIR
-
-        # 对应类型的模板不存在
-        if current_template_file is None:
-            return None
-
-        try:
-            print(f"current_template_file:{current_template_file}, result_file_execl_path:{result_file_execl_path}")
-            # 复制模板文件到临时目录
-            shutil.copy2(current_template_file, result_file_execl_path)
-
-            # 生成计费汇总租户详情数据
-            temp_data = self.generate_rating_summary_detail_data(detail, language)
-
-            # 加载模板文件
-            book = load_workbook(result_file_execl_path)
-            detail_sheet = book['ratingSummaryDetail']
-
-            # 插入项目ID、开始时间、结束时间数据
-            start_row = 1
-            for idx, item in enumerate(temp_data):
-                # 获取字典的键值对
-                value = list(item.values())[0]
-                # 写入第二列
-                detail_sheet.cell(row=start_row + idx, column=2, value=value).border = thin_border
-
-            # 插入资源类型费率
-            start_row = 5  # 从第5行开始插入
-            for idx, item in enumerate(temp_data[4:]):
-                # 获取字典的键值对
-                key = list(item.keys())[0]
-                value = list(item.values())[0]
-
-                # 写入第一列和第二列
-                detail_sheet.cell(row=start_row + idx, column=1, value=key).border = thin_border
-                detail_sheet.cell(row=start_row + idx, column=2, value=value).border = thin_border
-
-            # 保存修改
-            book.save(result_file_execl_path)
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            raise e
+    # def download_rating_summary_detail_execl(self, result_file_execl_path, detail, language):
+    #     if language is None or language == "EN":
+    #         # 模板路径
+    #         current_template_file = os.getcwd() + RATING_SUMMARY_DETAIL_EN_TEMPLATE_FILE_DIR
+    #     else:
+    #          # 模板路径
+    #          current_template_file = os.getcwd() + RATING_SUMMARY_DETAIL_ZH_TEMPLATE_FILE_DIR
+    #
+    #     # 对应类型的模板不存在
+    #     if current_template_file is None:
+    #         return None
+    #
+    #     try:
+    #         print(f"current_template_file:{current_template_file}, result_file_execl_path:{result_file_execl_path}")
+    #         # 复制模板文件到临时目录
+    #         shutil.copy2(current_template_file, result_file_execl_path)
+    #
+    #         # 生成计费汇总租户详情数据
+    #         temp_data = self.generate_rating_summary_detail_data(detail, language)
+    #
+    #         # 加载模板文件
+    #         book = load_workbook(result_file_execl_path)
+    #         detail_sheet = book['ratingSummaryDetail']
+    #
+    #         # 插入项目ID、开始时间、结束时间数据
+    #         start_row = 1
+    #         for idx, item in enumerate(temp_data):
+    #             # 获取字典的键值对
+    #             value = list(item.values())[0]
+    #             # 写入第二列
+    #             detail_sheet.cell(row=start_row + idx, column=2, value=value).border = thin_border
+    #
+    #         # 插入资源类型费率
+    #         start_row = 5  # 从第5行开始插入
+    #         for idx, item in enumerate(temp_data[4:]):
+    #             # 获取字典的键值对
+    #             key = list(item.keys())[0]
+    #             value = list(item.values())[0]
+    #
+    #             # 写入第一列和第二列
+    #             detail_sheet.cell(row=start_row + idx, column=1, value=key).border = thin_border
+    #             detail_sheet.cell(row=start_row + idx, column=2, value=value).border = thin_border
+    #
+    #         # 保存修改
+    #         book.save(result_file_execl_path)
+    #     except Exception as e:
+    #         import traceback
+    #         traceback.print_exc()
+    #         raise e
 
     def generate_rating_summary_detail_data(self, ratingSummaryDetailList, language):
         try:
@@ -316,3 +315,19 @@ class CloudKittyService:
             import traceback
             traceback.print_exc()
             raise RuntimeError(f"生成PDF[{filename}]失败: {e}")
+
+    def edit_rating_module_config_hashmap_mappings(self, mapping_id, mapping):
+        try:
+            return CloudKittyClient().modify_rating_module_config_hashmap_mappings(mapping_id, mapping)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise RuntimeError(f"modify rating module config hashmap mapping fail: {e}")
+
+    def edit_rating_module_config_hashmap_thresholdings(self, threshold_id, thresholding):
+        try:
+            return CloudKittyClient().modify_rating_module_config_hashmap_thresholdings(threshold_id, thresholding)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise RuntimeError(f"modify rating module config hashmap thresholding fail: {e}")
