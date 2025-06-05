@@ -46,6 +46,8 @@ module "ips" {
   token = var.token
   auth_url = var.auth_url
   tenant_id = var.tenant_id
+  bastion_floatip_id =  var.bastion_floatip_id
+
 }
 
 module "compute" {
@@ -100,6 +102,7 @@ module "compute" {
   node_fips                                    = module.ips.node_fips
   nodes_fips                                   = module.ips.nodes_fips
   bastion_fips                                 = module.ips.bastion_fips
+  bastion_fip_ids                              = module.ips.bastion_fip_ids
   bastion_allowed_remote_ips                   = var.bastion_allowed_remote_ips
   bastion_allowed_remote_ipv6_ips              = var.bastion_allowed_remote_ipv6_ips
   master_allowed_remote_ips                    = var.master_allowed_remote_ips
@@ -137,6 +140,7 @@ module "compute" {
   token = var.token
   auth_url = var.auth_url
   tenant_id = var.tenant_id
+  etcd_volume_type = var.etcd_volume_type
 }
 
 module "loadbalancer" {

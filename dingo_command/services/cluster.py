@@ -146,7 +146,10 @@ class ClusterService:
                         floating_ip=False,
                         etcd=False,
                         image_id=node.image,
-                        port_forwards=cluster_new.port_forwards
+                        port_forwards=cluster_new.port_forwards,
+                        use_local_disk = node.use_local_disk,
+                        volume_size=node.volume_size,
+                        volume_type=node.volume_type
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
@@ -390,6 +393,7 @@ class ClusterService:
                 user_id=cluster.user_id,
                 labels=cluster.labels,
                 status=cluster.status,
+                status_msg= cluster.status_msg,
                 region_name=cluster.region_name,
                 type=cluster.type,
                 kube_info=kube_info,

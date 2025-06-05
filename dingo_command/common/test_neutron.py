@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from dingo_command.utils.neutron import API as neutron
+from dingo_command.common.cinder_client import CinderClient
 from dingo_command.services import CONF
 
 
@@ -33,6 +34,15 @@ class TestNeutron(unittest.TestCase):
         # 验证结果
         self.assertEqual(result, mock_networks['networks'])
         mock_client.list_networks.assert_called_once_with(**{'router:external': True})
+
+    def test_list_volume_type(self):
+
+        # 创建模拟的neutron客户端
+        cinder_client = CinderClient()
+        
+        # 调用被测试的函数
+        result = cinder_client.list_volum_type()
+        
         
     def test_list_external_networks_with_client(self):
 

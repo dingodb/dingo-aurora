@@ -41,11 +41,11 @@
     - inventory_hostname != first_kube_control_plane
     - not kubeadm_already_run.stat.exists
 
-- name: Wait for k8s apiserver
-  wait_for:
-    host: "{{ kubeadm_discovery_address.split(':')[0] }}"
-    port: "{{ kubeadm_discovery_address.split(':')[1] }}"
-    timeout: 180
+# - name: Wait for k8s apiserver
+#   wait_for:
+#     host: "{{ kubeadm_discovery_address.split(':')[0] }}"
+#     port: "{{ kubeadm_discovery_address.split(':')[1] }}"
+#     timeout: 180
 
 
 - name: Check already run

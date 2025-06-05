@@ -13,11 +13,11 @@
         - ../vars
       skip: true
 
-- name: Helm | Install PyYaml
-  package:
-    name: "{{ pyyaml_package }}"
-    state: present
-  when: pyyaml_package is defined
+# - name: Helm | Install PyYaml
+#   package:
+#     name: "{{ pyyaml_package }}"
+#     state: present
+#   when: pyyaml_package is defined
 
 - name: Helm | Install PyYaml [flatcar]
   include_tasks: pyyaml-flatcar.yml

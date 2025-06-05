@@ -6,6 +6,9 @@ terraform {
     cloudinit = {
       source  = "dingo.com/hashicorp/cloudinit"
     }
+    random = {
+      source = "dingo.com/hashicorp/random"
+    }
   }
   required_version = ">= 1.3.0"
 }

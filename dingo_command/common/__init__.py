@@ -55,6 +55,22 @@ cloudkitty_opts = [
 CONF.register_group(cloudkitty_group)
 CONF.register_opts(cloudkitty_opts, cloudkitty_group)
 
+# nova的配置信息
+cinder_group = cfg.OptGroup(name='cinder', title='cinder conf data')
+cinder_opts = [
+    cfg.StrOpt( 'auth_url', default='http://10.220.56.254:5000', help='auth url'),
+    cfg.StrOpt( 'auth_type', default="password", help='auth type'),
+    cfg.StrOpt( 'project_domain', default="default", help='project domain'),
+    cfg.StrOpt( 'user_domain', default='default', help='user domain'),
+    cfg.StrOpt( 'project_name', default='service', help='project name'),
+    cfg.StrOpt( 'user_name', default='nova', help='user name'),
+    cfg.StrOpt( 'password', default='XModTf5fcvUw7aAr3CUBBVdO38WQS15QQwNqVjGJ', help='password'),
+    cfg.StrOpt( 'region_name', default='RegionOne', help='region name'),
+]
+# 注册nova配置
+CONF.register_group(cinder_group)
+CONF.register_opts(cinder_opts, cinder_group)
+
 # 注册neutron配置
 neutron_group = cfg.OptGroup(name='neutron', title='neutron conf data')
 CONF.register_group(neutron_group)

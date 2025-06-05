@@ -33,6 +33,11 @@ data "openstack_networking_network_v2" "bus_network" {
   network_id  = var.bus_network_id
 }
 
+resource "random_integer" "master_port" {
+  min   = 0
+  max   = 40000
+}
+
 # create key pair
 resource "openstack_compute_keypair_v2" "key_pair" {
   count      = (var.public_key_path != null && var.public_key_path != "") ? 1 : 0
@@ -118,10 +123,10 @@ locals {
       name => {
         "key_pair"       = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : "",
         "password"       = var.password,
-        "use_local_disk" = (node.root_volume_size_in_gb != null ? node.root_volume_size_in_gb : var.node_root_volume_size_in_gb) == 0,
+        "use_local_disk" = node.use_local_disk,
         "image_id"       = node.image_id != null ? node.image_id : local.image_to_use_node,
-        "volume_size"    = node.root_volume_size_in_gb != null ? node.root_volume_size_in_gb : var.node_root_volume_size_in_gb,
-        "volume_type"    = node.volume_type != null ? node.volume_type : var.node_volume_type,
+        "volume_size"    = node.volume_size,
+        "volume_type"    = node.volume_type,
         "admin_network_id"   = node.network_id != null ? node.network_id : (var.use_existing_network ? data.openstack_networking_network_v2.admin_network[0].id : var.admin_network_id)
         "bus_network_id"     = node.network_id != null ? node.network_id : (var.use_existing_network && var.bus_network_id != "" ? data.openstack_networking_network_v2.bus_network[0].id : var.bus_network_id)
         #"server_group"   = node.server_group != null ? node.server_group : openstack_compute_servergroup_v2.secgroup[0].id
@@ -151,6 +156,7 @@ locals {
   # Provide default values to prevent null
   segmentation_id = local.first_segment != null ? local.first_segment.segmentation_id : "1000"
   network_type = local.first_segment != null ? local.first_segment.network_type : "vlan"
+  protforward_external_port = 10000 + floor(random_integer.master_port.result)
 }
 
 resource "openstack_networking_port_v2" "admin_master_port" {
@@ -207,16 +213,29 @@ resource "openstack_compute_instance_v2" "k8s-master" {
   key_pair          = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : ""
   user_data         = data.cloudinit_config.cloudinit.rendered
   security_groups = [openstack_networking_secgroup_v2.secgroup.name]
+
   dynamic "block_device" {
-    for_each = var.master_root_volume_size_in_gb > 0 ? [local.image_to_use_master] : []
+    for_each = var.etcd_volume_type != "" ? [1] : []
     content {
       uuid                  = local.image_to_use_master
       source_type           = "image"
-      volume_size           = var.master_root_volume_size_in_gb
-      volume_type           = var.master_volume_type
+      volume_size           = 110
       boot_index            = 0
       destination_type      = "volume"
       delete_on_termination = true
+    }
+  }
+
+  dynamic "block_device" {
+    for_each = var.etcd_volume_type != "" ? [1] : []
+    content {
+      source_type           = "blank"
+      destination_type      = "volume"
+      volume_size           = 20
+      volume_type           = var.etcd_volume_type
+      boot_index            = -1
+      delete_on_termination = true
+      guest_format          = "ext4"
     }
   }
   tags = ["kubernetes control"]
@@ -226,6 +245,7 @@ resource "openstack_compute_instance_v2" "k8s-master" {
 
   metadata = {
     ssh_user         = var.ssh_user
+    ssh_port         = local.protforward_external_port
     kubespray_groups = "etcd,kube_control_plane,${var.supplementary_master_groups},cluster"
     depends_on       = var.network_router_id
     use_access_ip    = var.use_access_ip
@@ -234,7 +254,7 @@ resource "openstack_compute_instance_v2" "k8s-master" {
     openstack_networking_secgroup_v2.secgroup
   ]
   provisioner "local-exec" {
-    command = "%{if var.password == ""}sed -e s#USER#${var.ssh_user}# -e s#PRIVATE_KEY_FILE#${var.private_key_path}# -e s#BASTION_ADDRESS#${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}# ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}"
+    command = "%{if var.password == ""}sed -e s#USER#${var.ssh_user}# -e s#SSH_PORT#${local.protforward_external_port}# -e s#PRIVATE_KEY_FILE#${var.private_key_path}# -e s#BASTION_ADDRESS#${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}# ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s/USER/${var.ssh_user}/ -e s#SSH_PORT#${local.protforward_external_port}# -e s/BASTION_ADDRESS/${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}"
   }
 }
 ##########################################################################################################
@@ -294,15 +314,27 @@ resource "openstack_compute_instance_v2" "k8s-master-no-floatip" {
   user_data         = data.cloudinit_config.cloudinit.rendered
   security_groups = [openstack_networking_secgroup_v2.secgroup.name]
   dynamic "block_device" {
-    for_each = var.master_root_volume_size_in_gb > 0 ? [local.image_to_use_master] : []
+    for_each = var.etcd_volume_type != "" ? [1] : []
     content {
       uuid                  = local.image_to_use_master
       source_type           = "image"
-      volume_size           = var.master_root_volume_size_in_gb
-      volume_type           = var.master_volume_type
+      volume_size           = 110
       boot_index            = 0
       destination_type      = "volume"
       delete_on_termination = true
+    }
+  }
+
+  dynamic "block_device" {
+    for_each = var.etcd_volume_type != "" ? [1] : []
+    content {
+      source_type           = "blank"
+      destination_type      = "volume"
+      volume_size           = 20
+      volume_type           = var.etcd_volume_type
+      boot_index            = -1
+      delete_on_termination = true
+      guest_format          = "ext4"
     }
   }
   tags = ["kubernetes control"]
@@ -320,7 +352,7 @@ resource "openstack_compute_instance_v2" "k8s-master-no-floatip" {
     openstack_networking_secgroup_v2.secgroup
   ]
   provisioner "local-exec" {
-    command = "%{if var.password == ""}sed -e s#USER#${var.ssh_user}# -e s#PRIVATE_KEY_FILE#${var.private_key_path}# -e s#BASTION_ADDRESS#${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}# ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}"
+    command = "%{if var.password == ""}sed -e s#USER#${var.ssh_user}# -e s#SSH_PORT#${local.protforward_external_port}# -e s#PRIVATE_KEY_FILE#${var.private_key_path}# -e s#BASTION_ADDRESS#${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}# ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s#SSH_PORT#${local.protforward_external_port}# -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}"
   }
 }
 ###############################################worker node################################################
@@ -354,11 +386,11 @@ resource "openstack_networking_port_v2" "nodes_port" {
 #  port_id               = element(openstack_networking_port_v2.admin_master_port.*.id, count.index)
 #}
 
-resource "openstack_networking_floatingip_associate_v2" "master" {
-  count                 = var.number_of_k8s_masters
-  floating_ip           = var.k8s_master_fips[0]
-  port_id               = element(openstack_networking_port_v2.admin_master_port.*.id, 0)
-}
+#resource "openstack_networking_floatingip_associate_v2" "master" {
+#  count                 = var.number_of_k8s_masters
+#  floating_ip           = var.k8s_master_fips[0]
+#  port_id               = element(openstack_networking_port_v2.admin_master_port.*.id, 0)
+#}
 
 # resource "openstack_networking_floatingip_associate_v2" "masters" {
 #   for_each              = var.number_of_k8s_masters == 0 && var.number_of_k8s_masters_no_etcd == 0 && var.number_of_k8s_masters_no_floating_ip == 0 && var.number_of_k8s_masters_no_floating_ip_no_etcd == 0 ? { for key, value in var.masters : key => value if value.floating_ip } : {}
@@ -388,7 +420,7 @@ resource "openstack_compute_instance_v2" "nodes" {
   for_each          = var.number_of_nodes == 0 && var.number_of_nodes_no_floating_ip == 0 ? var.nodes : {}
   name              = "${var.cluster_name}-${each.key}"
   availability_zone = each.value.az
-  image_id          = local.nodes_settings[each.key].use_local_disk ? local.nodes_settings[each.key].image_id : null
+  image_id          = local.nodes_settings[each.key].use_local_disk == true ? null: local.nodes_settings[each.key].image_id
   flavor_id         = each.value.flavor
   key_pair          = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : ""
   user_data         = each.value.cloudinit != null ? templatefile("${path.module}/templates/cloudinit.yaml.tmpl", {
@@ -396,7 +428,7 @@ resource "openstack_compute_instance_v2" "nodes" {
     netplan_critical_dhcp_interface = each.value.cloudinit.netplan_critical_dhcp_interface,
   }) : data.cloudinit_config.cloudinit.rendered
   dynamic "block_device" {
-    for_each = !local.nodes_settings[each.key].use_local_disk ? [local.nodes_settings[each.key].image_id] : []
+    for_each = local.nodes_settings[each.key].use_local_disk == true ? [local.nodes_settings[each.key].image_id] : []
     content {
       uuid                  = block_device.value
       source_type           = "image"
@@ -423,7 +455,7 @@ resource "openstack_compute_instance_v2" "nodes" {
     openstack_networking_secgroup_v2.secgroup
   ]
   provisioner "local-exec" {
-    command = "%{if each.value.floating_ip} %{if var.password == ""}sed -e s#USER#${var.ssh_user}# -e s#PRIVATE_KEY_FILE#${var.private_key_path}# -e s#BASTION_ADDRESS#${element([for key, value in var.k8s_master_fips : value.address], 0)}# ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element([for key, value in var.k8s_master_fips : value.address], 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}%{else}true%{endif}"
+    command = "%{if each.value.floating_ip} %{if var.password == ""}sed -e s#USER#${var.ssh_user}# -e s#SSH_PORT#${local.protforward_external_port}# -e s#PRIVATE_KEY_FILE#${var.private_key_path}# -e s#BASTION_ADDRESS#${element([for key, value in var.k8s_master_fips : value.address], 0)}# ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s#SSH_PORT#${local.protforward_external_port}# -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element([for key, value in var.k8s_master_fips : value.address], 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}%{else}true%{endif}"
   }
 }
 
@@ -483,7 +515,18 @@ resource "openstack_networking_portforwarding_v2" "pf_multi" {
   ]
 }
 
-
+resource "openstack_networking_portforwarding_v2" "master_portforward" {
+  count            = var.number_of_k8s_masters
+  floatingip_id    = var.bastion_fip_ids[count.index]
+  external_port    = local.protforward_external_port
+  internal_port    = 22
+  internal_port_id = openstack_networking_port_v2.admin_master_port[count.index].id
+  protocol         = "tcp"
+  internal_ip_address = openstack_compute_instance_v2.k8s-master[count.index].network[0].fixed_ip_v4
+  depends_on = [
+    openstack_compute_instance_v2.k8s-master
+  ]
+}
 # resource "openstack_networking_floatingip_associate_v2" "masters" {
 #   for_each              = var.number_of_k8s_masters == 0 && var.number_of_k8s_masters_no_etcd == 0 && var.number_of_k8s_masters_no_floating_ip == 0 && var.number_of_k8s_masters_no_floating_ip_no_etcd == 0 ? { for key, value in var.masters : key => value if value.floating_ip } : {}
 #   floating_ip           = var.masters_fips[each.key].address

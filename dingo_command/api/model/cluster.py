@@ -39,6 +39,9 @@ class NodeConfigObject(BaseModel):
     security_group: Optional[str] = Field(None, description="安全组名称")
     status: Optional[str] = Field(None, description="状态")
     instance_id: Optional[str] = Field(None, description="实例id")
+    use_local_disk: Optional[bool] = Field(False, description="实例id")
+    volume_type: Optional[str] = Field("", description="卷类型")
+    volume_size: Optional[int] = Field(0, description="卷大小")
     
 class NodeGroup(BaseModel):
     az: Optional[str] = Field(None, description="可用域")
@@ -47,6 +50,9 @@ class NodeGroup(BaseModel):
     etcd: Optional[bool] = Field(None, description="是否是etcd节点")
     image_id: Optional[str] = Field(None, description="镜像id")
     port_forwards: Optional[List[PortForwards]] = Field(None, description="端口转发配置")
+    use_local_disk: Optional[bool] = Field(None, description="实例id")
+    volume_type: Optional[str] = Field(None, description="卷类型")
+    volume_size: Optional[int] = Field(None, description="卷大小")
 
 class KubeClusterObject(BaseModel):
     kube_lb_address: Optional[str] = Field(None, description="负载均衡器的浮动ip")
@@ -148,6 +154,8 @@ class ClusterTFVarsObject(BaseModel):
     token: Optional[str] = Field(None, description="token")
     forward_float_ip_id: Optional[str] = Field("", description="集群浮动ip的id")
     image_master: Optional[str] = Field(None, description="master节点的镜像")
+    router_id: Optional[str] = Field(None, description="路由id")
+    bastion_floatip_id: Optional[str] = Field(None, description="堡垒机浮动ip的id")
 
 class NodeRemoveObject(BaseModel):
     cluster_id: Optional[str] = Field(None, description="集群id")

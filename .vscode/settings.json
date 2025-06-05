@@ -7,7 +7,7 @@
   "python.testing.unittestArgs": [
     "-v",
     "-s",
-    "./dingoops",
+    "./dingo_command",
     "-p",
     "test_*.py"
   ]

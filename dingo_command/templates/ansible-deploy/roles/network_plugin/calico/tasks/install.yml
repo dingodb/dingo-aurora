@@ -1,13 +1,13 @@
 ---
-- name: Calico | Install Wireguard packages
-  package:
-    name: "{{ item }}"
-    state: present
-  with_items: "{{ calico_wireguard_packages }}"
-  register: calico_package_install
-  until: calico_package_install is succeeded
-  retries: 4
-  when: calico_wireguard_enabled
+# - name: Calico | Install Wireguard packages
+#   package:
+#     name: "{{ item }}"
+#     state: present
+#   with_items: "{{ calico_wireguard_packages }}"
+#   register: calico_package_install
+#   until: calico_package_install is succeeded
+#   retries: 4
+#   when: calico_wireguard_enabled
 
 - name: Calico | Copy calicoctl binary from download dir
   copy:

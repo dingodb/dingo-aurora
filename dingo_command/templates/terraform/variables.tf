@@ -296,6 +296,12 @@ variable "k8s_allowed_egress_ipv6_ips" {
   default     = ["::/0"]
 }
 
+
+variable "bastion_fip_ids" {
+  type = list
+  default = []
+}
+
 variable "master_allowed_ports" {
   type = list(any)
 
@@ -492,3 +498,12 @@ variable "forward_float_ip_id" {
 #variable "forward_out_port" {
 #  default = 0
 #}
+variable "bastion_floatip_id" {
+  type    = string
+  default = ""
+}
+
+variable "etcd_volume_type" {
+  type    = string
+  default = ""
+}

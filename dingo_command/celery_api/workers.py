@@ -27,6 +27,8 @@ from dingo_command.db.engines.mysql import get_engine, get_session
 from dingo_command.db.models.cluster.sql import ClusterSQL, TaskSQL
 from dingo_command.common import CONF as CommonConf
 from dingo_command.common.nova_client import NovaClient
+from dingo_command.common import neutron
+from dingo_command.common.cinder_client import CinderClient
 
 from dingo_command.db.models.node.sql import NodeSQL
 from dingo_command.db.models.instance.sql import InstanceSQL
@@ -49,6 +51,8 @@ SSH_KEY_NAME = "instance_key"
 INSTANCE_NET_NAME = "instance_network"
 INSTANCE_ROUTER_NAME = "instance_router"
 INSTANCE_SUBNET_NAME = "instance_subnet"
+TASK_TIMEOUT = CONF.DEFAULT.task_timeout
+SOFT_TASK_TIMEOUT = CONF.DEFAULT.soft_task_timeout
 
 etcd_task_name = "Check etcd cluster status"
 control_plane_task_name = "Check control plane status"
@@ -68,7 +72,9 @@ class NodeGroup(BaseModel):
     etcd: Optional[bool] = Field(None, description="是否是etcd节点")
     image_id: Optional[str] = Field(None, description="镜像id")
     port_forwards: Optional[List[PortForwards]] = Field(None, description="端口转发配置")
-
+    use_local_disk: Optional[bool] = Field(None, description="实例id")
+    volume_type: Optional[str] = Field(None, description="卷类型")
+    volume_size: Optional[int] = Field(None, description="卷大小")
 
 class ClusterTFVarsObject(BaseModel):
     id: Optional[str] = Field(None, description="集群id")
@@ -106,6 +112,10 @@ class ClusterTFVarsObject(BaseModel):
     forward_float_ip_id: Optional[str] = Field("", description="集群浮动ip的id")
     port_forwards: Optional[list[PortForwards]] = Field(None, description="端口转发配置")
     image_master: Optional[str] = Field(None, description="master节点的镜像")
+    router_id: Optional[str] = Field(None, description="路由id")
+    bastion_floatip_id: Optional[str] = Field(None, description="堡垒机浮动ip的id")
+    bastion_fips: Optional[list[str]] = Field(None, description="堡垒机浮动ip的地址")
+    etcd_volume_type: Optional[str] = Field(None, description="堡垒机浮动ip的地址")
     
 def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
     """使用Terraform创建基础设施"""
@@ -138,9 +148,25 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
                     return False, res.stderr
                 cluster.private_key_path = os.path.join(cluster_dir, "id_rsa")
                 cluster.public_key_path = os.path.join(cluster_dir, "id_rsa.pub")
+        neutron_api = neutron.API()  # 创建API类的实例
+        router = neutron_api.get_router_by_name(CONF.DEFAULT.cluster_router_name, cluster.tenant_id)
+        if router is not None:
+            cluster.router_id = router.get("id", "")
+        else:
+            cluster.router_id = ""
+        fip_id, fip_address = neutron_api.get_first_floatingip_id_by_tags(
+            tags=["bastion_fip"],
+            tenant_id=cluster.tenant_id
+        )
+        cluster.bastion_floatip_id = fip_id
+        cluster.bastion_fips = [fip_address]
+        if fip_address == "": 
+            cluster.bastion_fips = []
+        
 
         cluster.group_vars_path = os.path.join(cluster_dir, "group_vars")
         tfvars_str = json.dumps(cluster, default=lambda o: o.__dict__, indent=2)
+        
         with open("output.tfvars.json", "w") as f:
             f.write(tfvars_str)
             
@@ -157,7 +183,9 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
        
         # 执行terraform apply
         # os.environ['OS_CLOUD']=cluster.region_name
-        #os.environ['OS_CLOUD']=region_name 
+        #os.environ['OS_CLOUD']=region_name
+        #判断是否存在名为cluster-router的路由
+
         res = subprocess.run([
             "terraform",
             "apply",
@@ -221,8 +249,8 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
         return False, str(e)
 
 
-@celery_app.task(bind=True)
-def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list):
+@celery_app.task(bind=True, time_limit=TASK_TIMEOUT, soft_time_limit=SOFT_TASK_TIMEOUT)
+def create_cluster(self, cluster_tf: ClusterTFVarsObject, cluster_dict: ClusterObject, instance_bm_list):
     try:
         task_id = str(self.request.id)
         cluster_id = cluster_tf["id"]
@@ -774,6 +802,7 @@ def check_nodes_connectivity(host_file, key_file_path):
             "-i", host_file,
             "-m", "ping",
             "all",
+            "--ssh-common-args=\"-o StrictHostKeyChecking=no\"",
             "--private-key", key_file_path,
             "-o", # 使用简单输出格式
         ], capture_output=True, text=True)
@@ -783,6 +812,7 @@ def check_nodes_connectivity(host_file, key_file_path):
             "-i", host_file,
             "-m", "ping",
             "all",
+            "--ssh-common-args=\"-o StrictHostKeyChecking=no\"",
             "-o", # 使用简单输出格式
         ], capture_output=True, text=True)
     
@@ -803,7 +833,65 @@ def check_nodes_connectivity(host_file, key_file_path):
     
     return result
 
-@celery_app.task(bind=True)
+def remove_bastion_fip_from_state(cluster_dir):
+    """
+    检查并从 Terraform state 中移除 bastion_fip 资源
+    
+    参数:
+        cluster_dir: 集群目录路径
+    
+    返回:
+        bool: 操作是否成功
+    """
+    terraform_dir = os.path.join(cluster_dir, "terraform")
+    os.chdir(terraform_dir)
+    
+    try:
+        # 执行 terraform state list 获取所有资源
+        result = subprocess.run(
+            ["terraform", "state", "list"], 
+            capture_output=True, 
+            text=True, 
+            check=True
+        )
+        
+        state_resources = result.stdout.strip().split('\n')
+        target_resource = "module.ips.openstack_networking_floatingip_v2.bastion_fip[0]"
+        
+        # 检查目标资源是否存在
+        if target_resource in state_resources:
+            print(f"找到资源 {target_resource}，正在从 state 中移除...")
+            
+            # 执行 terraform state rm 移除资源
+            remove_result = subprocess.run(
+                ["terraform", "state", "rm", target_resource],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            print(f"rm bastion_fip from terraform state ")
+            return True
+
+        elif "module.network.data.openstack_networking_router_v2.cluster[0]" in state_resources:
+            # 执行 terraform state rm 移除资源
+            remove_result = subprocess.run(
+                ["terraform", "state", "rm", target_resource],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            print(f"rm cluster_router from terraform state ")
+            return True
+        else:
+            print(f"resource {target_resource} not exist in state ")
+            return True
+            
+    except subprocess.CalledProcessError as e:
+        print(f"操作失败: {e.stderr}")
+        return False
+
+@celery_app.task(bind=True,time_limit=TASK_TIMEOUT, soft_time_limit=SOFT_TASK_TIMEOUT)
 def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_list, scale_nodes=None, scale=False):
     try:
         task_id = self.request.id.__str__()
@@ -818,12 +906,19 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                              msg=TaskService.TaskMessage.instructure_create.name)
         TaskSQL.insert(task_info)
 
+        cinder_client = CinderClient()
+        volume_type = cinder_client.list_volum_type()
+        cluster_tfvars.etcd_volume_type = volume_type
         terraform_result = create_infrastructure(cluster_tfvars, task_info)
 
         if not terraform_result[0]:
             raise Exception(f"Terraform infrastructure creation failed, reason: {terraform_result[1]}")
         # 打印日志
         print("Terraform infrastructure creation succeeded")
+        # 将bastion_ip从terraform state中去除
+        # 从 terraform state 中移除 bastion_fip 资源
+        cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tf_dict["id"])
+        remove_bastion_fip_from_state(cluster_dir)
 
         # 根据生成inventory
         # 复制script下面的host文件到WORK_DIR/cluster.id目录下
@@ -837,6 +932,67 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tf_dict["id"], "hosts")
         os.chmod(host_file, 0o755)  # rwxr-xr-x permission
         master_ip, lb_ip, hosts_data = get_ips(cluster_tfvars, task_info, host_file)
+        # ensure /root/.ssh/known_hosts exists
+        if os.path.exists("/root/.ssh/known_hosts"):
+            for i in range(1, cluster_tfvars.number_of_k8s_masters + 1):
+                print(f"delete host from know_hosts  {task_id}")
+                master_node_name = f"{cluster_tfvars.cluster_name}-k8s-master-{i}"
+                tmp_ip = hosts_data["_meta"]["hostvars"][master_node_name]["ansible_host"]
+                cmd = f'ssh-keygen -f "/root/.ssh/known_hosts" -R "{tmp_ip}"'
+                result = subprocess.run(cmd, shell=True, capture_output=True)
+                if result.returncode != 0:
+                    task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                    task_info.state = "failed"
+                    task_info.detail = str(result.stderr)
+                    update_task_state(task_info)
+                    raise Exception("Ansible kubernetes deployment failed, configure ssh-keygen error")
+        if cluster_tfvars.password != "":
+            cmd = f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no {cluster_tfvars.ssh_user}@{master_ip}'
+            result = subprocess.run(cmd, shell=True, capture_output=True)
+            if result.returncode != 0:
+                task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                task_info.state = "failed"
+                task_info.detail = str(result.stderr)
+                update_task_state(task_info)
+                raise Exception("Ansible kubernetes deployment failed, configure sshpass error")
+
+        # 执行ansible命令验证是否能够连接到所有节点
+        print(f"check all node status {task_id}")
+        ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
+        os.chdir(ansible_dir)
+        key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "id_rsa")
+        # 添加重试逻辑
+        start_time = time.time()
+        max_retry_time = 600  # 10分钟超时
+        retry_interval = 5    # 5秒重试间隔
+        connection_success = False
+
+        while not connection_success and (time.time() - start_time) < max_retry_time:
+            nodes_result = check_nodes_connectivity(host_file, key_file_path)
+            
+            if nodes_result["all_nodes_reachable"]:
+                connection_success = True
+                print(f"all node connect sussess {task_id}")    
+                break
+            else:
+                unreachable_nodes = ", ".join(nodes_result["unreachable_nodes"])
+                print(f"some node can not connect: {unreachable_nodes}，{retry_interval}s after retry...")
+                # 记录日志，显示哪些节点不可达
+                with open(os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tf_dict["id"], "connection_check.log"), "a") as log_file:
+                    log_file.write(f"{datetime.now()}: unreachable nodes: {unreachable_nodes}\n")
+                    log_file.write(f"错误输出: {nodes_result['error']}\n\n")
+                
+                time.sleep(retry_interval)
+
+        # 如果超时后仍然无法连接所有节点，则抛出错误
+        if not connection_success:
+            error_msg = f"{int(time.time() - start_time)}s retry node can not connect: {', '.join(nodes_result['unreachable_nodes'])}"
+            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "failed"
+            task_info.detail = error_msg
+            update_task_state(task_info)
+            raise Exception(error_msg)
+
         output_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory",
                                    str(cluster.id), "terraform", "output.tfvars.json")
         with open(output_file) as f:

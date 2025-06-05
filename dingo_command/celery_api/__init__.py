@@ -21,7 +21,10 @@ default_opts = [
     cfg.StrOpt('cluster_work_dir', default='/var/lib/dingo-command', help='the openstack region name'),
     cfg.StrOpt('harbor_url', default=None, help='harbor url'),
     cfg.StrOpt('ubuntu_repo', default=None, help='repo url'),
-    cfg.StrOpt('fileserver_url', default=None, help='fileserver url')
+    cfg.StrOpt('fileserver_url', default=None, help='fileserver url'),
+    cfg.StrOpt('cluster_router_name', default='cluster-router', help='cluster-router'),
+    cfg.IntOpt('task_timeout', default=3600, help='cluster-router'),
+    cfg.IntOpt('soft_task_timeout', default=3600, help='cluster-router'),
 ]
 
 CONF.register_group(default_group)

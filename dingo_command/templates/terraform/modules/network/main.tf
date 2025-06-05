@@ -1,8 +1,7 @@
 data "openstack_networking_router_v2" "cluster" {
   name      = "cluster-router"
-  count     = var.use_neutron == 1 && var.router_id != null ? 1 : 0
+  count     = var.use_neutron == 1 && var.router_id != null && var.router_id != "" ? 1 : 0
 }
-
 resource "openstack_networking_router_v2" "cluster" {
   name                = "cluster-router"
   count               = length(data.openstack_networking_router_v2.cluster) == 0 ? 1 : 0

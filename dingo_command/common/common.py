@@ -1,4 +1,3 @@
-# 常用处理方法
 from keystoneauth1 import loading as ks_loading
 from oslo_config import cfg
 

@@ -38,6 +38,20 @@ def tfstates(root=None):
             #print(name)
             if os.path.splitext(name)[-1] == '.tfstate':
                 yield os.path.join(dirpath, name)
+def parse_outputs(resources):
+    """从 Terraform state 中解析 outputs"""
+    outputs = {}
+    
+    for filename in resources:
+        with open(filename, 'r') as json_file:
+            state = json.load(json_file)
+            if 'outputs' in state:
+                for key, output_data in state['outputs'].items():
+                    outputs[key] = output_data.get('value')
+    
+    return outputs
+
+
 
 def convert_to_v3_structure(attributes, prefix=''):
     """ Convert the attributes from v4 to v3
@@ -125,9 +139,25 @@ def iterips(resources):
         if resource_type == 'openstack_networking_floatingip_associate_v2':
             yield openstack_floating_ips(resource)
 
+def iterips_v2(resources):
+    '''yield ip tuples of (port_id, ip)'''
+    float_ip = ""
+    port_id = ""
+    for module_name, key, resource in resources:
+        #print("module_name: ", module_name,"key: ", key,"resource: ", resource)
+        resource_type, name = key.split('.', 1)
+        if resource_type == 'openstack_networking_portforwarding_v2' and name == 'master_portforward.0':
+            port_id = resource['primary']['attributes']['internal_port_id']
+        if resource_type == 'openstack_networking_floatingip_v2' and name == 'bastion_fip.0':
+            float_ip = resource['primary']['attributes']['address']
+
+    if port_id:
+        yield (port_id, float_ip)
+
 def iterlbips(resources):
     '''yield ip tuples of (port_id, ip)'''
     for module_name, key, resource in resources:
+        #print("module_name: ", module_name,"key: ", key,"resource: ", resource)
         resource_type, name = key.split('.', 1)
         if resource_type == 'openstack_networking_floatingip_associate_v2' and 'public_ip.0' == name:
             raw_attrs = resource['primary']['attributes']
@@ -344,6 +374,12 @@ def openstack_host(resource, module_name):
     if 'metadata.ssh_port' in raw_attrs:
         attrs['ansible_port'] = raw_attrs['metadata.ssh_port']
 
+    #如果name中包含master-1
+    # if 'master' in name and 'master-1' not in name:
+    #     attrs['ansible_ssh_common_args'] = '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    # else:
+    #     attrs['ansible_ssh_common_args'] = '-o StrictHostKeyChecking=no'
+
     if 'volume.#' in list(raw_attrs.keys()) and int(raw_attrs['volume.#']) > 0:
         device_index = 1
         for key, value in list(raw_attrs.items()):
@@ -374,7 +410,7 @@ def openstack_host(resource, module_name):
     return name, attrs, groups
 
 
-def iter_host_ips(hosts, ips,ip_lb, adminsubnet, bussububnet):
+def iter_host_ips(hosts, ips,ip_lb, adminsubnet, bussububnet, bastion_ip):
     '''Update hosts that have an entry in the floating IP list'''
     for host in hosts:
         port_id = host[1]['port_id']
@@ -382,29 +418,41 @@ def iter_host_ips(hosts, ips,ip_lb, adminsubnet, bussububnet):
         # print("bussububnet: ", bussububnet)
         if port_id in ips:
             ip = ips[port_id]
-
-            host[1].update({
+            if ip != "":
+                host[1].update({
                 'access_ip_v4': ip,
                 'access_ip': ip,
                 'public_ipv4': ip,
-                'ansible_host': ip
-            })
+                'ansible_host': bastion_ip
+                })
+            else:
+                host[1].update({
+                'ansible_host': bastion_ip
+                })
+
+            
         host[1]['subnet_id'] = adminsubnet
         host[1]['bussubnet_id'] = bussububnet
-        host[1]['lb_ip'] = ip_lb
+        if ip_lb == None or ip_lb == "":
+            host[1]['lb_ip'] = ""
+        else:
+            host[1]['lb_ip'] = ip_lb 
         if 'use_access_ip' in host[1]['metadata'] and host[1]['metadata']['use_access_ip'] == "0" and 'access_ip' in host[1]:
                 host[1].pop('access_ip')
 
         yield host
 
-def iter_host_network(hosts, adminsubnet, bussububnet):
+def iter_host_network(hosts,lb_ip, adminsubnet, bussububnet):
     '''Update hosts that have an entry in the floating IP list'''
     for host in hosts:
         # print("adminsubnet: ", adminsubnet)
         # print("bussububnet: ", bussububnet)
         host[1]['subnet_id'] = adminsubnet
         host[1]['bussubnet_id'] = bussububnet
-        
+        if lb_ip == None or lb_ip == "":
+            host[1]['lb_ip'] = ""
+        else:
+            host[1]['lb_ip'] = lb_ip 
         yield host
 ## QUERY TYPES
 def query_host(hosts, target):
@@ -480,15 +528,21 @@ def main():
     hosts = iterhosts(iterresources(tfstates(args.root)))
 
     # Perform a second pass on the file to pick up floating_ip entries to update the ip address of referenced hosts
-    ips = dict(iterips(iterresources(tfstates(args.root))))
+    ips = dict(iterips_v2(iterresources(tfstates(args.root))))
     lb_ip = iterlbips(iterresources(tfstates(args.root)))
     adminsubnet, bussububnet = itersubnets(iterresources(tfstates(args.root)))
     #hosts = iter_host_ips(hosts, ips, lb_ip, adminsubnet, bussububnet)
-
+    
+        #print(f"第一个 bastion IP: {first_bastion_ip}")
+    float_ip = ""
+    outputs = parse_outputs(tfstates(args.root))
+    bastion_fips = outputs.get('bastion_fips', [])
+    if bastion_fips:
+        float_ip = bastion_fips[0]
     if ips:
-        hosts = iter_host_ips(hosts, ips, lb_ip, adminsubnet, bussububnet)
+        hosts = iter_host_ips(hosts, ips, lb_ip, adminsubnet, bussububnet, float_ip)
     else:
-        hosts = iter_host_network(hosts, adminsubnet, bussububnet)
+        hosts = iter_host_network(hosts, lb_ip, adminsubnet, bussububnet)
     if args.list:
         output = query_list(hosts)
         if args.nometa:

@@ -109,6 +109,11 @@ variable "bastion_fips" {
   type = list
 }
 
+variable "bastion_fip_ids" {
+  type = list
+}
+
+
 variable "bastion_allowed_remote_ips" {
   type = list
 }
@@ -161,6 +166,9 @@ variable "nodes" {
     az                     = string
     flavor                 = string
     floating_ip            = bool
+    use_local_disk         = bool
+    volume_type            = string
+    volume_size            = number
     port_forwards          = optional(list(object({
     external_port = number
     internal_port = number
@@ -171,7 +179,6 @@ variable "nodes" {
     extra_groups           = optional(string)
     image_id               = optional(string)
     root_volume_size_in_gb = optional(number)
-    volume_type            = optional(string)
     network_id             = optional(string)
     additional_server_groups = optional(list(string))
     server_group           = optional(string)
@@ -304,3 +311,4 @@ variable "tenant_id" {
 }
 
 variable "forward_float_ip_id" {}
+variable "etcd_volume_type" {}

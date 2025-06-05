@@ -67,5 +67,7 @@ except OperationalError as e:
 celery_app.conf.task_default_queue = "main-queue"
 
 
+
+
 if __name__ == "__main__":
     celery_app.worker_main()

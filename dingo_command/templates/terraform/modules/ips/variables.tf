@@ -40,3 +40,7 @@ variable "tenant_id" {
   default = ""
 }
 variable "external_subnetids" {}
+variable "bastion_floatip_id" {
+  type    = string
+  default = ""
+}
