@@ -348,20 +348,15 @@ class ClusterService:
         try:
             # 按照条件从数据库中查询数据
             count, data = ClusterSQL.list_cluster(query_params, page, page_size, sort_keys, sort_dirs)
-             # 过滤掉状态为 "deleted" 的集群
-            filtered_data = [cluster for cluster in data if cluster.status != "deleted"]
-            
-            # 重新计算过滤后的数量
-            filtered_count = len(filtered_data)
-            # 返回数据
+
             res = {}
             # 页数相关信息
             if page and page_size:
                 res['currentPage'] = page
                 res['pageSize'] = page_size
                 res['totalPages'] = ceil(count / int(page_size))
-            res['total'] = filtered_count
-            res['data'] = filtered_data
+            res['total'] = count
+            res['data'] = data
             return res
         except Exception as e:
             import traceback

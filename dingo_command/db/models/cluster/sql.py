@@ -56,13 +56,8 @@ class ClusterSQL:
                 query = query.filter(Cluster.bus_address.like('%' + query_params["bus_address"] + '%'))
             if "cni" in query_params and query_params["cni"]:
                 query = query.filter(Cluster.cni.like('%' + query_params["cni"] + '%'))
-            if "user_name" in query_params and query_params["user_name"]:
-                query = query.filter(Cluster.user_name.like('%' + query_params["user_name"] + '%'))
-            if "manufacture_id" in query_params and query_params["manufacture_id"]:
-                query = query.filter(Cluster.id == query_params["manufacture_id"])
-            if "manufacture_name" in query_params and query_params["manufacture_name"]:
-                query = query.filter(Cluster.name.like('%' + query_params["manufacture_name"] + '%'))
             # 总数
+            query = query.filter(Cluster.status != "deleted")
             count = query.count()
             # 排序
             if sort_keys is not None and sort_keys in cluster_dir_dic:

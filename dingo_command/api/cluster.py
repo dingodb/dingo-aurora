@@ -55,14 +55,9 @@ async def list_cluster(id:str = Query(None, description="集群id"),
             query_params['project_id'] = project_id
         if type:
             query_params['type'] = type
-        query_params = {}
-        # 查询条件组装
         if id:
             query_params['id'] = id
-        if name:
-            query_params['name'] = name
-        if type:
-            query_params['type'] = type
+
         result = cluster_service.list_clusters(query_params, page,page_size, sort_keys,sort_dirs)
         return result
     except Exception as e:

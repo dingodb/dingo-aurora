@@ -23,6 +23,18 @@ data "cloudinit_config" "cloudinit" {
   }
 }
 
+data "cloudinit_config" "master-cloudinit" {
+  part {
+    content_type =  "text/cloud-config"
+    content = templatefile("${path.module}/templates/cloudinit-master.yaml.tmpl", {
+      extra_partitions = [],
+      netplan_critical_dhcp_interface = "",
+      ssh_user = var.ssh_user
+      password = var.password
+    })
+  }
+}
+
 data "openstack_networking_network_v2" "admin_network" {
   count = var.use_existing_network && var.bus_network_id != "" ? 1 : 0
   network_id  = var.admin_network_id
@@ -211,7 +223,7 @@ resource "openstack_compute_instance_v2" "k8s-master" {
   image_id          = local.image_to_use_master
   flavor_id         = local.master_flavor
   key_pair          = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : ""
-  user_data         = data.cloudinit_config.cloudinit.rendered
+  user_data         = data.cloudinit_config.master-cloudinit.rendered
   security_groups = [openstack_networking_secgroup_v2.secgroup.name]
 
   dynamic "block_device" {
@@ -235,7 +247,7 @@ resource "openstack_compute_instance_v2" "k8s-master" {
       volume_type           = var.etcd_volume_type
       boot_index            = -1
       delete_on_termination = true
-      guest_format          = "ext4"
+      guest_format          = "xfs"
     }
   }
   tags = ["kubernetes control"]
@@ -311,7 +323,7 @@ resource "openstack_compute_instance_v2" "k8s-master-no-floatip" {
   image_id          = local.image_to_use_master
   flavor_id         = local.master_flavor
   key_pair          = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : ""
-  user_data         = data.cloudinit_config.cloudinit.rendered
+  user_data         = data.cloudinit_config.master-cloudinit.rendered
   security_groups = [openstack_networking_secgroup_v2.secgroup.name]
   dynamic "block_device" {
     for_each = var.etcd_volume_type != "" ? [1] : []
