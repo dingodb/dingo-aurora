@@ -537,7 +537,7 @@ def scale_kubernetes(cluster: ClusterObject, scale_nodes):
         return False, str(e)
 
 
-def get_cluster_kubeconfig(cluster: ClusterTFVarsObject, lb_ip, master_ip, float_ip):
+def get_cluster_kubeconfig(cluster: ClusterTFVarsObject, lb_ip, master_ip, float_ip,ssh_port):
     """获取集群的kubeconfig配置"""
 
     print(f"lb_ip: {lb_ip}, master_ip: {master_ip}, float_ip: {float_ip}")
@@ -549,6 +549,7 @@ def get_cluster_kubeconfig(cluster: ClusterTFVarsObject, lb_ip, master_ip, float
                 [
                     "ssh",
                     "-o", "StrictHostKeyChecking=no",
+                    "-p", str(ssh_port),
                     f"{cluster.ssh_user}@{float_ip}",
                     "sudo cat /etc/kubernetes/admin.conf"
                 ],
@@ -882,10 +883,10 @@ def remove_bastion_fip_from_state(cluster_dir):
             print(f"rm bastion_fip from terraform state ")
             return True
 
-        elif "module.network.data.openstack_networking_router_v2.cluster[0]" in state_resources:
+        elif "module.network.openstack_networking_router_v2.cluster[0]" in state_resources:
             # 执行 terraform state rm 移除资源
             remove_result = subprocess.run(
-                ["terraform", "state", "rm", target_resource],
+                ["terraform", "state", "rm", "module.network.openstack_networking_router_v2.cluster[0]"],
                 capture_output=True,
                 text=True,
                 check=True
@@ -1038,70 +1039,6 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                             db_instance.floating_ip = v.get("public_ipv4")
                         break
 
-        print(f"config ssh no pass {task_id}")
-        # ensure /root/.ssh/known_hosts exists
-        if os.path.exists("/root/.ssh/known_hosts"):
-            for i in range(1, cluster_tfvars.number_of_k8s_masters + 1):
-                print(f"delete host from know_hosts  {task_id}")
-                master_node_name = f"{cluster_tfvars.cluster_name}-k8s-master-{i}"
-                tmp_ip = hosts_data["_meta"]["hostvars"][master_node_name]["access_ip_v4"]
-                cmd = f'ssh-keygen -f "/root/.ssh/known_hosts" -R "{tmp_ip}"'
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-                if result.returncode != 0:
-                    task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                    task_info.state = "failed"
-                    task_info.detail = str(result.stderr)
-                    update_task_state(task_info)
-                    raise Exception(f"Ansible kubernetes deployment failed, "
-                                    f"configure ssh-keygen error {str(result.stderr)}")
-        if cluster_tfvars.password != "":
-            cmd = f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no {cluster_tfvars.ssh_user}@{master_ip}'
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            if result.returncode != 0:
-                task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                task_info.state = "failed"
-                task_info.detail = str(result.stderr)
-                update_task_state(task_info)
-                raise Exception(f"Ansible kubernetes deployment failed, configure sshpass error {str(result.stderr)}")
-
-        # 执行ansible命令验证是否能够连接到所有节点
-        print(f"check all node status {task_id}")
-        ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
-        os.chdir(ansible_dir)
-        key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "id_rsa")
-        # 添加重试逻辑
-        start_time = time.time()
-        max_retry_time = 600  # 10分钟超时
-        retry_interval = 5    # 5秒重试间隔
-        connection_success = False
-
-        while not connection_success and (time.time() - start_time) < max_retry_time:
-            nodes_result = check_nodes_connectivity(host_file, key_file_path)
-            
-            if nodes_result["all_nodes_reachable"]:
-                connection_success = True
-                print(f"all node connect sussess {task_id}")    
-                break
-            else:
-                unreachable_nodes = ", ".join(nodes_result["unreachable_nodes"])
-                print(f"some node can not connect: {unreachable_nodes}，{retry_interval}s after retry...")
-                # 记录日志，显示哪些节点不可达
-                with open(os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tf_dict["id"],
-                                       "connection_check.log"), "a") as log_file:
-                    log_file.write(f"{datetime.now()}: unreachable nodes: {unreachable_nodes}\n")
-                    log_file.write(f"错误输出: {nodes_result['error']}\n\n")
-                
-                time.sleep(retry_interval)
-
-        # 如果超时后仍然无法连接所有节点，则抛出错误
-        if not connection_success:
-            error_msg = (f"{int(time.time() - start_time)}s retry node can not connect:"
-                         f" {', '.join(nodes_result['unreachable_nodes'])}")
-            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-            task_info.state = "failed"
-            task_info.detail = error_msg
-            update_task_state(task_info)
-            raise Exception(error_msg)
 
         res = subprocess.run(["python3", host_file, "--list"], capture_output=True, text=True)
         if res.returncode != 0:
@@ -1117,7 +1054,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         master_node_name = cluster_tfvars.cluster_name + "-k8s-master-1"
         master_ip = hosts_data["_meta"]["hostvars"][master_node_name]["ip"]
         float_ip = hosts_data["_meta"]["hostvars"][master_node_name]["access_ip_v4"]
-        
+        ssh_port = hosts_data["_meta"]["hostvars"][master_node_name].get("ansible_port", 22)
         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
         task_info.state = "success"
         task_info.detail = TaskService.TaskDetail.pre_install.value
@@ -1132,7 +1069,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             raise Exception(f"Ansible kubernetes deployment failed: {ansible_result[1]}")
         # 阻塞线程，直到ansible_client.get_playbook_result()返回结果
         # 获取集群的kube_config
-        kube_config = get_cluster_kubeconfig(cluster_tfvars,lb_ip,master_ip,float_ip)
+        kube_config = get_cluster_kubeconfig(cluster_tfvars,lb_ip,master_ip,float_ip,ssh_port)
         # 更新集群状态为running
         query_params = {}
         query_params["id"] = cluster_dict["id"]

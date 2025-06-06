@@ -1,5 +1,6 @@
 data "openstack_networking_router_v2" "cluster" {
   name      = "cluster-router"
+  tenant_id = var.tenant_id
   count     = var.use_neutron == 1 && var.router_id != null && var.router_id != "" ? 1 : 0
 }
 resource "openstack_networking_router_v2" "cluster" {
