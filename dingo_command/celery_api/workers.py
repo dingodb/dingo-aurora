@@ -329,7 +329,7 @@ def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list):
         count, db_clusters = ClusterSQL.list_cluster(query_params)
         db_cluster = db_clusters[0]
         db_cluster.status = 'error'
-        db_cluster.status_msg = str(e)
+        db_cluster.status_msg = replace_ansi_with_single_newline(str(e))
         ClusterSQL.update_cluster(db_cluster)
         raise
 
@@ -1095,7 +1095,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         count, db_clusters = ClusterSQL.list_cluster(query_params)
         c = db_clusters[0]
         c.status = 'error'
-        c.status_msg = str(e)
+        c.status_msg = replace_ansi_with_single_newline(str(e))
         ClusterSQL.update_cluster(c)
         raise
 
@@ -1257,7 +1257,7 @@ def delete_cluster(self, cluster_id, token):
         count, db_clusters = ClusterSQL.list_cluster(query_params)
         c = db_clusters[0]
         c.status = 'error'
-        c.status_msg = f"delete cluster error: {str(e)}"
+        c.status_msg = f"delete cluster error: {replace_ansi_with_single_newline(str(e))}"
         ClusterSQL.update_cluster(c)
                 
 
@@ -1302,7 +1302,7 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
         thread.join()
         if runner.rc != 0:
             print("{}".format(runner.stdout.read()))
-            raise Exception(f"Ansible remove node failed: {runner.stdout.read()}")
+            raise Exception(f"Ansible remove node failed, please check log")
 
         # # 2、执行完删除k8s这些节点之后，再执行terraform销毁这些节点（这里是单独修改output.json文件还是需要通过之前生成的output.json文件生成）
         # output_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id),
