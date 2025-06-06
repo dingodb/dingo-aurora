@@ -4,6 +4,7 @@ import random
 import ipaddress
 import base64
 import os
+import re
 import subprocess
 import time
 import copy
@@ -116,7 +117,15 @@ class ClusterTFVarsObject(BaseModel):
     bastion_floatip_id: Optional[str] = Field(None, description="堡垒机浮动ip的id")
     bastion_fips: Optional[list[str]] = Field(None, description="堡垒机浮动ip的地址")
     etcd_volume_type: Optional[str] = Field(None, description="堡垒机浮动ip的地址")
-    
+
+def replace_ansi_with_single_newline(text):
+    ansi_pattern = re.compile(r'\x1b\[[\d;]*[a-zA-Z]')
+    text_with_newlines = ansi_pattern.sub('\n', text)
+    consecutive_newline_pattern = re.compile(r'\n{2,}')
+    cleaned_text = consecutive_newline_pattern.sub('\n', text_with_newlines)
+    return cleaned_text
+
+
 def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
     """使用Terraform创建基础设施"""
     try:
@@ -179,7 +188,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
             task_info.detail = res.stderr
             update_task_state(task_info)
             print(f"Terraform init error: {res.stderr}")
-            return False, res.stderr
+            return False, replace_ansi_with_single_newline(res.stderr)
        
         # 执行terraform apply
         # os.environ['OS_CLOUD']=cluster.region_name
@@ -200,7 +209,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
             task_info.detail = res.stderr
             update_task_state(task_info)
             print(f"Terraform apply error: {res.stderr}")
-            return False, res.stderr
+            return False, replace_ansi_with_single_newline(res.stderr)
         key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory",str(cluster.id), "id_rsa")
         private_key_content = ""
         if os.path.exists(key_file_path):
@@ -250,7 +259,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
 
 
 @celery_app.task(bind=True, time_limit=TASK_TIMEOUT, soft_time_limit=SOFT_TASK_TIMEOUT)
-def create_cluster(self, cluster_tf: ClusterTFVarsObject, cluster_dict: ClusterObject, instance_bm_list):
+def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list):
     try:
         task_id = str(self.request.id)
         cluster_id = cluster_tf["id"]
@@ -1275,7 +1284,8 @@ def delete_cluster(self, cluster_id, token):
             count, db_clusters = ClusterSQL.list_cluster(query_params)
             c = db_clusters[0]
             c.status = 'error'
-            c.status_msg = f"delete cluster error: {res.stderr}"
+            error_msg = replace_ansi_with_single_newline(res.stderr)
+            c.status_msg = f"delete cluster error: {error_msg}"
             ClusterSQL.update_cluster(c)
             return False
         else:
@@ -1442,6 +1452,15 @@ def delete_baremetal(self, cluster_id, cluster_name, instance_list, token):
             "-var-file=output.tfvars.json"
         ], capture_output=True, text=True)
         session = get_session()
+        if res.returncode != 0:
+            # 发生错误时更新集群务状态为"失败"
+            print(f"Terraform error: {res.stderr}")
+            with session.begin():
+                db_cluster = session.get(Cluster, (cluster_id, cluster_name))
+                db_cluster.status = 'error'
+                error_msg = replace_ansi_with_single_newline(res.stderr)
+                db_cluster.status_msg = f"delete baremetal error: {error_msg}"
+            return False
         with session.begin():
             db_cluster = session.get(Cluster, (cluster_id, cluster_name))
             db_cluster.status = 'running'
@@ -1451,8 +1470,14 @@ def delete_baremetal(self, cluster_id, cluster_name, instance_list, token):
                 if node:
                     session.delete(node)
 
-    except subprocess.CalledProcessError as e:
+    except Exception as e:
         print(f"Ansible error: {e}")
+        session = get_session()
+        with session.begin():
+            db_cluster = session.get(Cluster, (cluster_id, cluster_name))
+            db_cluster.status = 'error'
+            error_msg = replace_ansi_with_single_newline(str(e))
+            db_cluster.status_msg = f"delete baremetal error: {error_msg}"
         return False
 
 @celery_app.task(bind=True)

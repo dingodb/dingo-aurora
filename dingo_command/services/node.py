@@ -19,7 +19,7 @@ from dingo_command.db.models.node.sql import NodeSQL
 from dingo_command.db.models.instance.sql import InstanceSQL
 from math import ceil
 from oslo_log import log
-from dingo_command.api.model.cluster import ClusterTFVarsObject, NodeGroup, ClusterObject, ScaleNodeObject
+from dingo_command.api.model.cluster import ClusterTFVarsObject, NodeGroup, ClusterObject, ScaleNodeObject, PortForwards
 from dingo_command.db.models.cluster.models import Cluster as ClusterDB
 from dingo_command.db.models.node.models import NodeInfo as NodeDB
 from dingo_command.db.models.instance.models import Instance as InstanceDB
@@ -185,7 +185,10 @@ class NodeService:
                         floating_ip=False,
                         etcd=False,
                         image_id=node.image,
-                        port_forwards=forward_rules_new
+                        port_forwards=[PortForwards(**forward) for forward in forward_rules_new],
+                        use_local_disk=node.use_local_disk,
+                        volume_size=node.volume_size,
+                        volume_type=node.volume_type
                     )
                     scale_nodes.append(f"{cluster_info.name}-node-{int(node_index)}")
                     instance_db = InstanceDB()
@@ -263,7 +266,8 @@ class NodeService:
                         flavor=node.flavor_id,
                         floating_ip=False,
                         etcd=False,
-                        image_id=node.image
+                        image_id=node.image,
+                        port_forwards=[PortForwards(**forward) for forward in forward_rules_new]
                     )
                     scale_nodes.append(f"{cluster_info.name}-node-{int(node_index)}")
                     instance_db = InstanceDB()

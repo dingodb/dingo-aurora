@@ -4,11 +4,11 @@ set -ex
 # copy dir
 TARGET_DIR="/var/lib/dingo-command/ansible-deploy"
 if [ ! -d "$TARGET_DIR" ]; then
-    echo "the taget dir is not exist, copying dir"
+    echo "the target dir is not exist, copying dir"
     mkdir -p /var/lib/dingo-command
     cp -r /opt/dingo-aurora/dingo_command/templates/ansible-deploy /var/lib/dingo-command
 else
-    echo "the taget dir is exist"
+    echo "the target dir is exist"
 fi
 
 # kolla_set_configs
