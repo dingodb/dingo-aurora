@@ -331,3 +331,11 @@ class CloudKittyService:
             import traceback
             traceback.print_exc()
             raise RuntimeError(f"modify rating module config hashmap thresholding fail: {e}")
+
+    def edit_rating_module_modules(self, module_id, modules):
+        try:
+            return CloudKittyClient().edit_rating_module_modules(module_id, modules)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise RuntimeError(f"modify rating modules fail: {e}")

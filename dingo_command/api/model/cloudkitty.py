@@ -36,3 +36,10 @@ class RatingModuleConfigHashMapThreshold(BaseModel):
     field_id: Optional[str] = Field(None, description="字段ID")
     service_id: Optional[str] = Field(None, description="服务ID")
     level: Optional[str] = Field(None, description="级别")
+
+class RatingModules(BaseModel):
+    module_id: Optional[str] = Field(None, description="模型ID")
+    description: Optional[str] = Field(None, description="描述")
+    enabled: Optional[bool] = Field(None, description="是否启用")
+    hot_config: Optional[bool] = Field(None, description="是否可配置", alias="hot-config")
+    priority: Optional[int] = Field(None, description="优先级")

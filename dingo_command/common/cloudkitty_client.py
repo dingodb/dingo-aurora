@@ -145,3 +145,14 @@ class CloudKittyClient:
             print(f"cloudkitty[{endpoint}/v1/rating/module_config/hashmap/thresholds/{mapping_id}] status_code:{response.status_code}, 请求失败: {response.text}")
             raise Exception(f"{response.text}")
         return response.json()
+
+    @_require_valid_token
+    def edit_rating_module_modules(self, module_id, modules):
+        endpoint = self.get_service_endpoint('rating')
+        # 转换键名
+        output_data = {k.replace('_', '-') if k == "hot_config" else k: v for k, v in modules}
+        response = self._session.put(f"{endpoint}/v1/rating/modules/{module_id}", data=json.dumps(output_data), headers={'Content-Type': 'application/json'})
+        if response.status_code != 200:
+            print(f"cloudkitty[{endpoint}/v1/rating/modules/{module_id}] status_code:{response.status_code}, 请求失败: {response.text}")
+            raise Exception(f"{response.text}")
+        return response.json()

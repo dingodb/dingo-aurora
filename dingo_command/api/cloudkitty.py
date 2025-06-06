@@ -5,7 +5,7 @@ from typing import List
 from fastapi.responses import FileResponse
 from urllib.parse import unquote
 from starlette.background import BackgroundTask
-from dingo_command.api.model.cloudkitty import CloudKittyRatingSummaryDetail, RatingModuleConfigHashMapMapping, RatingModuleConfigHashMapThreshold
+from dingo_command.api.model.cloudkitty import CloudKittyRatingSummaryDetail, RatingModuleConfigHashMapMapping, RatingModuleConfigHashMapThreshold, RatingModules
 from dingo_command.services.cloudkitty import CloudKittyService
 from dingo_command.utils import file_utils
 
@@ -113,9 +113,8 @@ async def download_rating_summary_detail_pdf(filePath: str = Query(None, descrip
 #         )
 #     raise HTTPException(status_code=400, detail="Execl file not found")
 
-@router.put("/rating/module_config/hashmap/mappings/{mapping_id}", summary="编辑计费映射哈希字段或服务映射",description="编辑计费映射哈希字段或服务映射")
+@router.put("/cloudkitty/module_config/hashmap/mappings/{mapping_id}", summary="编辑计费映射哈希字段或服务映射",description="编辑计费映射哈希字段或服务映射")
 async def edit_rating_module_config_hashmap_mappings(mapping_id: str, mapping: RatingModuleConfigHashMapMapping):
-    # 文件存在则下载
     try:
         return cloudkitty_service.edit_rating_module_config_hashmap_mappings(mapping_id, mapping)
     except Exception as e:
@@ -123,14 +122,23 @@ async def edit_rating_module_config_hashmap_mappings(mapping_id: str, mapping: R
         traceback.print_exc()
         raise HTTPException(status_code=400, detail={e})
 
-@router.put("/rating/module_config/hashmap/thresholds/{threshold_id}", summary="编辑计费映射哈希服务阈值",description="编辑计费映射哈希服务阈值")
+@router.put("/cloudkitty/module_config/hashmap/thresholds/{threshold_id}", summary="编辑计费映射哈希服务阈值",description="编辑计费映射哈希服务阈值")
 async def edit_rating_module_config_hashmap_thresholdings(threshold_id: str, thresholding: RatingModuleConfigHashMapThreshold):
-    # 文件存在则下载
     try:
         return cloudkitty_service.edit_rating_module_config_hashmap_thresholdings(threshold_id, thresholding)
     except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail={e})
+
+@router.put("/cloudkitty/modules/{module_id}", summary="编辑计费模型（禁用/启用模块、优先级）",description="编辑计费模型（禁用/启用模块、优先级）")
+async def edit_rating_module_modules(module_id: str, modules: RatingModules):
+    try:
+        return cloudkitty_service.edit_rating_module_modules(module_id, modules)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail={e})
+
 
 
