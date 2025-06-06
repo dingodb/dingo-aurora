@@ -81,8 +81,7 @@ class AssetResourceRelationSQL:
                                   AssetResourceRelationInfo.resource_project_name.label("resource_project_name"),
                                   )
             # 外连接
-            query = query.outerjoin(AssetBasicInfo, AssetBasicInfo.id == AssetResourceRelationInfo.asset_id). \
-                outerjoin(ResourceMetrics, ResourceMetrics.resource_id == AssetResourceRelationInfo.resource_id).group_by(AssetResourceRelationInfo.resource_id)
+            query = query.outerjoin(AssetBasicInfo, AssetBasicInfo.id == AssetResourceRelationInfo.asset_id).group_by(AssetResourceRelationInfo.resource_id)
             if 'resource_name' in query_params and query_params['resource_name']:
                 query = query.filter(AssetResourceRelationInfo.resource_name.like('%' + query_params['resource_name'] + '%'))
             if 'resource_status' in query_params and query_params['resource_status']:
@@ -115,18 +114,21 @@ class AssetResourceRelationSQL:
                     elif sort_dirs == "descend":
                         query = query.order_by(resource_detail_list_dir_dic[sort_keys].desc())
                 else:
-                    from sqlalchemy import case, null
                     metric_name = sort_keys.replace("resource_", "")
-
-                    # 构建case表达式处理空值
-                    order_expr = case(
-                (ResourceMetrics.name == metric_name, ResourceMetrics.data),
-                        else_=0  # 默认值为0，可根据业务需求调整
+                    # 使用left join确保主表数据不丢失
+                    query = query.outerjoin(
+                        ResourceMetrics,
+                        and_(
+                            ResourceMetrics.resource_id == AssetResourceRelationInfo.resource_id,
+                            ResourceMetrics.name == metric_name
+                        )
                     )
-                    if sort_dirs == "ascend" or sort_dirs is None:
-                        query = query.order_by(order_expr.asc())
-                    elif sort_dirs == "descend":
+                    # 使用coalesce处理空值
+                    order_expr = func.coalesce(ResourceMetrics.data, 0)
+                    if sort_dirs == "descend":
                         query = query.order_by(order_expr.desc())
+                    else:
+                        query = query.order_by(order_expr.asc())
             else:
                 query = query.order_by(AssetResourceRelationInfo.create_date.desc())
             # 分页条件
