@@ -440,7 +440,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
             task_info.state = "failed"
             task_info.detail = "ansible deploy kubernetes error"
             update_task_state(task_info)
-            raise Exception(f"Playbook execution failed: {runner.stdout.read()}")
+            raise Exception("Deploy kubernetes failed, please check log")
 
         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
         task_info.state = "success"
@@ -530,7 +530,7 @@ def scale_kubernetes(cluster: ClusterObject, scale_nodes):
             log_file.write(format(runner.stdout.read()))
         thread.join()
         if runner.rc != 0:
-            raise Exception(f"Playbook execution with sacle node failed: {runner.stdout.read()}")
+            raise Exception("Deploy kubernetes with sacle node failed, please check log")
         return True, ""
     except Exception as e:
         print(f"Ansible error: {e}")
@@ -1053,7 +1053,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         # 从_meta.hostvars中获取master节点的IP
         master_node_name = cluster_tfvars.cluster_name + "-k8s-master-1"
         master_ip = hosts_data["_meta"]["hostvars"][master_node_name]["ip"]
-        float_ip = hosts_data["_meta"]["hostvars"][master_node_name]["access_ip_v4"]
+        float_ip = hosts_data["_meta"]["hostvars"][master_node_name]["ansible_host"]
         ssh_port = hosts_data["_meta"]["hostvars"][master_node_name].get("ansible_port", 22)
         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
         task_info.state = "success"
@@ -1244,13 +1244,12 @@ def delete_cluster(self, cluster_id, token):
                 for instance in instances:
                     db_instance = session.get(Instance, instance.id)
                     session.delete(db_instance)
-
             # 1. 查询与该集群关联的所有实例
             query_params = {"cluster_id": cluster_id}
             count, nodes = NodeSQL.list_nodes(query_params, 1, -1, None, None)
             with session.begin():
                 for n in nodes:
-                    db_node = session.get(Instance, n.id)
+                    db_node = session.get(NodeInfo, n.id)
                     session.delete(db_node)
     except Exception as e:
         query_params = {}
