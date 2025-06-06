@@ -24,9 +24,10 @@ RUN pip install -r /opt/dingo-aurora/requirements.txt
 RUN apt-get clean \
     && rm -rf ~/.cache/pip \
     && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /etc/dingo-command /var/log/dingo-command /var/lib/dingo-command
+    && mkdir -p /etc/dingo-command /var/log/dingo-command /var/lib/dingo-command /root/.terraform.d/plugin-cache /etc/ansible
 
 COPY ./etc/.terraformrc /root/.terraformrc
+COPY ./etc/ansible.cfg /etc/ansible/ansible.cfg
 COPY ./etc/gunicorn.py /etc/dingo-command/gunicorn.py
 COPY ./etc/dingo-command.conf /etc/dingo-command/dingo-command.conf
 COPY ./etc/supervisord.conf /etc/dingo-command/supervisord.conf

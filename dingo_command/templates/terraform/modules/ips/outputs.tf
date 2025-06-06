@@ -19,7 +19,7 @@ locals {
       address = value.address
     }
   }
-  bastion_ips = var.bastion_floatip_id != "" && length(var.bastion_fips) > 0 ?  var.bastion_fips : openstack_networking_floatingip_v2.bastion_fip.*.address
+  bastion_ips = var.bastion_floatip_id != "" && var.bastion_fips != null && length(var.bastion_fips) > 0 ?  var.bastion_fips : openstack_networking_floatingip_v2.bastion_fip.*.address
 }
 
 # If k8s_master_fips is already defined as input, keep the same value since new FIPs have not been created.

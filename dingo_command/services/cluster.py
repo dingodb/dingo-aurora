@@ -738,7 +738,10 @@ class ClusterService:
                         flavor=node.flavor_id,
                         floating_ip=False,
                         etcd=False,
-                        port_forwards=cluster_new.port_forwards
+                        port_forwards=cluster_new.port_forwards,
+                        use_local_disk = node.use_local_disk,
+                        volume_size=node.volume_size,
+                        volume_type=node.volume_type
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
