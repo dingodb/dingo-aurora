@@ -23,7 +23,7 @@ pipeline {
             ], 
             printContributedVariables: true, 
             printPostContent: true,
-            regexpFilterExpression: 'completed\\sdevelop\\ssuccess',
+            regexpFilterExpression: 'completed\\smain\\ssuccess',
             regexpFilterText: '$action $branch $result',
             token: 'dingo-command'
         )

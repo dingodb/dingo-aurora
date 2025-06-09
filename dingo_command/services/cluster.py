@@ -404,19 +404,14 @@ class ClusterService:
                 private_key=cluster.private_key
             )
             #查询网络信息
-            neutron_api = neutron.API()  # 创建API类的实例
-            if cluster.admin_network_id != "null":
-                admin_network = neutron_api.get_network_by_id(cluster.admin_network_id)
-                res_cluster.network_config.admin_network_name = admin_network.get("name")
-            if cluster.admin_subnet_id != "null":   
-                admin_subnet = neutron_api.get_subnet_by_id(cluster.admin_subnet_id)
-                res_cluster.network_config.admin_cidr = admin_subnet.get("cidr")
-            if cluster.bus_network_id != "null":
-                bus_network = neutron_api.get_network_by_id(cluster.bus_network_id)
-                res_cluster.network_config.bus_network_name = bus_network.get("name")
-            if cluster.bus_subnet_id != "null":   
-                bus_subnet = neutron_api.get_subnet_by_id(cluster.bus_subnet_id)
-                res_cluster.network_config.bus_cidr = bus_subnet.get("cidr")
+            if not cluster.admin_network_id and cluster.admin_network_id != "":
+                res_cluster.network_config.admin_network_name = cluster.admin_network_name
+            if not cluster.admin_subnet_id and cluster.admin_subnet_id!= "":
+                res_cluster.network_config.admin_cidr = cluster.admin_network_cidr
+            if not cluster.bus_network_id and cluster.bus_network_id != "":
+                res_cluster.network_config.bus_network_name = cluster.bus_network_name
+            if not cluster.bus_subnet_id and cluster.bus_subnet_id != "":
+                res_cluster.network_config.bus_cidr = cluster.bus_network_cidr
             # 空
             # 查询节点信息
             node_query_params = {"cluster_id": cluster_id}

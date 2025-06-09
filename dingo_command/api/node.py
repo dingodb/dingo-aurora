@@ -96,7 +96,6 @@ async def create_node(cluster: ScaleNodeObject, token: str = Depends(get_token))
 @router.post("/node/remove", summary="缩容节点", description="缩容节点")
 async def delete_node(node_info: NodeRemoveObject):
     try:
-        print("node_info is:", node_info)
         # 先检查下是否有正在处于缩容的状态，如果是就直接返回
         cluster_service = ClusterService()
         result = cluster_service.get_cluster(node_info.cluster_id)

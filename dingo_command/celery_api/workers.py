@@ -125,6 +125,21 @@ def replace_ansi_with_single_newline(text):
     cleaned_text = consecutive_newline_pattern.sub('\n', text_with_newlines)
     return cleaned_text
 
+def get_node_info(node_list):
+    cpu_int_total = 0
+    gpu_int_total = 0
+    mem_int_total = 0
+    for node in node_list:
+        if node.get("cpu"):
+            cpu_int = node.get("cpu")
+            cpu_int_total += cpu_int
+        if node.get("gpu"):
+            gpu_int = node.get("gpu")
+            gpu_int_total += gpu_int
+        if node.get("mem"):
+            mem_int = node.get("mem")
+            mem_int_total += mem_int
+    return cpu_int_total, gpu_int_total, mem_int_total
 
 def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
     """使用Terraform创建基础设施"""
@@ -223,12 +238,20 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
             host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster.id, "hosts")
             # Give execute permissions to the host file
             os.chmod(host_file, 0o755)
-            network_id, bus_network_id, subnet_id, bussubnet_id = get_networks(cluster, task_info, host_file)
+            (network_id, network_name, bus_network_id, bus_network_name,
+             subnet_id, bussubnet_id) = get_networks(cluster, task_info, host_file)
             db_cluster.admin_network_id = network_id
             db_cluster.admin_subnet_id = subnet_id
             db_cluster.bus_network_id = bus_network_id
             db_cluster.bus_subnet_id = bussubnet_id
             db_cluster.private_key = private_key_content
+            db_cluster.admin_network_name = network_name
+            db_cluster.admin_network_cidr = cluster.subnet_cidr
+            db_cluster.bus_network_name = bus_network_name
+            if bussubnet_id != "":
+                neutron_api = neutron.API()
+                bus_subnet = neutron_api.get_subnet_by_id(bussubnet_id)
+                db_cluster.bus_network_cidr = bus_subnet.get("cidr")
             #db_cluster.status = "running"
             ClusterSQL.update_cluster(db_cluster)
         if res.returncode != 0:
@@ -259,7 +282,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
 
 
 @celery_app.task(bind=True, time_limit=TASK_TIMEOUT, soft_time_limit=SOFT_TASK_TIMEOUT)
-def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list):
+def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list, scale=False):
     try:
         task_id = str(self.request.id)
         cluster_id = cluster_tf["id"]
@@ -320,6 +343,11 @@ def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list):
         count, db_clusters = ClusterSQL.list_cluster(query_params)
         db_cluster = db_clusters[0]
         db_cluster.status = 'running'
+        if scale:
+            cpu_total, gpu_total, mem_total = get_node_info(instance_list)
+            db_cluster.cpu += cpu_total
+            db_cluster.gpu += gpu_total
+            db_cluster.mem += mem_total
         db_cluster.status_msg = ""
         ClusterSQL.update_cluster(db_cluster)
     except Exception as e:
@@ -1079,6 +1107,11 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         kube_info["kube_config"] = kube_config
         c.kube_info = json.dumps(kube_info)
         c.status = 'running'
+        if scale:
+            cpu_total, gpu_total, mem_total = get_node_info(node_list)
+            c.cpu += cpu_total
+            c.gpu += gpu_total
+            c.mem += mem_total
         c.error_message = ""
         ClusterSQL.update_cluster(c)
 
@@ -1135,12 +1168,15 @@ def get_networks(cluster_tfvars, task_info, host_file):
         node_name = cluster_tfvars.cluster_name + "-node-1"
     
     bus_network_id = ""
+    bus_network_name = ""
     network_id = hosts_data["_meta"]["hostvars"][node_name]["network"][0]['uuid']
-    if hosts_data["_meta"]["hostvars"][node_name]["network"].__len__() > 1:
+    network_name = hosts_data["_meta"]["hostvars"][node_name]["network"][0]['name']
+    if len(hosts_data["_meta"]["hostvars"][node_name]["network"]) > 1:
         bus_network_id = hosts_data["_meta"]["hostvars"][node_name]["network"][1]['uuid']
+        bus_network_name = hosts_data["_meta"]["hostvars"][node_name]["network"][1]['name']
     subnet_id = hosts_data["_meta"]["hostvars"][node_name]["subnet_id"]
     bussubnet_id = hosts_data["_meta"]["hostvars"][node_name]["bussubnet_id"]
-    return network_id, bus_network_id, subnet_id, bussubnet_id
+    return network_id, network_name, bus_network_id, bus_network_name, subnet_id, bussubnet_id
 
 def load_tfvars_to_object(tfvars_path):
     """
@@ -1337,6 +1373,10 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
             db_cluster = session.get(Cluster, (cluster_id, cluster_name))
             db_cluster.status = 'running'
             db_cluster.status_msg = ''
+            cpu_total, gpu_total, mem_total = get_node_info(node_list)
+            db_cluster.cpu -= cpu_total
+            db_cluster.gpu -= gpu_total
+            db_cluster.mem -= mem_total
             for node in node_list:
                 # 根据 node.id 删除节点
                 node = session.get(NodeInfo, node.get("id"))
@@ -1400,6 +1440,10 @@ def delete_baremetal(self, cluster_id, cluster_name, instance_list, token):
         with session.begin():
             db_cluster = session.get(Cluster, (cluster_id, cluster_name))
             db_cluster.status = 'running'
+            cpu_total, gpu_total, mem_total = get_node_info(instance_list)
+            db_cluster.cpu -= cpu_total
+            db_cluster.gpu -= gpu_total
+            db_cluster.mem -= mem_total
             for node in instance_list:
                 # 根据 node.id 删除节点
                 node = session.get(Instance, node.get("id"))

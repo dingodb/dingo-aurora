@@ -285,6 +285,10 @@ class InstanceService:
                 "region": instance.region,
                 "user": instance.user,
                 "password": instance.password,
+                "cpu": instance.cpu,
+                "gpu": instance.gpu,
+                "mem": instance.mem,
+                "disk": instance.disk,
                 "image_id": instance.image_id,
                 "project_id": instance.project_id,
                 "security_group": instance.security_group,
@@ -329,6 +333,7 @@ class InstanceService:
         # 创建instance，创建openstack种的虚拟机或者裸金属服务器
         # 数据校验 todo
         try:
+            scale = True
             for conf in cluster.node_config:
                 if conf.role == "master":
                     raise ValueError("The expanded node cannot be the master node.")
@@ -386,7 +391,7 @@ class InstanceService:
                 tfvars.password = ""
             # 调用celery_app项目下的work.py中的create_cluster方法
             result = celery_app.send_task("dingo_command.celery_api.workers.create_cluster",
-                                          args=[tfvars.dict(), cluster_info.dict(), instance_list])
+                                          args=[tfvars.dict(), cluster_info.dict(), instance_list, scale])
             return result.id
         except Fail as e:
             raise e
@@ -575,6 +580,10 @@ class InstanceService:
                 "cluster_id": db_instance.cluster_id,
                 "cluster_name": db_instance.cluster_name,
                 "server_id": db_instance.server_id,
+                "cpu": db_instance.cpu,
+                "gpu": db_instance.gpu,
+                "mem": db_instance.mem,
+                "disk": db_instance.disk,
                 "ip_address": db_instance.ip_address,
                 "node_type": db_instance.node_type,
                 "region": db_instance.region,
