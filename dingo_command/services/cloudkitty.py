@@ -163,35 +163,30 @@ class CloudKittyService:
             if ratingSummaryDetailList is None:
                 return None
             temp_data = []
-            # 项目ID
-            tenant_name = None if ratingSummaryDetailList is None else ratingSummaryDetailList[0].tenant_name
-            if language is None or language == "EN":
-                temp_data.append({'Tenant Name': tenant_name})
-            else:
-                temp_data.append({'项目名称':tenant_name})
+            # 项目名称
+            tenant_name = None
+            tenant_id =  None
             # 开始时间
-            begin_datatime = None if ratingSummaryDetailList is None or ratingSummaryDetailList[0].flavor is None \
-                             or ratingSummaryDetailList[0].flavor is None or ratingSummaryDetailList[0].flavor[0] is None \
-                            else ratingSummaryDetailList[0].flavor[0].begin
-            begin_datatime_str = None
-            if begin_datatime is not None:
-                # 转换为datetime对象
-                dt = datetime.strptime(begin_datatime, "%Y-%m-%dT%H:%M:%S")
-                # 格式化为不带T的字符串
-                begin_datatime_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-            if language is None or language == "EN":
-                temp_data.append({'Begin Time': begin_datatime_str})
-            else:
-                temp_data.append({'开始时间': begin_datatime_str})
-
+            begin_datatime = None
             # 结束时间
-            end_date = None if ratingSummaryDetailList is None else ratingSummaryDetailList[0].end
+            end_datatime = None
+            if ratingSummaryDetailList is not None and ratingSummaryDetailList[0] is not None:
+                for ratingSummaryDetail in ratingSummaryDetailList:
+                    if ratingSummaryDetail.service == "总计" or ratingSummaryDetail.service.lower() == "total":
+                        tenant_name = ratingSummaryDetail.tenant_name
+                        tenant_id = ratingSummaryDetail.tenant_id
+                        begin_datatime = ratingSummaryDetail.start_time
+                        end_datatime = ratingSummaryDetail.end_time
             if language is None or language == "EN":
-                temp_data.append({'End Time': end_date})
-                # Res type、费率
+                temp_data.append({'Tenant Name': tenant_name + f"(ID: {tenant_id})"})
+                temp_data.append({'Begin Time': begin_datatime})
+                temp_data.append({'End Time': end_datatime})
+                # Res type、Rate
                 temp_data.append({'Res Type': 'Rate'})
             else:
-                temp_data.append({'结束时间': end_date})
+                temp_data.append({'项目名称': tenant_name + f"(ID: {tenant_id})"})
+                temp_data.append({'开始时间': begin_datatime})
+                temp_data.append({'结束时间': end_datatime})
                 # Res type、费率
                 temp_data.append({'资源类型': '费率'})
 
@@ -199,7 +194,7 @@ class CloudKittyService:
             temp_non_instance_data = []
             temp_total_rating_data = []
             for ratingSummaryDetail in ratingSummaryDetailList:
-                if ratingSummaryDetail.service == "总计" or ratingSummaryDetail.service == "Total":
+                if ratingSummaryDetail.service == "总计" or ratingSummaryDetail.service.lower() == "total":
                     if language is None or language == "EN":
                         temp_total_rating_data.append({'Total':ratingSummaryDetail.total})
                     else:
@@ -208,7 +203,12 @@ class CloudKittyService:
                     temp_instance_flavor_data.append({'instance':ratingSummaryDetail.total})
                     if ratingSummaryDetail.flavor is not None:
                         for flavor in ratingSummaryDetail.flavor:
-                            temp_instance_flavor_data.append({"instance-flavor-" + flavor.flavor_name: flavor.rate})
+                            flavor_name_final = "instance-flavor-"
+                            if flavor.flavor_name is None:
+                                flavor_name_final = flavor_name_final + "None"
+                            else:
+                                flavor_name_final = flavor_name_final + flavor.flavor_name
+                            temp_instance_flavor_data.append({flavor_name_final: flavor.rate})
                 else:
                     temp_non_instance_data.append({ratingSummaryDetail.service:ratingSummaryDetail.total})
 
@@ -231,6 +231,7 @@ class CloudKittyService:
             # 转换数据为二维数组
             # table_data = [[list(item.keys())[0], list(item.values())[0]] for item in input_data]
 
+            is_has_instance_flavor_prefix = self.has_instance_flavor_prefix(input_data)
             table_data = []
             instance_total_value = 0
             for i, item in enumerate(input_data):
@@ -242,6 +243,8 @@ class CloudKittyService:
                 elif key.startswith('instance'):  # instance前缀行
                     if key == "instance":
                         instance_total_value = value
+                        if not is_has_instance_flavor_prefix:
+                            table_data.append(["instance", value,"", ""])
                     else:
                         table_data.append(["instance", key.removeprefix("instance-flavor-"), value, instance_total_value])  # 同样四列
                 else:
@@ -293,19 +296,25 @@ class CloudKittyService:
                     first_instance_row = None
                     fourth_instance_row = None
                 else:
-                    # 处理第一列合并
-                    if first_instance_row is None:
-                        first_instance_row = i
+                    if is_has_instance_flavor_prefix == False:
+                        style.append(('SPAN', (1, i), (3, i)))
+                         # 重置instance行标记
+                        first_instance_row = None
+                        fourth_instance_row = None
                     else:
-                        style.append(('SPAN', (0, first_instance_row), (0, i)))
-                        table_data[i][0] = ""  # 清空后续行内容
+                        # 处理第一列合并
+                        if first_instance_row is None:
+                            first_instance_row = i
+                        else:
+                            style.append(('SPAN', (0, first_instance_row), (0, i)))
+                            table_data[i][0] = ""  # 清空后续行内容
 
-                    # 处理第四列合并
-                    if fourth_instance_row is None:
-                        fourth_instance_row = i
-                    else:
-                        style.append(('SPAN', (3, fourth_instance_row), (3, i)))
-                        table_data[i][3] = ""  # 清空后续行内容
+                        # 处理第四列合并
+                        if fourth_instance_row is None:
+                            fourth_instance_row = i
+                        else:
+                            style.append(('SPAN', (3, fourth_instance_row), (3, i)))
+                            table_data[i][3] = ""  # 清空后续行内容
 
             table.setStyle(style)
 
@@ -315,6 +324,18 @@ class CloudKittyService:
             import traceback
             traceback.print_exc()
             raise RuntimeError(f"生成PDF[{filename}]失败: {e}")
+
+    def has_instance_flavor_prefix(self, data):
+        """
+        检查JSON数据中是否存在以'instance-flavor-'为前缀的key
+        :param data: 输入的JSON数据
+        :return: 布尔值，表示是否存在符合条件的key
+        """
+        for item in data:
+            for key in item.keys():
+                if key.startswith('instance-flavor-'):
+                    return True
+        return False
 
     def edit_rating_module_config_hashmap_mappings(self, mapping_id, mapping):
         try:

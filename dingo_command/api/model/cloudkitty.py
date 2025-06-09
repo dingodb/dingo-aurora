@@ -14,6 +14,8 @@ class CloudKittyRatingSummaryDetail(BaseModel):
     tenant_id: Optional[str] = Field(None, description="项目ID")
     tenant_name: Optional[str] = Field(None, description="项目名称")
     end: Optional[str] = Field(None, description="结束时间")
+    end_time: Optional[str] = Field(None, description="结束时间")
+    start_time: Optional[str] = Field(None, description="开始时间")
     total: Optional[str] = Field(None, description="总计")
     flavor: Optional[List[FlavorObject]] = Field(None, description="描述信息")
 
