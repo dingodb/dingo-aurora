@@ -401,6 +401,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
             'service_cidr': cluster.kube_info.service_cidr,
             "kube_vip_address": lb_ip,
             "kube_proxy_mode": cluster.kube_info.kube_proxy_mode,
+            "container_manager": cluster.kube_info.runtime,
         }
         target_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "group_vars", "k8s_cluster")
         os.makedirs(target_dir, exist_ok=True)
@@ -596,6 +597,7 @@ def get_cluster_kubeconfig(cluster: ClusterTFVarsObject, lb_ip, master_ip, float
                     "ssh",
                     "-o", "StrictHostKeyChecking=no",
                     "-i", key_file_path,  # SSH私钥路径
+                    "-p", str(ssh_port),
                     f"{cluster.ssh_user}@{float_ip}",
                     "sudo cat /etc/kubernetes/admin.conf"
                     ""
@@ -936,6 +938,7 @@ def remove_bastion_fip_from_state(cluster_dir):
 def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_list, scale_nodes=None, scale=False):
     try:
         task_id = self.request.id.__str__()
+        print(f"tf: {cluster_tf_dict},cluster_dict: {cluster_dict}")
         print(f"Task ID: {task_id}")
         cluster_tfvars = ClusterTFVarsObject(**cluster_tf_dict)
         cluster = ClusterObject(**cluster_dict)
@@ -1243,18 +1246,18 @@ def delete_cluster(self, cluster_id, token):
         print(f"Terraform dir: {terraform_dir}")
 
         os.chdir(terraform_dir)
-
-        res = subprocess.run(["terraform", "destroy", "-auto-approve", "-var-file=output.tfvars.json"],
-                             capture_output=True, text=True)
-        # 获取 tfvars 文件路径
-        tfvars_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_id, "terraform", "output.tfvars.json")
-
         # 加载为 ClusterTFVarsObject 对象
+        tfvars_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_id, "terraform", "output.tfvars.json")
         cluster_tfvars = load_tfvars_to_object(tfvars_path)
         cluster_tfvars.token = token
         tfvars_str = json.dumps(cluster_tfvars, default=lambda o: o.__dict__, indent=2)
         with open("output.tfvars.json", "w") as f:
             f.write(tfvars_str)
+        # 获取 tfvars 文件路径
+
+
+        res = subprocess.run(["terraform", "destroy", "-auto-approve", "-var-file=output.tfvars.json"],
+                             capture_output=True, text=True)
         if res.returncode != 0:
             # 发生错误时更新任务状态为"失败"
             print(f"Terraform error: {res.stderr}")

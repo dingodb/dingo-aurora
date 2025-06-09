@@ -84,9 +84,9 @@ pipeline {
                     steps {
                         echo "pull dingo-command images to test on second node"
                         dir('/home/cicd/kolla-ansible/tools') {
-                            sh 'ansible-playbook -e @/home/cicd/envs/test-regiontwo/globals.yml -e @/home/cicd/envs/test-regiontwo/passwords.yml --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e CONFIG_DIR=/home/cicd/envs/test-regiontwo -e kolla_action=pull ../ansible/site.yml  --inventory /cicd/envs/test-regiontwo/multinode -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
+                            sh 'ansible-playbook -e @/home/cicd/envs/test-regiontwo/globals.yml -e @/home/cicd/envs/test-regiontwo/passwords.yml --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e CONFIG_DIR=/home/cicd/envs/test-regiontwo -e kolla_action=pull ../ansible/site.yml  --inventory /home/cicd/envs/test-regiontwo/multinode -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
                             echo 'deploy images to develop on second node'
-                            sh 'ansible-playbook -e @/home/cicd/envs/test-regiontwo/globals.yml -e @/home/cicd/envs/test-regiontwo/passwords.yml --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e CONFIG_DIR=/home/cicd/envs/test-regiontwo -e kolla_action=upgrade ../ansible/site.yml  --inventory /cicd/envs/test-regiontwo/multinode -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
+                            sh 'ansible-playbook -e @/home/cicd/envs/test-regiontwo/globals.yml -e @/home/cicd/envs/test-regiontwo/passwords.yml --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e CONFIG_DIR=/home/cicd/envs/test-regiontwo -e kolla_action=upgrade ../ansible/site.yml  --inventory /home/cicd/envs/test-regiontwo/multinode -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
                         }
                     }
                 }
