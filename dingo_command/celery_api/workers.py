@@ -356,7 +356,10 @@ def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list, scale=False
         query_params["id"] = cluster_tf["id"]
         count, db_clusters = ClusterSQL.list_cluster(query_params)
         db_cluster = db_clusters[0]
-        db_cluster.status = 'error'
+        if scale:
+            db_cluster.status = 'scale_error'
+        else:
+            db_cluster.status = 'error'
         db_cluster.status_msg = replace_ansi_with_single_newline(str(e))
         ClusterSQL.update_cluster(db_cluster)
         raise
@@ -1127,7 +1130,10 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         query_params["id"] = cluster_dict["id"]
         count, db_clusters = ClusterSQL.list_cluster(query_params)
         c = db_clusters[0]
-        c.status = 'error'
+        if scale:
+            c.status = 'scale_error'
+        else:
+            c.status = 'error'
         c.status_msg = replace_ansi_with_single_newline(str(e))
         ClusterSQL.update_cluster(c)
         raise
@@ -1256,7 +1262,7 @@ def delete_cluster(self, cluster_id, token):
             query_params["id"] = cluster_id
             count, db_clusters = ClusterSQL.list_cluster(query_params)
             c = db_clusters[0]
-            c.status = 'error'
+            c.status = 'delete_error'
             error_msg = replace_ansi_with_single_newline(res.stderr)
             c.status_msg = f"delete cluster error: {error_msg}"
             ClusterSQL.update_cluster(c)
@@ -1292,7 +1298,7 @@ def delete_cluster(self, cluster_id, token):
         query_params["id"] = cluster_id
         count, db_clusters = ClusterSQL.list_cluster(query_params)
         c = db_clusters[0]
-        c.status = 'error'
+        c.status = 'delete_error'
         c.status_msg = f"delete cluster error: {replace_ansi_with_single_newline(str(e))}"
         ClusterSQL.update_cluster(c)
                 
@@ -1393,7 +1399,7 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
         session = get_session()
         with session.begin():
             db_cluster = session.get(Cluster, (cluster_id, cluster_name))
-            db_cluster.status = 'error'
+            db_cluster.status = 'remove_error'
             db_cluster.status_msg = f"Ansible remove node error: {str(e)}"
 
 @celery_app.task(bind=True)
@@ -1455,7 +1461,7 @@ def delete_baremetal(self, cluster_id, cluster_name, instance_list, token):
         session = get_session()
         with session.begin():
             db_cluster = session.get(Cluster, (cluster_id, cluster_name))
-            db_cluster.status = 'error'
+            db_cluster.status = 'remove_error'
             error_msg = replace_ansi_with_single_newline(str(e))
             db_cluster.status_msg = f"delete baremetal error: {error_msg}"
         return False

@@ -142,6 +142,17 @@ async def delete_cluster(cluster_id:str, token: str = Depends(get_token)):
     try:
         NovaClient(token)
         # 集群信息存入数据库
+        result = cluster_service.get_cluster(cluster_id)
+        if not result:
+            raise HTTPException(status_code=400, detail="the cluster does not exist, please check")
+        if result.status == "creating":
+            raise HTTPException(status_code=400, detail="the cluster is creating, please wait")
+        if result.status == "deleting":
+            raise HTTPException(status_code=400, detail="the cluster is deleting, please wait")
+        if result.status == "scaling":
+            raise HTTPException(status_code=400, detail="the cluster is scaling, please wait")
+        if result.status == "removing":
+            raise HTTPException(status_code=400, detail="the cluster is removing, please wait")
         result = cluster_service.delete_cluster(cluster_id, token)
         # 操作日志
         #SystemService.create_system_log(OperateLogApiModel(operate_type="create", resource_type="flow", resource_id=result, resource_name=cluster_object.name, operate_flag=True))
@@ -153,4 +164,4 @@ async def delete_cluster(cluster_id:str, token: str = Depends(get_token)):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail="get cluster error")
+        raise HTTPException(status_code=400, detail="delete cluster error")

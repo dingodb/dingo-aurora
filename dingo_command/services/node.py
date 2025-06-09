@@ -170,10 +170,11 @@ class NodeService:
         node_db_list, instance_db_list = [], []
         max_key = max(k8s_nodes, key=lambda k: int(k.split('-')[-1]))
         node_index = int(max_key.split('-')[-1]) + 1
+        nova_client = NovaClient()
         for idx, node in enumerate(cluster.node_config):
             if node.role == "worker" and node.type == "vm":
-                cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
-                operation_system = self.get_image_info(node.image)
+                cpu, gpu, mem, disk = self.get_flavor_info(nova_client, node.flavor_id)
+                operation_system = self.get_image_info(nova_client, node.image)
                 for i in range(node.count):
                     forward_rules_new = []
                     if forward_rules:
@@ -254,8 +255,8 @@ class NodeService:
                     node_db_list.append(node_db)
                     node_index = node_index + 1
             if node.role == "worker" and node.type == "baremental":
-                cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
-                operation_system = self.get_image_info(node.image)
+                cpu, gpu, mem, disk = self.get_flavor_info(nova_client, node.flavor_id)
+                operation_system = self.get_image_info(nova_client, node.image)
                 for i in range(node.count):
                     forward_rules_new = []
                     if forward_rules:
@@ -711,8 +712,7 @@ class NodeService:
         instance_list_json = json.dumps(instance_list_dict)
         return instance_list, instance_list_json
 
-    def get_flavor_info(self, flavor_id):
-        nova_client = NovaClient()
+    def get_flavor_info(self, nova_client, flavor_id):
         flavor = nova_client.nova_get_flavor(flavor_id)
         cpu = 0
         gpu = 0
@@ -728,9 +728,8 @@ class NodeService:
                     gpu = pci_alias.split(':')[1]
         return int(cpu), int(gpu), int(mem), int(disk)
 
-    def get_image_info(self, image_id):
+    def get_image_info(self, nova_client, image_id):
         operation_system = ""
-        nova_client = NovaClient()
         image = nova_client.glance_get_image(image_id)
         if image is not None:
             if image.get("os_version"):

@@ -12,7 +12,7 @@ from dingo_command.db.models.instance.sql import InstanceSQL
 from math import ceil
 from oslo_log import log
 from dingo_command.api.model.instance import InstanceCreateObject, OpenStackConfigObject
-from dingo_command.api.model.cluster import ClusterTFVarsObject, NodeGroup, ScaleNodeObject
+from dingo_command.api.model.cluster import ClusterTFVarsObject, NodeGroup, ScaleNodeObject, PortForwards
 from dingo_command.api.model.base import BaseResponse, ErrorResponse, ErrorDetail
 from dingo_command.db.models.instance.models import Instance as InstanceDB
 from dingo_command.db.models.cluster.models import Cluster as ClusterDB
@@ -195,7 +195,10 @@ class InstanceService:
                         floating_ip=False,
                         etcd=False,
                         image_id=node.image,
-                        port_forwards=forward_rules_new
+                        port_forwards=[PortForwards(**forward) for forward in forward_rules_new],
+                        use_local_disk=node.use_local_disk,
+                        volume_size=node.volume_size,
+                        volume_type=node.volume_type
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
@@ -243,7 +246,7 @@ class InstanceService:
                         floating_ip=False,
                         etcd=False,
                         image_id=node.image,
-                        port_forwards=forward_rules_new
+                        port_forwards=[PortForwards(**forward) for forward in forward_rules_new]
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
