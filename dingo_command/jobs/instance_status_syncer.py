@@ -53,10 +53,6 @@ def check_instance_status():
                         instance.status = "error"
                         instance.status_msg = server.get("fault").get("details")
                         InstanceSQL.update_instance(instance)
-                    elif server.get("status") == "ACTIVE" and instance.status != "running":
-                        instance.status = "running"
-                        instance.status_msg = ""
-                        InstanceSQL.update_instance(instance)
             except Exception as e:
                 LOG.error(f"Error checking status for instance {instance.id}: {str(e)}")
                 if "could not be found." in str(e):
@@ -92,10 +88,6 @@ def check_node_status():
                         LOG.info(f"Updating node {node.id} status from {node.status} to {server.get('status')}")
                         node.status = "error"
                         node.status_msg = server.get("fault").get("details")
-                        NodeSQL.update_node(node)
-                    elif server.get("status") == "ACTIVE" and node.status != "running":
-                        node.status = "running"
-                        node.status_msg = ""
                         NodeSQL.update_node(node)
             except Exception as e:
                 LOG.error(f"Error checking status for node {node.id}: {str(e)}")

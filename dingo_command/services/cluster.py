@@ -52,7 +52,7 @@ class ClusterService:
         """根据节点类型返回az值"""
         return "nova" if node_type == "vm" else ""
 
-    def generate_k8s_nodes(self, cluster:ClusterObject, k8s_masters, k8s_nodes):
+    def generate_k8s_nodes(self, cluster: ClusterObject, k8s_masters, k8s_nodes):
         forward_float_ip_id = ""
         if cluster.forward_float_ip_id:
             forward_float_ip_id = cluster.forward_float_ip_id
@@ -97,7 +97,7 @@ class ClusterService:
                     instance_db.disk = disk
                     instance_db.ip_address = ""
                     instance_db.name = cluster.name + f"master-{int(master_index)}"
-                    instance_db.floating_ip = ""
+                    instance_db.floating_ip = cluster.forward_float_ip
                     instance_db.create_time = datetime.now()
                     instance_db_list.append(instance_db)
 
@@ -175,7 +175,7 @@ class ClusterService:
                     instance_db.disk = disk
                     instance_db.ip_address = ""
                     instance_db.name = cluster.name + f"-node-{int(node_index)}"
-                    instance_db.floating_ip = ""
+                    instance_db.floating_ip = cluster.forward_float_ip
                     instance_db.create_time = datetime.now()
                     instance_db_list.append(instance_db)
 
@@ -201,6 +201,7 @@ class ClusterService:
                     node_db.disk = disk
                     node_db.status = "creating"
                     node_db.floating_forward_ip = forward_float_ip_id
+                    node_db.floating_ip = cluster.forward_float_ip
                     node_db.ip_forward_rule = cluster_new.dict().get("port_forwards")
                     node_db.status_msg = ""
                     node_db.admin_address = ""
@@ -227,7 +228,7 @@ class ClusterService:
                         floating_ip=False,
                         etcd=False,
                         image_id=node.image,
-                        port_forwards=cluster.port_forwards
+                        port_forwards=cluster_new.port_forwards
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
@@ -279,6 +280,7 @@ class ClusterService:
                     node_db.disk = disk
                     node_db.status = "creating"
                     node_db.floating_forward_ip = forward_float_ip_id
+                    node_db.floating_ip = cluster.forward_float_ip
                     node_db.ip_forward_rule = cluster_new.dict().get("port_forwards")
                     node_db.status_msg = ""
                     node_db.admin_address = ""
@@ -398,6 +400,7 @@ class ClusterService:
                 gpu=cluster.gpu,
                 cpu=cluster.cpu,
                 mem=cluster.mem,
+                forward_float_ip=cluster.forward_float_ip,
                 gpu_mem = cluster.gpu_mem,
                 network_config=network_config,
                 extra=cluster.extra,
@@ -754,7 +757,7 @@ class ClusterService:
                     instance_db.ip_forward_rule = cluster_new.dict().get("port_forwards")
                     instance_db.ip_address = ""
                     instance_db.name = cluster.name + f"-node-{int(node_index)}"
-                    instance_db.floating_ip = ""
+                    instance_db.floating_ip = cluster.forward_float_ip
                     instance_db.create_time = datetime.now()
                     instance_db_list.append(instance_db)
                     cluster_new = copy.deepcopy(cluster)
@@ -797,7 +800,7 @@ class ClusterService:
                     instance_db.ip_forward_rule = cluster_new.dict().get("port_forwards")
                     instance_db.ip_address = ""
                     instance_db.name = cluster.name + f"-node-{int(node_index)}"
-                    instance_db.floating_ip = ""
+                    instance_db.floating_ip = cluster.forward_float_ip
                     instance_db.create_time = datetime.now()
                     instance_db_list.append(instance_db)
                     cluster_new = copy.deepcopy(cluster)

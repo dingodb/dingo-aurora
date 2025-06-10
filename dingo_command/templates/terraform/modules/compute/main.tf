@@ -176,6 +176,7 @@ resource "openstack_networking_port_v2" "admin_master_port" {
   name                  = "${var.cluster_name}-master-admin-${count.index + 1}"
   network_id            = var.use_existing_network ? data.openstack_networking_network_v2.admin_network[0].id : var.admin_network_id
   admin_state_up        = "true"
+  security_group_ids    = [openstack_networking_secgroup_v2.secgroup.id]
   dynamic "fixed_ip" {
     for_each = var.private_subnet_id == "" ? [] : [true]
     content {
@@ -224,7 +225,7 @@ resource "openstack_compute_instance_v2" "k8s-master" {
   flavor_id         = local.master_flavor
   key_pair          = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : ""
   user_data         = data.cloudinit_config.master-cloudinit.rendered
-  security_groups = [openstack_networking_secgroup_v2.secgroup.name]
+  security_groups   = [openstack_networking_secgroup_v2.secgroup.name]
 
   dynamic "block_device" {
     for_each = var.etcd_volume_type != "" ? [1] : []
@@ -374,6 +375,7 @@ resource "openstack_networking_port_v2" "nodes_port" {
   name                  = "${var.cluster_name}-node-${each.key}"
   network_id            = local.nodes_settings[each.key].admin_network_id
   admin_state_up        = "true"
+  security_group_ids    = [openstack_networking_secgroup_v2.secgroup.id]
   #port_security_enabled = var.force_null_port_security ? null : var.port_security_enabled
   #no_security_groups    = var.port_security_enabled ? null : false
   dynamic "fixed_ip" {

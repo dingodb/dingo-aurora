@@ -220,7 +220,7 @@ class NodeService:
                     instance_db.disk = disk
                     instance_db.ip_address = ""
                     instance_db.name = cluster_info.name + f"-node-{int(node_index)}"
-                    instance_db.floating_ip = ""
+                    instance_db.floating_ip = cluster_info.forward_float_ip
                     instance_db.create_time = datetime.now()
                     instance_db_list.append(instance_db)
 
@@ -246,6 +246,7 @@ class NodeService:
                     node_db.flavor_id = node.flavor_id
                     node_db.status = "creating"
                     node_db.floating_forward_ip = forward_float_ip_id
+                    node_db.floating_ip = cluster_info.forward_float_ip
                     node_db.ip_forward_rule = forward_rules_new
                     node_db.status_msg = ""
                     node_db.admin_address = ""
