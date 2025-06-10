@@ -27,7 +27,7 @@ class CustomCallback(CallbackBase):
 def run_playbook(playbook_name, inventory, data_dir, ssh_key, extravars=None, limit=None):
     # 设置环境变量
     envvars = {
-        "ANSIBLE_FORKS": 1,
+        "ANSIBLE_FORKS": 10,
     }
     # 运行 Ansible playbook 异步
     thread,runner = ansible_runner.run_async(

@@ -432,6 +432,7 @@ resource "openstack_compute_instance_v2" "nodes" {
   for_each          = var.number_of_nodes == 0 && var.number_of_nodes_no_floating_ip == 0 ? var.nodes : {}
   name              = "${var.cluster_name}-${each.key}"
   availability_zone = each.value.az
+  config_drive      = true             # 启用 config_drive
   image_id          = local.nodes_settings[each.key].use_local_disk == true ? null: local.nodes_settings[each.key].image_id
   flavor_id         = each.value.flavor
   key_pair          = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : ""

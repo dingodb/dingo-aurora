@@ -141,15 +141,15 @@ def get_node_info(node_list):
             mem_int_total += mem_int
     return cpu_int_total, gpu_int_total, mem_int_total
 
-def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo):
+def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale=False):
     """使用Terraform创建基础设施"""
     try:
-
-        # 将templat下的terraform目录复制到WORK_DIR/cluster.id目录下
         cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id))
-        subprocess.run(["cp", "-LRpf", os.path.join(WORK_DIR, "ansible-deploy", "inventory", "sample-inventory"),
+        if not scale:
+            # 将templat下的terraform目录复制到WORK_DIR/cluster.id目录下
+            subprocess.run(["cp", "-LRpf", os.path.join(WORK_DIR, "ansible-deploy", "inventory", "sample-inventory"),
                         str(cluster_dir)], capture_output=True)
-        subprocess.run(["cp", "-r", str(TERRAFORM_DIR), str(cluster_dir)], capture_output=True)
+            subprocess.run(["cp", "-r", str(TERRAFORM_DIR), str(cluster_dir)], capture_output=True)
         os.chdir(os.path.join(cluster_dir, "terraform"))
         # 初始化terraform
         #os.environ['https_proxy']="10.220.70.88:1088"
@@ -296,7 +296,7 @@ def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list, scale=False
                                     msg=TaskService.TaskMessage.instructure_create.name)
         TaskSQL.insert(instructure_task)
 
-        terraform_result = create_infrastructure(cluster_tfvars, instructure_task)
+        terraform_result = create_infrastructure(cluster_tfvars, instructure_task, scale)
 
         if not terraform_result[0]:
             raise Exception(f"Terraform infrastructure creation failed, reason: {terraform_result[1]}")
@@ -552,9 +552,6 @@ def scale_kubernetes(cluster: ClusterObject, scale_nodes):
                     host = event['event_data'].get('host')
                     task_status = event['event'].split('_')[-1]  # 例如 runner_on_ok -> ok
                     print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
-                    # 将结果输出到文件中
-                    with open("ansible_debug.log", "a") as log_file:
-                        log_file.write(f"Task: {task_name}, Status: {task_status}, host:  {host}\n")
             time.sleep(0.01)
             continue
         log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "ansible_scale.log")
@@ -953,7 +950,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         cinder_client = CinderClient()
         volume_type = cinder_client.list_volum_type()
         cluster_tfvars.etcd_volume_type = volume_type
-        terraform_result = create_infrastructure(cluster_tfvars, task_info)
+        terraform_result = create_infrastructure(cluster_tfvars, task_info, scale)
 
         if not terraform_result[0]:
             raise Exception(f"Terraform infrastructure creation failed, reason: {terraform_result[1]}")
@@ -1336,9 +1333,6 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
                     host = event['event_data'].get('host')
                     task_status = event['event'].split('_')[-1]  # 例如 runner_on_ok -> ok
                     print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
-                    # 将结果输出到文件中
-                    with open("ansible_debug.log", "a") as log_file:
-                        log_file.write(f"Task: {task_name}, Status: {task_status}, host:  {host}\n")
             time.sleep(0.01)
             continue
         log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), "ansible_remove.log")
