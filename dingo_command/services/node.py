@@ -432,6 +432,7 @@ class NodeService:
             k8s_nodes = content["nodes"]
             scale_nodes = []
             subnet_cidr = content.get("subnet_cidr")
+            image_uuid = content.get("image_uuid")
             forward_float_ip_id = content.get("forward_float_ip_id")
             lb_enbale = content.get("k8s_master_loadbalancer_enabled")
             number_of_k8s_masters_no_floating_ip = content.get("number_of_k8s_masters_no_floating_ip")
@@ -450,7 +451,7 @@ class NodeService:
             tfvars = ClusterTFVarsObject(
                 id=cluster.id,
                 cluster_name=cluster_info.name,
-                image_uuid=cluster.node_config[0].image,
+                image_uuid=image_uuid,
                 nodes=k8s_nodes,
                 subnet_cidr=subnet_cidr,
                 floatingip_pool=floatingip_pool,

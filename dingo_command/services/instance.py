@@ -353,6 +353,7 @@ class InstanceService:
             ClusterSQL.update_cluster(cluster_info_db)
             k8s_nodes = content["nodes"]
             subnet_cidr = content.get("subnet_cidr")
+            image_uuid = content.get("image_uuid")
             forward_float_ip_id = content.get("forward_float_ip_id")
             neutron_api = neutron.API()  # 创建API类的实例
             external_net = neutron_api.list_external_networks()
@@ -370,7 +371,7 @@ class InstanceService:
             tfvars = ClusterTFVarsObject(
                 id=cluster.id,
                 cluster_name=cluster_info.name,
-                image_uuid=cluster.node_config[0].image,
+                image_uuid=image_uuid,
                 nodes=k8s_nodes,
                 subnet_cidr=subnet_cidr,
                 floatingip_pool=floatingip_pool,
