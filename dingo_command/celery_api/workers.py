@@ -266,7 +266,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
             # 更新任务状态为"成功"
             task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
             task_info.state = "success"
-            task_info.detail = res.stdout
+            task_info.detail = "base infrastructure created successfully"
             update_task_state(task_info)
             print("Terraform apply succeeded")
             return True, ""
@@ -986,7 +986,10 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                     update_task_state(task_info)
                     raise Exception("Ansible kubernetes deployment failed, configure ssh-keygen error")
         if cluster_tfvars.password != "":
-            cmd = f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no {cluster_tfvars.ssh_user}@{master_ip}'
+            master_node_name = f"{cluster_tfvars.cluster_name}-k8s-master-1"
+            ssh_port = hosts_data["_meta"]["hostvars"][master_node_name].get("ansible_port", 22)
+            cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p {ssh_port}'
+                   f' {cluster_tfvars.ssh_user}@{master_ip}')
             result = subprocess.run(cmd, shell=True, capture_output=True)
             if result.returncode != 0:
                 task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
@@ -1146,7 +1149,7 @@ def get_ips(cluster_tfvars, task_info, host_file):
     hosts_data = json.loads(hosts)
     # 从_meta.hostvars中获取master节点的IP
     master_node_name = cluster_tfvars.cluster_name + "-k8s-master-1"
-    master_ip = hosts_data["_meta"]["hostvars"][master_node_name]["access_ip_v4"]
+    master_ip = hosts_data["_meta"]["hostvars"][master_node_name]["ansible_host"]
     lb_ip = hosts_data["_meta"]["hostvars"][master_node_name]["lb_ip"]
     return master_ip, lb_ip, hosts_data
 
@@ -1368,8 +1371,6 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
         session = get_session()
         with session.begin():
             db_cluster = session.get(Cluster, (cluster_id, cluster_name))
-            db_cluster.status = 'running'
-            db_cluster.status_msg = ''
             cpu_total, gpu_total, mem_total = get_node_info(node_list)
             db_cluster.cpu -= cpu_total
             db_cluster.gpu -= gpu_total
@@ -1385,6 +1386,13 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
                 instance.status = "running"
                 instance.cluster_id = ""
                 instance.cluster_name = ""
+            query_params = {"cluster_id": cluster_id}
+            count, nodes = NodeSQL.list_nodes(query_params, 1, -1, None, None)
+            for node in nodes:
+                if node.status != "running":
+                    return
+            db_cluster.status = 'running'
+            db_cluster.status_msg = ''
     except Exception as e:
         print(f"Ansible error: {e}")
         session = get_session()
@@ -1436,7 +1444,6 @@ def delete_baremetal(self, cluster_id, cluster_name, instance_list, token):
             return False
         with session.begin():
             db_cluster = session.get(Cluster, (cluster_id, cluster_name))
-            db_cluster.status = 'running'
             cpu_total, gpu_total, mem_total = get_node_info(instance_list)
             db_cluster.cpu -= cpu_total
             db_cluster.gpu -= gpu_total
@@ -1446,6 +1453,14 @@ def delete_baremetal(self, cluster_id, cluster_name, instance_list, token):
                 node = session.get(Instance, node.get("id"))
                 if node:
                     session.delete(node)
+            query_params = {"cluster_id": cluster_id}
+            count, instances = InstanceSQL.list_instances(query_params, 1, -1, None, None)
+            for ins in instances:
+                if ins.status != "running":
+                    return False
+            db_cluster.status = 'running'
+            db_cluster.status_msg = ''
+            return True
 
     except Exception as e:
         print(f"Ansible error: {e}")

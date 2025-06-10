@@ -135,7 +135,7 @@ async def get_cluster(cluster_id:str):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail="get cluster error")
+        raise HTTPException(status_code=400, detail=f"get cluster error {str(e)}")
 
 @router.delete("/cluster/{cluster_id}", summary="删除k8s集群", description="删除k8s集群")
 async def delete_cluster(cluster_id:str, token: str = Depends(get_token)):
@@ -164,4 +164,4 @@ async def delete_cluster(cluster_id:str, token: str = Depends(get_token)):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail="delete cluster error")
+        raise HTTPException(status_code=400, detail=f"delete cluster error {str(e)}")

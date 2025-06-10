@@ -221,7 +221,7 @@ resource "openstack_compute_instance_v2" "k8s-master" {
   name              = "${var.cluster_name}-k8s-master-${count.index + 1}"
   count             = var.number_of_k8s_masters
   availability_zone = "nova"
-  image_id          = local.image_to_use_master
+  image_id          = var.etcd_volume_type == "" ? local.image_to_use_master : null
   flavor_id         = local.master_flavor
   key_pair          = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : ""
   user_data         = data.cloudinit_config.master-cloudinit.rendered
@@ -321,7 +321,7 @@ resource "openstack_compute_instance_v2" "k8s-master-no-floatip" {
   name              = "${var.cluster_name}-k8s-master-${count.index + var.number_of_k8s_masters+1}"
   count             = var.number_of_k8s_masters_no_floating_ip
   availability_zone = "nova"
-  image_id          = local.image_to_use_master
+  image_id          = var.etcd_volume_type == "" ? local.image_to_use_master : null
   flavor_id         = local.master_flavor
   key_pair          = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : ""
   user_data         = data.cloudinit_config.master-cloudinit.rendered
@@ -347,7 +347,7 @@ resource "openstack_compute_instance_v2" "k8s-master-no-floatip" {
       volume_type           = var.etcd_volume_type
       boot_index            = -1
       delete_on_termination = true
-      guest_format          = "ext4"
+      guest_format          = "xfs"
     }
   }
   tags = ["kubernetes control"]

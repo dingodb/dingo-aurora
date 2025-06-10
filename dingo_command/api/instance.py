@@ -63,7 +63,7 @@ async def get_instance(instance_id: str):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail="get instance error")
+        raise HTTPException(status_code=400, detail=f"get instance error {str(e)}")
 
 
 @router.post("/instance", summary="创建instance", description="创建instance")
@@ -82,7 +82,7 @@ async def create_instance(instance: InstanceCreateObject, token: str = Depends(g
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail="create instance error")
+        raise HTTPException(status_code=400, detail=f"create instance error {str(e)}")
 
 
 @router.delete("/instance/{instance_id}", summary="删除instance", description="删除instance")
@@ -114,7 +114,7 @@ async def delete_instance(instance_id: str, token: str = Depends(get_token)):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail="delete instance error")
+        raise HTTPException(status_code=400, detail=f"delete instance error {str(e)}")
 
 
 @router.post("/baremetal", summary="扩容baremetal集群", description="扩容baremetal集群")
@@ -144,7 +144,7 @@ async def create_baremetal(baremetal: ScaleNodeObject, token: str = Depends(get_
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail="create instance error")
+        raise HTTPException(status_code=400, detail=f"create instance error {str(e)}")
 
 
 @router.post("/baremetal/remove", summary="缩容baremetal", description="缩容baremetal")
@@ -184,4 +184,4 @@ async def delete_node(node_info: NodeRemoveObject, token: str = Depends(get_toke
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail="remove node error")
+        raise HTTPException(status_code=400, detail=f"remove node error {str(e)}")

@@ -16,7 +16,6 @@ runcmd:
   - chown nobody:nogroup ${partition.mount_path}
   - mount ${partition.partition_path} ${partition.mount_path}
 %{~ endfor ~}
-
 %{~ if netplan_critical_dhcp_interface != "" }
 write_files:
   - path: /etc/netplan/90-critical-dhcp.yaml
@@ -43,7 +42,6 @@ chpasswd:
 %{~ endif }
 ## in some cases direct root ssh access via ssh key is required
 disable_root: false
-
 ## in some cases additional CA certs are required
 #ca-certs:
 #  trusted: |
@@ -51,3 +49,7 @@ disable_root: false
 %{~ endif }
 mounts:
   - [ /dev/vdb, /var/lib/etcd, xfs, defaults, 0, 2 ]
+bootcmd:
+  - mkdir -p /var/lib/etcd
+  - mkfs.xfs /dev/vdb
+  - mount /dev/vdb /var/lib/etcd

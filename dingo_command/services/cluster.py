@@ -12,7 +12,8 @@ from openpyxl.styles import Border, Side
 from fastapi import HTTPException
 
 from dingo_command.celery_api.celery_app import celery_app
-
+from dingo_command.services.node import NodeService
+from dingo_command.services.instance import InstanceService
 from dingo_command.db.models.cluster.sql import ClusterSQL,TaskSQL,ParamSQL
 from dingo_command.db.models.node.sql import NodeSQL
 from dingo_command.db.models.instance.sql import InstanceSQL
@@ -374,7 +375,16 @@ class ClusterService:
             query_params = {}
             query_params["id"] = cluster_id
             res = self.list_clusters(query_params, 1, 10, None, None)
-
+            query_params = {}
+            query_params["cluster_id"] = cluster_id
+            res = NodeService().list_nodes(query_params, 1, 10, None, None)
+            forward_float_ip = ""
+            if len(res.get("data")) > 0:
+                forward_float_ip = res.get("data")[0].floating_ip
+            else:
+                res = InstanceService().list_instances(query_params, 1, 10, None, None)
+                if len(res.get("data")) > 0:
+                    forward_float_ip = res.get("data")[0].floating_ip
             # 将cluster转为ClusterObject对象
             if not res.get("data"):
                 return None
@@ -400,7 +410,7 @@ class ClusterService:
                 gpu=cluster.gpu,
                 cpu=cluster.cpu,
                 mem=cluster.mem,
-                forward_float_ip=cluster.forward_float_ip,
+                forward_float_ip=forward_float_ip,
                 gpu_mem = cluster.gpu_mem,
                 network_config=network_config,
                 extra=cluster.extra,

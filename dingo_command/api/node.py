@@ -59,7 +59,7 @@ async def get_node(node_id: str):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail="get cluster error")
+        raise HTTPException(status_code=400, detail=f"get node error {str(e)}")
 
 
 @router.post("/node", summary="扩容节点", description="扩容节点")
@@ -90,7 +90,7 @@ async def create_node(cluster: ScaleNodeObject, token: str = Depends(get_token))
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail="scale node error")
+        raise HTTPException(status_code=400, detail=f"scale node error {str(e)}")
 
 
 @router.post("/node/remove", summary="缩容节点", description="缩容节点")
@@ -127,4 +127,4 @@ async def delete_node(node_info: NodeRemoveObject):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail="remove node error")
+        raise HTTPException(status_code=400, detail=f"remove node error {str(e)}")
