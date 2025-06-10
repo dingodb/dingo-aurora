@@ -50,7 +50,11 @@ def fetch_relation_info():
         for temp_node in node_list:
             # print(f"裸金属数据:{temp_node}")
             # uuid是裸金属的id  instance_uuid是对应的虚拟机的id
-            resource_id_list.append(temp_node.get('uuid'))
+            if temp_node.get('uuid') in resource_id_list:
+                print(f"resource_id_list中已存在裸金属的id：{temp_node.get('uuid')}")
+                continue
+            else:
+                resource_id_list.append(temp_node.get('uuid'))
             #print(f"裸金属列表数据:{temp_node.get('uuid')}")
             server_detail = None
             if temp_node.get('instance_uuid'):
@@ -88,8 +92,14 @@ def fetch_relation_info():
                     # 数据插入
                     AssetResourceRelationSQL.create_asset_resource_relation(temp_relation)
                 else:
-                    # 数据更新
-                    update_asset_resource_relation(db_relation, temp_relation)
+                    if len(db_relation) > 1:
+                        # 先根据resource_id删除所有重复数据
+                        AssetResourceRelationSQL.delete_asset_resource_relation_by_resource_id(temp_relation.resource_id)
+                        # 数据插入
+                        AssetResourceRelationSQL.create_asset_resource_relation(temp_relation)
+                    else:
+                        # 数据更新
+                        update_asset_resource_relation(db_relation[0], temp_relation)
         # 删除掉已经不存在的资源数据
         # 读取所有裸机关联关系数据
         asset_resource_relation_list = AssetResourceRelationSQL.get_all_asset_resource_relation()
@@ -226,21 +236,23 @@ def fetch_resource_metrics_info():
                 # 遍历监控指标项
                 for temp_config in resource_metrics_config_list:
                     # 读取配置项的查询query字符串，写入参数，组装promql
-                    data = {"host_name": temp_relation.resource_name}
-                    promql = temp_config.query.format(**data)
+                    promql = temp_config.query.replace("{host_name}", temp_relation.resource_name)
                     print(f"查询promql语句是{promql}")
-                    metrics_json = BigScreensService.fetch_metrics_with_promql(promql)
-                    # if temp_config.name == "gpu_count":
-                    #     metrics_json = {"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1747031802.721,"8"]}],"analysis":{}}}
-                    # elif temp_config.name == "cpu_usage":
-                    #     metrics_json = {"status":"success","data":{"resultType":"vector","result":[{"metric":{"instance":"10.201.49.1:9100"},"value":[1747031746.604,"1.6218749999663329"]}],"analysis":{}}}
-                    # elif temp_config.name == "memory_usage":
-                    #     metrics_json = {"status":"success","data":{"resultType":"vector","result":[{"metric":{"hostname":"hd03-gpu2-0001","ib_addr":"192.168.1.1","instance":"10.201.49.1:9100","job":"consul","node_role":"k8s","region":"hd-03"},"value":[1747031684.197,"27.14990270986004"]}],"analysis":{}}}
-                    # elif temp_config.name == "gpu_power":
-                    #     metrics_json = {"status":"success","data":{"resultType":"vector","result":[{"metric":{"hostname":"hd03-gpu2-0001","ib_addr":"192.168.1.1","instance":"10.201.49.1:9100","job":"consul","node_role":"k8s","region":"hd-03"},"value":[1747031684.197,"27.14990270986004"]}],"analysis":{}}}
-                    print(f"监控项：{temp_config.name}数据:{metrics_json}")
-                    metrics_value = handle_metrics_json(metrics_json)
-                    temp_resource_metrics_dict[temp_config.name] = metrics_value
+                    try:
+                        metrics_json = BigScreensService.fetch_metrics_with_promql(promql)
+                        # if temp_config.name == "gpu_count":
+                        #     metrics_json = {"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1747031802.721,"8"]}],"analysis":{}}}
+                        # elif temp_config.name == "cpu_usage":
+                        #     metrics_json = {"status":"success","data":{"resultType":"vector","result":[{"metric":{"instance":"10.201.49.1:9100"},"value":[1747031746.604,"1.6218749999663329"]}],"analysis":{}}}
+                        # elif temp_config.name == "memory_usage":
+                        #     metrics_json = {"status":"success","data":{"resultType":"vector","result":[{"metric":{"hostname":"hd03-gpu2-0001","ib_addr":"192.168.1.1","instance":"10.201.49.1:9100","job":"consul","node_role":"k8s","region":"hd-03"},"value":[1747031684.197,"27.14990270986004"]}],"analysis":{}}}
+                        # elif temp_config.name == "gpu_power":
+                        #     metrics_json = {"status":"success","data":{"resultType":"vector","result":[{"metric":{"hostname":"hd03-gpu2-0001","ib_addr":"192.168.1.1","instance":"10.201.49.1:9100","job":"consul","node_role":"k8s","region":"hd-03"},"value":[1747031684.197,"27.14990270986004"]}],"analysis":{}}}
+                        print(f"监控项：{temp_config.name}数据:{metrics_json}")
+                        metrics_value = handle_metrics_json(metrics_json)
+                        temp_resource_metrics_dict[temp_config.name] = metrics_value
+                    except Exception as e:
+                        print(f"查询promql[{promql}]监控数据失败: {e}")
                 # 存入数据库
                 resource_service.update_resource_metrics(temp_relation.resource_id, temp_resource_metrics_dict)
 

@@ -180,7 +180,7 @@ class AssetResourceRelationSQL:
         session = get_session()
         with session.begin():
             return session.query(AssetResourceRelationInfo).filter(
-                AssetResourceRelationInfo.resource_id == resource_id).first()
+                AssetResourceRelationInfo.resource_id == resource_id).all()
 
     @classmethod
     def get_all_asset_resource_relation(cls):
