@@ -728,6 +728,7 @@ class ClusterService:
                         flavor=node.flavor_id,
                         floating_ip=False,
                         etcd=False,
+                        image_id=node.image,
                         port_forwards=cluster_new.port_forwards,
                         use_local_disk = node.use_local_disk,
                         volume_size=node.volume_size,
@@ -772,6 +773,7 @@ class ClusterService:
                         az=self.get_az_value(node.type),
                         flavor=node.flavor_id,
                         floating_ip=False,
+                        image_id=node.image,
                         etcd=False,
                         port_forwards=cluster_new.port_forwards
                     )
