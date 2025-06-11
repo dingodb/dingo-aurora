@@ -374,7 +374,7 @@ class ClusterService:
             # 根据id查询
             query_params = {}
             query_params["id"] = cluster_id
-            res = self.list_clusters(query_params, 1, 10, None, None)
+            result = self.list_clusters(query_params, 1, 10, None, None)
             query_params = {}
             query_params["cluster_id"] = cluster_id
             res = NodeService().list_nodes(query_params, 1, 10, None, None)
@@ -386,9 +386,9 @@ class ClusterService:
                 if len(res.get("data")) > 0:
                     forward_float_ip = res.get("data")[0].floating_ip
             # 将cluster转为ClusterObject对象
-            if not res.get("data"):
+            if not result.get("data"):
                 return None
-            cluster = res.get("data")[0]
+            cluster = result.get("data")[0]
             # Convert the parsed JSON to a KubeClusterObject
             kube_info = KubeClusterObject(**json.loads(cluster.kube_info))
             network_config = NetworkConfigObject()
@@ -440,7 +440,7 @@ class ClusterService:
             res_cluster.node_count = count
             
             # 查询
-            if not res or not res.get("data"):
+            if not result or not result.get("data"):
                 return None
             # 返回第一条数据
             return res_cluster

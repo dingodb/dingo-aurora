@@ -6,7 +6,7 @@ ENV LC_ALL C.UTF-8
 RUN apt-get update -y && apt-get install -y --no-install-recommends apt-utils \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     gcc traceroute lsof iputils-ping vim wget curl locales-all\
-    python3-pip cmake build-essential python3-dev libxml2-dev supervisor gnupg software-properties-common
+    python3-pip cmake build-essential python3-dev libxml2-dev supervisor gnupg software-properties-common sshpass
 RUN wget -O - https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list \
     && apt-get update -y \
@@ -24,7 +24,8 @@ RUN pip install -r /opt/dingo-aurora/requirements.txt
 RUN apt-get clean \
     && rm -rf ~/.cache/pip \
     && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /etc/dingo-command /var/log/dingo-command /var/lib/dingo-command /root/.terraform.d/plugin-cache /etc/ansible
+    && mkdir -p /etc/dingo-command /var/log/dingo-command /var/lib/dingo-command /root/.terraform.d/plugin-cache /etc/ansible \
+    && ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N ""
 
 COPY ./etc/.terraformrc /root/.terraformrc
 COPY ./etc/ansible.cfg /etc/ansible/ansible.cfg

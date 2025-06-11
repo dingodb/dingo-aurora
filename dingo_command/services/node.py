@@ -431,6 +431,8 @@ class NodeService:
             scale_nodes = []
             subnet_cidr = content.get("subnet_cidr")
             image_uuid = content.get("image_uuid")
+            ssh_user = content.get("ssh_user")
+            password = content.get("password")
             forward_float_ip_id = content.get("forward_float_ip_id")
             lb_enbale = content.get("k8s_master_loadbalancer_enabled")
             number_of_k8s_masters_no_floating_ip = content.get("number_of_k8s_masters_no_floating_ip")
@@ -458,7 +460,7 @@ class NodeService:
                 external_subnetids=external_subnetids,
                 external_net=external_net_id,
                 use_existing_network=False,
-                ssh_user=cluster.node_config[0].user,
+                ssh_user=ssh_user,
                 k8s_master_loadbalancer_enabled=lb_enbale,
                 number_of_k8s_masters=1,
                 number_of_k8s_masters_no_floating_ip=number_of_k8s_masters_no_floating_ip,
@@ -473,7 +475,7 @@ class NodeService:
             elif cluster.node_config[0].auth_type == "keypair":
                 tfvars.password = ""
             else:
-                tfvars.password = ""
+                tfvars.password = password
             # 调用celery_app项目下的work.py中的create_cluster方法
             result = celery_app.send_task("dingo_command.celery_api.workers.create_k8s_cluster",
                                           args=[tfvars.dict(), cluster_info.dict(), node_list, instance_list,

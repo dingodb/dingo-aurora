@@ -354,6 +354,8 @@ class InstanceService:
             k8s_nodes = content["nodes"]
             subnet_cidr = content.get("subnet_cidr")
             image_uuid = content.get("image_uuid")
+            ssh_user = content.get("ssh_user")
+            password = content.get("password")
             forward_float_ip_id = content.get("forward_float_ip_id")
             neutron_api = neutron.API()  # 创建API类的实例
             external_net = neutron_api.list_external_networks()
@@ -380,7 +382,7 @@ class InstanceService:
                 external_subnetids=external_subnetids,
                 external_net=external_net_id,
                 use_existing_network=False,
-                ssh_user=cluster.node_config[0].user,
+                ssh_user=ssh_user,
                 token=token,
                 auth_url=auth_url,
                 tenant_id=cluster_info.project_id,
@@ -392,7 +394,7 @@ class InstanceService:
             elif cluster.node_config[0].auth_type == "keypair":
                 tfvars.password = ""
             else:
-                tfvars.password = ""
+                tfvars.password = password
             # 调用celery_app项目下的work.py中的create_cluster方法
             result = celery_app.send_task("dingo_command.celery_api.workers.create_cluster",
                                           args=[tfvars.dict(), cluster_info.dict(), instance_list, scale])

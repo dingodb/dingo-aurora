@@ -419,7 +419,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
             with open(key_file_path, 'r') as key_file:
                 private_key_content = key_file.read()
         
-        print(f"start deploy kubernetes cluster: {ansible_dir}")
+        print(f"start deploy kubernetes cluster: {str(cluster.id)}")
         thread, runner = run_playbook(playbook_file, host_file, ansible_dir, ssh_key=private_key_content)
         # 处理并打印事件日志
         while runner.status not in ['canceled', 'successful', 'timeout', 'failed']:
@@ -430,8 +430,8 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
                     task_name = event['event_data'].get('task')
                     host =  event['event_data'].get('host')
                     task_status = event['event'].split('_')[-1]  # 例如 runner_on_ok -> ok
-                     # 处理 etcd 任务的特殊逻辑
-                    print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
+                    # 处理 etcd 任务的特殊逻辑
+                    # print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
                     
                     if task_name == etcd_task_name and host is not None:
                         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
@@ -988,9 +988,19 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         if cluster_tfvars.password != "":
             master_node_name = f"{cluster_tfvars.cluster_name}-k8s-master-1"
             ssh_port = hosts_data["_meta"]["hostvars"][master_node_name].get("ansible_port", 22)
-            cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p {ssh_port}'
-                   f' {cluster_tfvars.ssh_user}@{master_ip}')
-            result = subprocess.run(cmd, shell=True, capture_output=True)
+            cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p {ssh_port} '
+                   f'{cluster_tfvars.ssh_user}@{master_ip}')
+            retry_count = 0
+            max_retries = 5
+            while retry_count < max_retries:
+                result = subprocess.run(cmd, shell=True, capture_output=True)
+                if result.returncode == 0:
+                    break
+                else:
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        print(f"sshpass failed, retry {retry_count}/{max_retries} after 5s...")
+                        time.sleep(5)
             if result.returncode != 0:
                 task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
                 task_info.state = "failed"
@@ -1206,8 +1216,9 @@ def load_tfvars_to_object(tfvars_path):
 def delete_cluster(self, cluster_id, token):
     try:
         cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_id)
+        terraform_dir = os.path.join(cluster_dir, "terraform")
         # 进入到terraform目录、
-        if not os.path.exists(cluster_dir):
+        if not os.path.exists(cluster_dir) or not os.path.exists(terraform_dir):
             print(f"集群目录不存在: {cluster_dir}")
             # 更新集群状态为已删除，因为目录不存在意味着可能已被删除或从未创建成功
             query_params = {}
@@ -1370,11 +1381,6 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
         # 更新集群cluster的状态为running，删除缩容节点的数据库信息
         session = get_session()
         with session.begin():
-            db_cluster = session.get(Cluster, (cluster_id, cluster_name))
-            cpu_total, gpu_total, mem_total = get_node_info(node_list)
-            db_cluster.cpu -= cpu_total
-            db_cluster.gpu -= gpu_total
-            db_cluster.mem -= mem_total
             for node in node_list:
                 # 根据 node.id 删除节点
                 node = session.get(NodeInfo, node.get("id"))
@@ -1386,6 +1392,12 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
                 instance.status = "running"
                 instance.cluster_id = ""
                 instance.cluster_name = ""
+        with session.begin():
+            db_cluster = session.get(Cluster, (cluster_id, cluster_name))
+            cpu_total, gpu_total, mem_total = get_node_info(node_list)
+            db_cluster.cpu -= cpu_total
+            db_cluster.gpu -= gpu_total
+            db_cluster.mem -= mem_total
             query_params = {"cluster_id": cluster_id}
             count, nodes = NodeSQL.list_nodes(query_params, 1, -1, None, None)
             for node in nodes:
@@ -1443,16 +1455,17 @@ def delete_baremetal(self, cluster_id, cluster_name, instance_list, token):
                 db_cluster.status_msg = f"delete baremetal error: {error_msg}"
             return False
         with session.begin():
-            db_cluster = session.get(Cluster, (cluster_id, cluster_name))
-            cpu_total, gpu_total, mem_total = get_node_info(instance_list)
-            db_cluster.cpu -= cpu_total
-            db_cluster.gpu -= gpu_total
-            db_cluster.mem -= mem_total
             for node in instance_list:
                 # 根据 node.id 删除节点
                 node = session.get(Instance, node.get("id"))
                 if node:
                     session.delete(node)
+        with session.begin():
+            db_cluster = session.get(Cluster, (cluster_id, cluster_name))
+            cpu_total, gpu_total, mem_total = get_node_info(instance_list)
+            db_cluster.cpu -= cpu_total
+            db_cluster.gpu -= gpu_total
+            db_cluster.mem -= mem_total
             query_params = {"cluster_id": cluster_id}
             count, instances = InstanceSQL.list_instances(query_params, 1, -1, None, None)
             for ins in instances:
