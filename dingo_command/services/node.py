@@ -24,7 +24,6 @@ from dingo_command.db.models.cluster.models import Cluster as ClusterDB
 from dingo_command.db.models.node.models import NodeInfo as NodeDB
 from dingo_command.db.models.instance.models import Instance as InstanceDB
 from dingo_command.common import neutron
-from dingo_command.services.cluster import ClusterService
 from dingo_command.db.engines.mysql import get_engine, get_session
 
 from dingo_command.services.custom_exception import Fail
@@ -420,8 +419,6 @@ class NodeService:
                 if conf.role == "master":
                     raise ValueError("The expanded node cannot be the master node.")
             # 从集群数据库里获取这个集群的集群信息，然后拼接出一个扩容的信息，或者从output.tfvars.json信息里获取
-            # cluster_service = ClusterService()
-            # clust_dbinfo = cluster_service.get_cluster(cluster.id)
 
             output_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id),
                                        "terraform", "output.tfvars.json")
