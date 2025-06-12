@@ -212,7 +212,7 @@ class ClusterService:
                     node_db_list.append(node_db)
                     cluster_new = copy.deepcopy(cluster)
                     node_index=node_index+1
-            if node.role == "worker" and node.type == "baremental":
+            if node.role == "worker" and node.type == "baremetal":
                 cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
                 operation_system = self.get_image_info(node.image)
                 for i in range(node.count):
@@ -417,13 +417,13 @@ class ClusterService:
                 private_key=cluster.private_key
             )
             #查询网络信息
-            if not cluster.admin_network_id and cluster.admin_network_id != "":
+            if cluster.admin_network_id and cluster.admin_network_id != "":
                 res_cluster.network_config.admin_network_name = cluster.admin_network_name
-            if not cluster.admin_subnet_id and cluster.admin_subnet_id!= "":
+            if cluster.admin_subnet_id and cluster.admin_subnet_id!= "":
                 res_cluster.network_config.admin_cidr = cluster.admin_network_cidr
-            if not cluster.bus_network_id and cluster.bus_network_id != "":
+            if cluster.bus_network_id and cluster.bus_network_id != "":
                 res_cluster.network_config.bus_network_name = cluster.bus_network_name
-            if not cluster.bus_subnet_id and cluster.bus_subnet_id != "":
+            if cluster.bus_subnet_id and cluster.bus_subnet_id != "":
                 res_cluster.network_config.bus_cidr = cluster.bus_network_cidr
             # 空
             # 查询节点信息
@@ -550,7 +550,7 @@ class ClusterService:
             elif cluster.node_config[0].auth_type == "keypair":
                 tfvars.password = ""
             #组装cluster信息为ClusterTFVarsObject格式
-            if cluster.type == "baremental":
+            if cluster.type == "baremetal":
                 tfvars.number_of_k8s_masters = 0
                 tfvars.number_of_k8s_masters_no_floating_ip = 0
                 result = celery_app.send_task("dingo_command.celery_api.workers.create_cluster",
@@ -702,7 +702,7 @@ class ClusterService:
                             gpu_total = gpu_total + int(gpu_value) *  node.count
                     #gpu_mem_total += flavor['extra_specs']['gpu_mem']
                 #查询flavor信息
-            elif node.role == "worker" and node.type == "baremental":
+            elif node.role == "worker" and node.type == "baremetal":
                 flavor = nova_client.nova_get_flavor(node.flavor_id)
                 cpu_total = cpu_total + flavor['vcpus'] * node.count
                 mem_total = mem_total + flavor['ram'] * node.count
@@ -720,7 +720,7 @@ class ClusterService:
         forward_float_ip_id = ""
         if cluster.forward_float_ip_id:
             forward_float_ip_id = cluster.forward_float_ip_id
-        if cluster.type != "baremental":
+        if cluster.type != "baremetal":
             return [], []
         instance_db_list = []
         node_index = 1
@@ -772,7 +772,7 @@ class ClusterService:
                     instance_db_list.append(instance_db)
                     cluster_new = copy.deepcopy(cluster)
                     node_index = node_index + 1
-            if node.role == "worker" and node.type == "baremental":
+            if node.role == "worker" and node.type == "baremetal":
                 cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
                 operation_system = self.get_image_info(node.image)
                 for i in range(node.count):

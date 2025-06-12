@@ -28,6 +28,7 @@ def run_playbook(playbook_name, inventory, data_dir, ssh_key, extravars=None, li
     # 设置环境变量
     envvars = {
         "ANSIBLE_FORKS": 10,
+        "ANSIBLE_BECOME": "True",
     }
     # 运行 Ansible playbook 异步
     thread, runner = ansible_runner.run_async(
@@ -38,8 +39,7 @@ def run_playbook(playbook_name, inventory, data_dir, ssh_key, extravars=None, li
         envvars=envvars,
         extravars=extravars,
         ssh_key=ssh_key,
-        limit=limit,
-        become=True  # 添加 --become 参数
+        limit=limit
     )
 
     return thread,runner

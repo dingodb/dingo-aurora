@@ -550,7 +550,7 @@ def scale_kubernetes(cluster: ClusterObject, scale_nodes):
                     task_name = event['event_data'].get('task')
                     host = event['event_data'].get('host')
                     task_status = event['event'].split('_')[-1]  # 例如 runner_on_ok -> ok
-                    print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
+                    # print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
             time.sleep(0.01)
             continue
         log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "ansible_scale.log")
@@ -851,7 +851,6 @@ def check_nodes_connectivity(host_file, key_file_path):
             "-i", host_file,
             "-m", "ping",
             "all",
-            "--ssh-common-args=\"-o StrictHostKeyChecking=no\"",
             "-o", # 使用简单输出格式
         ], capture_output=True, text=True)
     
@@ -1014,7 +1013,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
         os.chdir(ansible_dir)
         key_file_path = ""
-        if cluster_tfvars.password != "":
+        if cluster_tfvars.password == "":
             key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "id_rsa")
         # 添加重试逻辑
         start_time = time.time()
@@ -1255,6 +1254,7 @@ def delete_cluster(self, cluster_id, token):
 
         os.chdir(terraform_dir)
         # 加载为 ClusterTFVarsObject 对象
+        
         tfvars_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_id, "terraform", "output.tfvars.json")
         cluster_tfvars = load_tfvars_to_object(tfvars_path)
         cluster_tfvars.token = token
@@ -1262,22 +1262,18 @@ def delete_cluster(self, cluster_id, token):
         with open("output.tfvars.json", "w") as f:
             f.write(tfvars_str)
         # 获取 tfvars 文件路径
-
+        res = subprocess.run(["terraform", "init"], capture_output=True, text=True)
+        if res.returncode != 0:
+            # 发生错误时更新任务状态为"失败"
+            print(f"Terraform error: {res.stderr}")
+            raise Exception("delete cluster Error terraform init exception: {}".format(res.stderr))
 
         res = subprocess.run(["terraform", "destroy", "-auto-approve", "-var-file=output.tfvars.json"],
                              capture_output=True, text=True)
         if res.returncode != 0:
             # 发生错误时更新任务状态为"失败"
             print(f"Terraform error: {res.stderr}")
-            query_params = {}
-            query_params["id"] = cluster_id
-            count, db_clusters = ClusterSQL.list_cluster(query_params)
-            c = db_clusters[0]
-            c.status = 'delete_error'
-            error_msg = replace_ansi_with_single_newline(res.stderr)
-            c.status_msg = f"delete cluster error: {error_msg}"
-            ClusterSQL.update_cluster(c)
-            return False
+            raise Exception("delete cluster Error terraform destroy exception: {}".format(res.stderr))
         else:
             # 更新任务状态为"成功"
             query_params = {}
@@ -1304,7 +1300,9 @@ def delete_cluster(self, cluster_id, token):
                 for n in nodes:
                     db_node = session.get(NodeInfo, n.id)
                     session.delete(db_node)
+            return True
     except Exception as e:
+
         query_params = {}
         query_params["id"] = cluster_id
         count, db_clusters = ClusterSQL.list_cluster(query_params)
@@ -1312,6 +1310,7 @@ def delete_cluster(self, cluster_id, token):
         c.status = 'delete_error'
         c.status_msg = f"delete cluster error: {replace_ansi_with_single_newline(str(e))}"
         ClusterSQL.update_cluster(c)
+        return False
                 
 
 @celery_app.task(bind=True)

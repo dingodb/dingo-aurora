@@ -231,7 +231,7 @@ class InstanceService:
                     instance_db.create_time = datetime.now()
                     instance_db_list.append(instance_db)
                     node_index = node_index + 1
-            if node.role == "worker" and node.type == "baremental":
+            if node.role == "worker" and node.type == "baremetal":
                 cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
                 operation_system = self.get_image_info(node.image)
                 for i in range(node.count):

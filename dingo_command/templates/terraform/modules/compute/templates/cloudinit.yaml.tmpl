@@ -39,6 +39,12 @@ mounts:
 ## in some cases novnc console access is required
 ## it requires ssh password to be set
 %{~ if password != "" }
+users:
+  - name: ${ssh_user}
+    lock_passwd: false
+    passwd: ${password}
+    shell: /bin/bash
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
 ssh_pwauth: yes
 chpasswd:
   list: |
