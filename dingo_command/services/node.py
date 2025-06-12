@@ -167,8 +167,11 @@ class NodeService:
 
     def generate_k8s_nodes(self, cluster_info, cluster, k8s_nodes, scale_nodes, forward_rules, forward_float_ip_id):
         node_db_list, instance_db_list = [], []
-        max_key = max(k8s_nodes, key=lambda k: int(k.split('-')[-1]))
-        node_index = int(max_key.split('-')[-1]) + 1
+        if k8s_nodes:
+            max_key = max(k8s_nodes, key=lambda k: int(k.split('-')[-1]))
+            node_index = int(max_key.split('-')[-1]) + 1
+        else:
+            node_index = 1
         nova_client = NovaClient()
         for idx, node in enumerate(cluster.node_config):
             if node.role == "worker" and node.type == "vm":

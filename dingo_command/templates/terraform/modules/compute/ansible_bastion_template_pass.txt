@@ -1,1 +1,1 @@
-ansible_ssh_common_args: '-o ProxyCommand="sshpass -p PASSWORD ssh -W %h:%p USER@BASTION_ADDRESS"'
+ansible_ssh_common_args: '-o ProxyCommand="sshpass -p PASSWORD ssh -W %h:%p -p SSH_PORT USER@BASTION_ADDRESS"'

@@ -30,7 +30,7 @@ def run_playbook(playbook_name, inventory, data_dir, ssh_key, extravars=None, li
         "ANSIBLE_FORKS": 10,
     }
     # 运行 Ansible playbook 异步
-    thread,runner = ansible_runner.run_async(
+    thread, runner = ansible_runner.run_async(
         private_data_dir=data_dir,
         playbook=playbook_name,
         inventory=inventory,
@@ -38,7 +38,8 @@ def run_playbook(playbook_name, inventory, data_dir, ssh_key, extravars=None, li
         envvars=envvars,
         extravars=extravars,
         ssh_key=ssh_key,
-        limit=limit
+        limit=limit,
+        become=True  # 添加 --become 参数
     )
 
     return thread,runner

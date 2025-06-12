@@ -286,6 +286,7 @@ def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list, scale=False
     try:
         task_id = str(self.request.id)
         cluster_id = cluster_tf["id"]
+        print(f"tf: {cluster_tf}, cluster_dict: {cluster_dict}")
         print(f"Task ID: {task_id}, Cluster ID: {cluster_id}")
         cluster_tfvars = ClusterTFVarsObject(**cluster_tf)
         cluster = ClusterObject(**cluster_dict)
@@ -991,7 +992,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p {ssh_port} '
                    f'{cluster_tfvars.ssh_user}@{master_ip}')
             retry_count = 0
-            max_retries = 5
+            max_retries = 30
             while retry_count < max_retries:
                 result = subprocess.run(cmd, shell=True, capture_output=True)
                 if result.returncode == 0:
@@ -1012,7 +1013,9 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         print(f"check all node status {task_id}")
         ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
         os.chdir(ansible_dir)
-        key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "id_rsa")
+        key_file_path = ""
+        if cluster_tfvars.password != "":
+            key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "id_rsa")
         # 添加重试逻辑
         start_time = time.time()
         max_retry_time = 600  # 10分钟超时
