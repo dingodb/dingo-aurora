@@ -272,7 +272,7 @@ class CloudKittyService:
             print(f"registered font:{pdfmetrics.getRegisteredFontNames()}, font_name:{font_name}")
 
             # 定义表格样式（包含列宽设置）
-            col_widths = [100, 150, 100, 100] if len(table_data[0]) > 2 else [100, 150]
+            col_widths = [120, 150, 100, 100] if len(table_data[0]) > 2 else [120, 150]
 
             # print(f"table data:{table_data}")
             table = Table(table_data, colWidths=col_widths)

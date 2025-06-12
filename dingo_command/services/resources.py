@@ -170,19 +170,19 @@ class ResourcesService:
 
     # 查询某个资源的监控指标项数据
     def get_resource_metrics_by_resource_id(self, resource_id):
-        temp = {"resource_gpu_count": None,
-                "resource_gpu_power": None,
-                "resource_cpu_usage": None,
-                "resource_memory_usage": None}
+        temp = {"resource_gpu_count": "-",
+                "resource_gpu_power": "-",
+                "resource_cpu_usage": "-",
+                "resource_memory_usage": "-"}
         # 查询数据
         db_resource_metrics = AssetResourceRelationSQL.get_resource_metrics_by_resource_id(resource_id)
-        print(db_resource_metrics)
+        #print(db_resource_metrics)
         if not db_resource_metrics:
             return temp
 
         for resource_metric in db_resource_metrics:
             # GPU卡数
-            if resource_metric.name == 'gpu_count':
+            if resource_metric.name == 'gpu_count' and resource_metric.data is not None:
                 temp["resource_gpu_count"] = resource_metric.data
             # 资源GPU平均功率
             if resource_metric.name == 'gpu_power' and resource_metric.data is not None:

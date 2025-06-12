@@ -1,6 +1,7 @@
 # 计费的api接口
 import os
 from typing import List
+from oslo_log import log
 
 from fastapi.responses import FileResponse
 from urllib.parse import unquote
@@ -13,6 +14,7 @@ from dingo_command.utils.constant import EXCEL_TEMP_DIR
 from dingo_command.utils.datetime import format_d8q_timestamp
 from fastapi import APIRouter, HTTPException, Query
 
+LOG = log.getLogger(__name__)
 router = APIRouter()
 
 cloudkitty_service = CloudKittyService()
@@ -78,6 +80,7 @@ async def download_rating_summary_detail_pdf_preprocessing(detail: List[CloudKit
 async def download_rating_summary_detail_pdf(filePath: str = Query(None, description="下载PDF文件名称")):
     # 文件存在则下载
     result_file_pdf_path = EXCEL_TEMP_DIR + unquote(filePath)
+    LOG.info(f"rating summary detail download pdf name：{filePath}, path: {result_file_pdf_path}, isExists:{os.path.exists(result_file_pdf_path)}")
     if filePath is not None and os.path.exists(result_file_pdf_path):
         return FileResponse(
             path=result_file_pdf_path,
