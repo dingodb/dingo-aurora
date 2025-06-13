@@ -3,9 +3,10 @@ import os
 from typing import List
 from oslo_log import log
 
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from urllib.parse import unquote
 from starlette.background import BackgroundTask
+
 from dingo_command.api.model.cloudkitty import CloudKittyRatingSummaryDetail, RatingModuleConfigHashMapMapping, RatingModuleConfigHashMapThreshold, RatingModules
 from dingo_command.services.cloudkitty import CloudKittyService
 from dingo_command.utils import file_utils
@@ -106,17 +107,20 @@ async def rating_summary_detail_pdf_download(detail: List[CloudKittyRatingSummar
         file_utils.cleanup_temp_file(result_file_pdf_path)
         raise HTTPException(status_code=400, detail="generate pdf file error")
 
-    if os.path.exists(result_file_pdf_path):
-        return FileResponse(
-            path=result_file_pdf_path,
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f"attachment; filename={result_file_pdf_name}"
-            },
-            filename=result_file_pdf_name,  # 下载时显示的文件名
-            background=BackgroundTask(file_utils.cleanup_temp_file, result_file_pdf_path)
-        )
-    raise HTTPException(status_code=400, detail="PDf file not found")
+    if not os.path.exists(result_file_pdf_path):
+        raise HTTPException(status_code=404, detail="PDf file not found")
+
+    def file_stream():
+        with open(result_file_pdf_path, "rb") as f:
+            while chunk := f.read(8192):  # 8KB分块读取
+                yield chunk
+        file_utils.cleanup_temp_file(result_file_pdf_path)
+
+    return StreamingResponse(
+        file_stream(),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename={result_file_pdf_name}"}
+    )
 
 # @router.post("/cloudkitty/download/ratingSummaryDetail/execl", summary="下载计费汇总详情execl", description="下载计费汇总详情execl")
 # async def download_rating_summary_detail_execl(detail: List[CloudKittyRatingSummaryDetail],
