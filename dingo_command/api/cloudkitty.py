@@ -90,6 +90,34 @@ async def download_rating_summary_detail_pdf(filePath: str = Query(None, descrip
         )
     raise HTTPException(status_code=400, detail="PDf file not found")
 
+@router.post("/cloudkitty/download/ratingSummaryDetail/pdf", summary="下载计费汇总详情PDF文件", description="下载计费汇总详情PDF文件")
+async def rating_summary_detail_pdf_download(detail: List[CloudKittyRatingSummaryDetail],
+                                             language: str = Query(None, description="当前环境语言")):
+    result_file_pdf_name = "rating_summary_detail_" + format_d8q_timestamp() + ".pdf"
+    # 导出文件路径
+    result_file_pdf_path = EXCEL_TEMP_DIR + result_file_pdf_name
+
+    # 1. 生成PDF文件
+    try:
+        cloudkitty_service.generate_rating_summary_detail_pdf(result_file_pdf_path, detail, language)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        file_utils.cleanup_temp_file(result_file_pdf_path)
+        raise HTTPException(status_code=400, detail="generate pdf file error")
+
+    if os.path.exists(result_file_pdf_path):
+        return FileResponse(
+            path=result_file_pdf_path,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={result_file_pdf_name}"
+            },
+            filename=result_file_pdf_name,  # 下载时显示的文件名
+            background=BackgroundTask(file_utils.cleanup_temp_file, result_file_pdf_path)
+        )
+    raise HTTPException(status_code=400, detail="PDf file not found")
+
 # @router.post("/cloudkitty/download/ratingSummaryDetail/execl", summary="下载计费汇总详情execl", description="下载计费汇总详情execl")
 # async def download_rating_summary_detail_execl(detail: List[CloudKittyRatingSummaryDetail],
 #                                              language: str = Query(None, description="当前环境语言")):
