@@ -141,7 +141,37 @@ def get_node_info(node_list):
             mem_int_total += mem_int
     return cpu_int_total, gpu_int_total, mem_int_total
 
-def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale=False):
+def set_instance_status(cluster, node_list, task_info=None, node_type=None):
+    host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster.id, "hosts")
+    os.chmod(host_file, 0o755)
+    res = subprocess.run(["python3", host_file, "--list"], capture_output=True, text=True)
+    if res.returncode != 0:
+        # 更新数据库的状态为failed
+        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+        task_info.state = "failed"
+        task_info.detail = str(res.stderr)
+        update_task_state(task_info)
+        raise Exception(f"Error generating Ansible inventory: {str(res.stderr)}")
+    hosts_data = json.loads(res.stdout)
+    session = get_session()
+    nova_client = NovaClient()
+    with session.begin():
+        for node in node_list:
+            db_instance = session.get(node_type, node.get("id"))
+            for k, v in hosts_data["_meta"]["hostvars"].items():
+                # 需要添加节点的ip地址等信息
+                if db_instance.name == k:
+                    db_instance.server_id = v.get("id")
+                    server = nova_client.nova_get_server_detail(v.get("id"))
+                    if server.get("status") == "ERROR":
+                        db_instance.status = "error"
+                        db_instance.status_msg = server.get("fault").get("details")
+                    elif server.get("status") == "ACTIVE":
+                        db_instance.status = "running"
+                    else:
+                        db_instance.status = server.get("status")
+
+def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale=False, node_list=None, node_type=None):
     """使用Terraform创建基础设施"""
     try:
         cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id))
@@ -224,6 +254,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
             task_info.detail = res.stderr
             update_task_state(task_info)
             print(f"Terraform apply error: {res.stderr}")
+            set_instance_status(cluster, node_list, task_info=task_info, node_type=node_type)
             return False, replace_ansi_with_single_newline(res.stderr)
         key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory",str(cluster.id), "id_rsa")
         private_key_content = ""
@@ -297,7 +328,8 @@ def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list, scale=False
                                     msg=TaskService.TaskMessage.instructure_create.name)
         TaskSQL.insert(instructure_task)
 
-        terraform_result = create_infrastructure(cluster_tfvars, instructure_task, scale)
+        terraform_result = create_infrastructure(cluster_tfvars, instructure_task,
+                                                 scale=scale, node_list=instance_list, node_type=Instance)
 
         if not terraform_result[0]:
             raise Exception(f"Terraform infrastructure creation failed, reason: {terraform_result[1]}")
@@ -948,7 +980,8 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         cinder_client = CinderClient()
         volume_type = cinder_client.list_volum_type()
         cluster_tfvars.etcd_volume_type = volume_type
-        terraform_result = create_infrastructure(cluster_tfvars, task_info, scale)
+        terraform_result = create_infrastructure(cluster_tfvars, task_info, scale=scale,
+                                                 node_list=node_list, node_type=NodeInfo)
 
         if not terraform_result[0]:
             raise Exception(f"Terraform infrastructure creation failed, reason: {terraform_result[1]}")

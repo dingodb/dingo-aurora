@@ -334,10 +334,23 @@ class InstanceService:
             public_subnetids = external_subnetids
         return floatingip_pool,public_floatingip_pool,public_subnetids,external_subnetids,external_net_id
 
+    def check_node_param(self, cluster: ScaleNodeObject):
+        if not cluster.node_config:
+            raise Fail(error_code=405, error_message="扩容的node_config参数不能为空")
+        else:
+            for node_info in cluster.node_config:
+                if node_info.count < 1:
+                    raise Fail(error_code=405, error_message="扩容的节点数量不能小于1")
+                if not node_info.image:
+                    raise Fail(error_code=405, error_message="扩容节点的image参数不能为空")
+                if not node_info.flavor_id:
+                    raise Fail(error_code=405, error_message="扩容节点的flavor参数不能为空")
+
     def create_baremetal(self, cluster_info, cluster: ScaleNodeObject, token):
         # 扩容baremetal集群的节点
         # 创建instance，创建openstack种的虚拟机或者裸金属服务器
         # 数据校验 todo
+        self.check_node_param(cluster)
         try:
             scale = True
             for conf in cluster.node_config:

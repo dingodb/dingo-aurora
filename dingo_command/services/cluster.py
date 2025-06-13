@@ -255,7 +255,7 @@ class ClusterService:
                     instance_db.disk = disk
                     instance_db.ip_address = ""
                     instance_db.name = cluster.name + f"-node-{int(node_index)}"
-                    instance_db.floating_ip = ""
+                    instance_db.floating_ip = cluster.forward_float_ip
                     instance_db.create_time = datetime.now()
                     instance_db_list.append(instance_db)
 
@@ -451,8 +451,6 @@ class ClusterService:
 
     def check_cluster_param(self, cluster: ClusterObject):
         # 判断名称是否重复、判断是否有空值、判断是否有重复的节点配置
-        
-        
         query_params = {}
         query_params["exact_name"] = cluster.name
         query_params["project_id"] = cluster.project_id
@@ -460,8 +458,26 @@ class ClusterService:
         if res.get("total") > 0:
             for c in res.get("data"):
                 if c.status != "deleted":
+                    # 如果查询结果不为空，说明集群名称已存在+
                     raise Fail(error_code=405, error_message="集群名称已存在")
-                # 如果查询结果不为空，说明集群名称已存在+
+        if cluster.type not in ("kubernetes", "baremetal"):
+            raise Fail(error_code=405, error_message="集群类型必须为kubernetes或baremetal")
+        if not cluster.node_config:
+            raise Fail(error_code=405, error_message="集群的node_config参数不能为空")
+        else:
+            for node_info in cluster.node_config:
+                if node_info.count < 1:
+                    raise Fail(error_code=405, error_message="集群的节点数量不能小于1")
+                if not node_info.image:
+                    raise Fail(error_code=405, error_message="集群节点的image参数不能为空")
+                if not node_info.flavor_id:
+                    raise Fail(error_code=405, error_message="集群节点的flavor参数不能为空")
+        if cluster.port_forwards:
+            for port_info in cluster.port_forwards:
+                if not port_info.internal_port:
+                    raise Fail(error_code=405, error_message="节点端口转发规则的内部端口参数不能为空")
+                if port_info.protocol:
+                    raise Fail(error_code=405, error_message="节点端口转发规则的协议必须为tcp或者udp")
         return True
     
     def generate_random_cidr(self):

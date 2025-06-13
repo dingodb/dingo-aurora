@@ -302,7 +302,7 @@ class NodeService:
                     instance_db.disk = disk
                     instance_db.ip_address = ""
                     instance_db.name = cluster_info.name + f"-node-{int(node_index)}"
-                    instance_db.floating_ip = ""
+                    instance_db.floating_ip = cluster_info.forward_float_ip
                     instance_db.create_time = datetime.now()
                     instance_db_list.append(instance_db)
 
@@ -317,12 +317,18 @@ class NodeService:
                     node_db.password = node.password
                     node_db.image = node.image
                     node_db.instance_id = instance_db.id
+                    node_db.operation_system = operation_system
+                    node_db.cpu = cpu
+                    node_db.gpu = gpu
+                    node_db.mem = mem
+                    node_db.disk = disk
                     node_db.project_id = cluster_info.project_id
                     node_db.auth_type = node.auth_type
                     node_db.security_group = node.security_group
                     node_db.flavor_id = node.flavor_id
                     node_db.status = "creating"
                     node_db.floating_forward_ip = forward_float_ip_id
+                    node_db.floating_ip = cluster_info.forward_float_ip
                     node_db.ip_forward_rule = forward_rules_new
                     node_db.status_msg = ""
                     node_db.admin_address = ""
@@ -413,9 +419,22 @@ class NodeService:
             public_subnetids = external_subnetids
         return floatingip_pool,public_floatingip_pool,public_subnetids,external_subnetids,external_net_id
 
+    def check_node_param(self, cluster: ScaleNodeObject):
+        if not cluster.node_config:
+            raise Fail(error_code=405, error_message="扩容的node_config参数不能为空")
+        else:
+            for node_info in cluster.node_config:
+                if node_info.count < 1:
+                    raise Fail(error_code=405, error_message="扩容的节点数量不能小于1")
+                if not node_info.image:
+                    raise Fail(error_code=405, error_message="扩容节点的image参数不能为空")
+                if not node_info.flavor_id:
+                    raise Fail(error_code=405, error_message="扩容节点的flavor参数不能为空")
+
     def create_node(self, cluster_info, cluster: ScaleNodeObject, token):
         # 在这里执行创建集群的那个流程，先创建vm虚拟机，然后添加到本k8s集群里面
         # 数据校验 todo
+        self.check_node_param(cluster)
         try:
             scale = True
             for conf in cluster.node_config:
