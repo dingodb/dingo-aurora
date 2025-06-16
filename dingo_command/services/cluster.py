@@ -476,7 +476,7 @@ class ClusterService:
             for port_info in cluster.port_forwards:
                 if not port_info.internal_port:
                     raise Fail(error_code=405, error_message="节点端口转发规则的内部端口参数不能为空")
-                if port_info.protocol:
+                if not port_info.protocol:
                     raise Fail(error_code=405, error_message="节点端口转发规则的协议必须为tcp或者udp")
         return True
     
@@ -514,7 +514,7 @@ class ClusterService:
             external_net = neutron_api.list_external_networks()
 
             lb_enbale = False
-            if cluster.kube_info.number_master>1 and cluster.type == "kubernetes":
+            if cluster.type == "kubernetes":
                 lb_enbale = cluster.kube_info.loadbalancer_enabled
            
             cluster_info_db = self.convert_clusterinfo_todb(cluster)

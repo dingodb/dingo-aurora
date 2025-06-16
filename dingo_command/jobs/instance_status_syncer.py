@@ -48,9 +48,14 @@ def check_instance_status():
                     server = nova_client.nova_get_server_detail(server_id)
 
                     # 如果状态发生变化，更新集群状态
-                    if server.get("status") == "ERROR" and instance.status != "error":
-                        LOG.info(f"Updating instance {instance.id} status from {instance.status} to {server.get('status')}")
-                        instance.status = "error"
+                    if (server.get("status") == "ERROR" and instance.status != "error" or
+                            server.get("status") != "ACTIVE" and instance.status == "running"):
+                        LOG.info(f"Updating instance {instance.id} status from {instance.status} to "
+                                 f"{server.get('status')}")
+                        if server.get("status") == "ERROR":
+                            instance.status = "error"
+                        else:
+                            instance.status = server.get("status")
                         instance.status_msg = server.get("fault").get("details")
                         InstanceSQL.update_instance(instance)
             except Exception as e:
@@ -84,9 +89,13 @@ def check_node_status():
                     server = nova_client.nova_get_server_detail(server_id)
 
                     # 如果状态发生变化，更新集群状态
-                    if server.get("status") == "ERROR" and node.status != "error":
+                    if (server.get("status") == "ERROR" and node.status != "error" or
+                            server.get("status") != "ACTIVE" and node.status == "running"):
                         LOG.info(f"Updating node {node.id} status from {node.status} to {server.get('status')}")
-                        node.status = "error"
+                        if server.get("status") == "ERROR":
+                            node.status = "error"
+                        else:
+                            node.status = server.get("status")
                         node.status_msg = server.get("fault").get("details")
                         NodeSQL.update_node(node)
             except Exception as e:

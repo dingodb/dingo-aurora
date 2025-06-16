@@ -254,12 +254,20 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
             for node in cluster.nodes.keys():
                 nodes_old_list.append(node)
             query_params = {"cluster_id": cluster.id}
-            count, nodes = NodeSQL.list_nodes(query_params, page=1, page_size=-1)
-            for node in nodes:
-                if node.status == "creating":
-                    node_create_list.append(node.name.split(cluster.cluster_name + "-")[1])
-                    continue
-                nodes_new_list.append(node.name.split(cluster.cluster_name + "-")[1])
+            if node_type != Instance:
+                count, nodes = NodeSQL.list_nodes(query_params, page=1, page_size=-1)
+                for node in nodes:
+                    if node.status == "creating":
+                        node_create_list.append(node.name.split(cluster.cluster_name + "-")[1])
+                        continue
+                    nodes_new_list.append(node.name.split(cluster.cluster_name + "-")[1])
+            else:
+                count, nodes = InstanceSQL.list_instances(query_params, page=1, page_size=-1)
+                for node in nodes:
+                    if node.status == "creating":
+                        node_create_list.append(node.name.split(cluster.cluster_name + "-")[1])
+                        continue
+                    nodes_new_list.append(node.name.split(cluster.cluster_name + "-")[1])
             new_node_list = list(set(nodes_old_list) - set(nodes_new_list) - set(node_create_list))
             state_remove(new_node_list)
 
