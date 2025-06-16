@@ -357,6 +357,7 @@ resource "openstack_compute_instance_v2" "k8s-master-no-floatip" {
 
   metadata = {
     ssh_user         = var.ssh_user
+    password         = var.password
     kubespray_groups = "etcd,kube_control_plane,${var.supplementary_master_groups},cluster,no_floating"
     depends_on       = var.network_router_id
     use_access_ip    = var.use_access_ip

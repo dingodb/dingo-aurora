@@ -141,17 +141,10 @@ def get_node_info(node_list):
             mem_int_total += mem_int
     return cpu_int_total, gpu_int_total, mem_int_total
 
-def set_instance_status(cluster, node_list, task_info=None, node_type=None):
+def set_instance_status(cluster, node_list, node_type=None):
     host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster.id, "hosts")
     os.chmod(host_file, 0o755)
     res = subprocess.run(["python3", host_file, "--list"], capture_output=True, text=True)
-    if res.returncode != 0:
-        # 更新数据库的状态为failed
-        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-        task_info.state = "failed"
-        task_info.detail = str(res.stderr)
-        update_task_state(task_info)
-        raise Exception(f"Error generating Ansible inventory: {str(res.stderr)}")
     hosts_data = json.loads(res.stdout)
     session = get_session()
     nova_client = NovaClient()
@@ -171,7 +164,22 @@ def set_instance_status(cluster, node_list, task_info=None, node_type=None):
                     else:
                         db_instance.status = server.get("status")
 
-def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale=False, node_list=None, node_type=None):
+def state_remove(node_list):
+    for node in node_list:
+        try:
+            subprocess.run(
+                ["terraform", "state", "rm", f"module.compute.openstack_compute_instance_v2.nodes[\"{node}\"]"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+        except Exception as e:
+            if "No matching objects found" in str(e):
+                continue
+    print(f"rm nodes from terraform state successfully")
+
+def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale=False, node_list=None,
+                          node_type=None, instance_list=None):
     """使用Terraform创建基础设施"""
     try:
         cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id))
@@ -240,6 +248,30 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
         #os.environ['OS_CLOUD']=region_name
         #判断是否存在名为cluster-router的路由
 
+        # 在这里添加需要排除重新创建的虚拟机，从output文件里面取得nodes再和数据库里面的nodes做比较，数据里面没有的就在state删除
+        if scale:
+            nodes_old_list, nodes_new_list, node_create_list = [], [], []
+            for node in cluster.nodes.keys():
+                nodes_old_list.append(node)
+            query_params = {"cluster_id": cluster.id}
+            count, nodes = NodeSQL.list_nodes(query_params, page=1, page_size=-1)
+            for node in nodes:
+                if node.status == "creating":
+                    node_create_list.append(node.name.split(cluster.cluster_name + "-")[1])
+                    continue
+                nodes_new_list.append(node.name.split(cluster.cluster_name + "-")[1])
+            new_node_list = list(set(nodes_old_list) - set(nodes_new_list) - set(node_create_list))
+            state_remove(new_node_list)
+
+            with open("output.tfvars.json") as f:
+                content = json.loads(f.read())
+                content_new = copy.deepcopy(content)
+                for node in content["nodes"]:
+                    if node in new_node_list:
+                        del content_new["nodes"][node]
+            with open("output.tfvars.json", "w") as f:
+                json.dump(content_new, f, indent=4)
+
         res = subprocess.run([
             "terraform",
             "apply",
@@ -254,7 +286,9 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
             task_info.detail = res.stderr
             update_task_state(task_info)
             print(f"Terraform apply error: {res.stderr}")
-            set_instance_status(cluster, node_list, task_info=task_info, node_type=node_type)
+            set_instance_status(cluster, node_list, node_type=node_type)
+            if node_type == NodeInfo and instance_list:
+                set_instance_status(cluster, instance_list, node_type=Instance)
             return False, replace_ansi_with_single_newline(res.stderr)
         key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory",str(cluster.id), "id_rsa")
         private_key_content = ""
@@ -981,7 +1015,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         volume_type = cinder_client.list_volum_type()
         cluster_tfvars.etcd_volume_type = volume_type
         terraform_result = create_infrastructure(cluster_tfvars, task_info, scale=scale,
-                                                 node_list=node_list, node_type=NodeInfo)
+                                                 node_list=node_list, node_type=NodeInfo, instance_list=instance_list)
 
         if not terraform_result[0]:
             raise Exception(f"Terraform infrastructure creation failed, reason: {terraform_result[1]}")
@@ -1054,32 +1088,6 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         retry_interval = 5    # 5秒重试间隔
         connection_success = False
 
-        while not connection_success and (time.time() - start_time) < max_retry_time:
-            nodes_result = check_nodes_connectivity(host_file, key_file_path)
-            
-            if nodes_result["all_nodes_reachable"]:
-                connection_success = True
-                print(f"all node connect sussess {task_id}")    
-                break
-            else:
-                unreachable_nodes = ", ".join(nodes_result["unreachable_nodes"])
-                print(f"some node can not connect: {unreachable_nodes}，{retry_interval}s after retry...")
-                # 记录日志，显示哪些节点不可达
-                with open(os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tf_dict["id"], "connection_check.log"), "a") as log_file:
-                    log_file.write(f"{datetime.now()}: unreachable nodes: {unreachable_nodes}\n")
-                    log_file.write(f"错误输出: {nodes_result['error']}\n\n")
-                
-                time.sleep(retry_interval)
-
-        # 如果超时后仍然无法连接所有节点，则抛出错误
-        if not connection_success:
-            error_msg = f"{int(time.time() - start_time)}s retry node can not connect: {', '.join(nodes_result['unreachable_nodes'])}"
-            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-            task_info.state = "failed"
-            task_info.detail = error_msg
-            update_task_state(task_info)
-            raise Exception(error_msg)
-
         output_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory",
                                    str(cluster.id), "terraform", "output.tfvars.json")
         with open(output_file) as f:
@@ -1112,6 +1120,31 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                         db_instance.ip_address = v.get("ip")
                         break
 
+        while not connection_success and (time.time() - start_time) < max_retry_time:
+            nodes_result = check_nodes_connectivity(host_file, key_file_path)
+            
+            if nodes_result["all_nodes_reachable"]:
+                connection_success = True
+                print(f"all node connect sussess {task_id}")    
+                break
+            else:
+                unreachable_nodes = ", ".join(nodes_result["unreachable_nodes"])
+                print(f"some node can not connect: {unreachable_nodes}，{retry_interval}s after retry...")
+                # 记录日志，显示哪些节点不可达
+                with open(os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tf_dict["id"], "connection_check.log"), "a") as log_file:
+                    log_file.write(f"{datetime.now()}: unreachable nodes: {unreachable_nodes}\n")
+                    log_file.write(f"错误输出: {nodes_result['error']}\n\n")
+                
+                time.sleep(retry_interval)
+
+        # 如果超时后仍然无法连接所有节点，则抛出错误
+        if not connection_success:
+            error_msg = f"{int(time.time() - start_time)}s retry node can not connect: {', '.join(nodes_result['unreachable_nodes'])}"
+            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "failed"
+            task_info.detail = error_msg
+            update_task_state(task_info)
+            raise Exception(error_msg)
 
         res = subprocess.run(["python3", host_file, "--list"], capture_output=True, text=True)
         if res.returncode != 0:
@@ -1375,7 +1408,7 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
                     task_name = event['event_data'].get('task')
                     host = event['event_data'].get('host')
                     task_status = event['event'].split('_')[-1]  # 例如 runner_on_ok -> ok
-                    print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
+                    #print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
             time.sleep(0.01)
             continue
         log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), "ansible_remove.log")

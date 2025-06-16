@@ -25,138 +25,117 @@
   debug:
     msg: "Docker is already installed: {{ docker_already_installed }}" 
 
-- name: Gather os specific variables
-  include_vars: "{{ item }}"
-  with_first_found:
-    - files:
-        - "{{ ansible_distribution | lower }}-{{ ansible_distribution_version | lower | replace('/', '_') }}.yml"
-        - "{{ ansible_distribution | lower }}-{{ ansible_distribution_release | lower }}-{{ host_architecture }}.yml"
-        - "{{ ansible_distribution | lower }}-{{ ansible_distribution_release | lower }}.yml"
-        - "{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version | lower | replace('/', '_') }}.yml"
-        - "{{ ansible_distribution | lower }}-{{ host_architecture }}.yml"
-        - "{{ ansible_distribution | lower }}.yml"
-        - "{{ ansible_distribution.split(' ')[0] | lower }}.yml"
-        - "{{ ansible_os_family | lower }}-{{ ansible_distribution_major_version | lower | replace('/', '_') }}.yml"
-        - "{{ ansible_os_family | lower }}-{{ host_architecture }}.yml"
-        - "{{ ansible_os_family | lower }}.yml"
-        - defaults.yml
-      paths:
-        - ../vars
-      skip: true
-  tags:
-    - facts
+- name: Docker installation block
+  block:
+    - name: Gather os specific variables
+      include_vars: "{{ item }}"
+      with_first_found:
+        - files:
+            - "{{ ansible_distribution | lower }}-{{ ansible_distribution_version | lower | replace('/', '_') }}.yml"
+            - "{{ ansible_distribution | lower }}-{{ ansible_distribution_release | lower }}-{{ host_architecture }}.yml"
+            - "{{ ansible_distribution | lower }}-{{ ansible_distribution_release | lower }}.yml"
+            - "{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version | lower | replace('/', '_') }}.yml"
+            - "{{ ansible_distribution | lower }}-{{ host_architecture }}.yml"
+            - "{{ ansible_distribution | lower }}.yml"
+            - "{{ ansible_distribution.split(' ')[0] | lower }}.yml"
+            - "{{ ansible_os_family | lower }}-{{ ansible_distribution_major_version | lower | replace('/', '_') }}.yml"
+            - "{{ ansible_os_family | lower }}-{{ host_architecture }}.yml"
+            - "{{ ansible_os_family | lower }}.yml"
+            - defaults.yml
+          paths:
+            - ../vars
+          skip: true
+      tags:
+        - facts
+
+    - name: Gather DNS facts
+      include_tasks: set_facts_dns.yml
+      when: dns_mode != 'none' and resolvconf_mode == 'docker_dns'
+      tags:
+        - facts
+
+    - name: Pre-upgrade docker
+      import_tasks: pre-upgrade.yml
+
+    - name: Ensure docker-ce repository public key is installed
+      apt_key:
+        id: "{{ item }}"
+        url: "{{ docker_repo_key_info.url }}"
+        keyring: "{{ docker_repo_key_keyring|default(omit) }}"
+        state: present
+      register: keyserver_task_result
+      until: keyserver_task_result is succeeded
+      retries: 4
+      delay: "{{ retry_stagger | d(3) }}"
+      with_items: "{{ docker_repo_key_info.repo_keys }}"
+      environment: "{{ proxy_env }}"
+      when: ansible_pkg_mgr == 'apt'
+
+    - name: Ensure docker-ce repository is enabled
+      apt_repository:
+        repo: "{{ item }}"
+        state: present
+      with_items: "{{ docker_repo_info.repos }}"
+      when: ansible_pkg_mgr == 'apt'
+
+    - name: Configure docker repository on Fedora
+      template:
+        src: "fedora_docker.repo.j2"
+        dest: "{{ yum_repo_dir }}/docker.repo"
+        mode: "0644"
+      when: ansible_distribution == "Fedora" and not is_ostree
+
+    - name: Remove dpkg hold
+      dpkg_selections:
+        name: "{{ item }}"
+        selection: install
+      when: ansible_pkg_mgr == 'apt'
+      register: ret
+      changed_when: false
+      failed_when:
+        - ret is failed
+        - ret.msg != ( "Failed to find package '" + item + "' to perform selection 'install'." )
+      with_items:
+        - "{{ containerd_package }}"
+        - docker-ce
+        - docker-ce-cli
+
+    - name: Ensure docker packages are installed
+      package:
+        name: "{{ docker_package_info.pkgs }}"
+        state: "{{ docker_package_info.state | default('present') }}"
+      module_defaults:
+        apt:
+          update_cache: true
+        dnf:
+          enablerepo: "{{ docker_package_info.enablerepo | default(omit) }}"
+          disablerepo: "{{ docker_package_info.disablerepo | default(omit) }}"
+        yum:
+          enablerepo: "{{ docker_package_info.enablerepo | default(omit) }}"
+        zypper:
+          update_cache: true
+      register: docker_task_result
+      until: docker_task_result is succeeded
+      retries: 4
+      delay: "{{ retry_stagger | d(3) }}"
+      notify: Restart docker
+      when:
+        - not ansible_os_family in ["Flatcar", "Flatcar Container Linux by Kinvolk"]
+        - not is_ostree
+        - docker_package_info.pkgs | length > 0
+
+    - name: Tell Debian hosts not to change the docker version with apt upgrade
+      dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      when: ansible_pkg_mgr == 'apt'
+      changed_when: false
+      with_items:
+        - "{{ containerd_package }}"
+        - docker-ce
+        - docker-ce-cli
+
   when: not docker_already_installed
-
-- name: Gather DNS facts
-  include_tasks: set_facts_dns.yml
-  when: dns_mode != 'none' and resolvconf_mode == 'docker_dns' and  not docker_already_installed
-  tags:
-    - facts
-
-- name: Pre-upgrade docker
-  import_tasks: pre-upgrade.yml
-  when: not docker_already_installed
-
-- name: Ensure docker-ce repository public key is installed
-  apt_key:
-    id: "{{ item }}"
-    url: "{{ docker_repo_key_info.url }}"
-    keyring: "{{ docker_repo_key_keyring|default(omit) }}"
-    state: present
-  register: keyserver_task_result
-  until: keyserver_task_result is succeeded
-  retries: 4
-  delay: "{{ retry_stagger | d(3) }}"
-  with_items: "{{ docker_repo_key_info.repo_keys }}"
-  environment: "{{ proxy_env }}"
-  when: 
-    - ansible_pkg_mgr == 'apt'
-    - not docker_already_installed
-
-# ref to https://github.com/kubernetes-sigs/kubespray/issues/11086
-- name: Remove the archived debian apt repository
-  lineinfile:
-    path: /etc/apt/sources.list
-    regexp: 'buster-backports'
-    state: absent
-    backup: true
-  when:
-    - ansible_os_family == 'Debian'
-    - ansible_distribution_release == "buster"
-
-- name: Ensure docker-ce repository is enabled
-  apt_repository:
-    repo: "{{ item }}"
-    state: present
-  with_items: "{{ docker_repo_info.repos }}"
-  when: 
-    - ansible_pkg_mgr == 'apt'
-    - not docker_already_installed
-
-- name: Configure docker repository on Fedora
-  template:
-    src: "fedora_docker.repo.j2"
-    dest: "{{ yum_repo_dir }}/docker.repo"
-    mode: "0644"
-  when: 
-    - ansible_distribution == "Fedora" and not is_ostree
-    - not docker_already_installed
-
-- name: Remove dpkg hold
-  dpkg_selections:
-    name: "{{ item }}"
-    selection: install
-  when: 
-     - ansible_pkg_mgr == 'apt'
-     - not docker_already_installed
-  register: ret
-  changed_when: false
-  failed_when:
-    - ret is failed
-    - ret.msg != ( "Failed to find package '" + item + "' to perform selection 'install'." )
-  with_items:
-    - "{{ containerd_package }}"
-    - docker-ce
-    - docker-ce-cli
-
-- name: Ensure docker packages are installed
-  package:
-    name: "{{ docker_package_info.pkgs }}"
-    state: "{{ docker_package_info.state | default('present') }}"
-  module_defaults:
-    apt:
-      update_cache: true
-    dnf:
-      enablerepo: "{{ docker_package_info.enablerepo | default(omit) }}"
-      disablerepo: "{{ docker_package_info.disablerepo | default(omit) }}"
-    yum:
-      enablerepo: "{{ docker_package_info.enablerepo | default(omit) }}"
-    zypper:
-      update_cache: true
-  register: docker_task_result
-  until: docker_task_result is succeeded
-  retries: 4
-  delay: "{{ retry_stagger | d(3) }}"
-  notify: Restart docker
-  when:
-    - not ansible_os_family in ["Flatcar", "Flatcar Container Linux by Kinvolk"]
-    - not is_ostree
-    - docker_package_info.pkgs | length > 0
-    - not docker_already_installed
-
-# This is required to ensure any apt upgrade will not break kubernetes
-- name: Tell Debian hosts not to change the docker version with apt upgrade
-  dpkg_selections:
-    name: "{{ item }}"
-    selection: hold
-  when: 
-    - ansible_pkg_mgr == 'apt'
-    - not docker_already_installed
-  changed_when: false
-  with_items:
-    - "{{ containerd_package }}"
-    - docker-ce
-    - docker-ce-cli
 
 - name: Ensure docker started, remove our config if docker start failed and try again
   block:

@@ -118,18 +118,6 @@
 - name: Flush handlers
   meta: flush_handlers
 
-- name: Check if we are running inside a Azure VM
-  stat:
-    path: /var/lib/waagent/
-    get_attributes: false
-    get_checksum: false
-    get_mime: false
-  register: azure_check
-  when:
-    - not dns_late
-  tags:
-    - bootstrap-os
-
 - name: Run calico checks
   include_role:
     name: network_plugin/calico
