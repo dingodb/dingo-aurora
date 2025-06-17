@@ -30,6 +30,7 @@ from dingo_command.common import CONF as CommonConf
 from dingo_command.common.nova_client import NovaClient
 from dingo_command.common import neutron
 from dingo_command.common.cinder_client import CinderClient
+from celery.exceptions import SoftTimeLimitExceeded
 
 from dingo_command.db.models.node.sql import NodeSQL
 from dingo_command.db.models.instance.sql import InstanceSQL
@@ -142,9 +143,10 @@ def get_node_info(node_list):
     return cpu_int_total, gpu_int_total, mem_int_total
 
 def set_instance_status(cluster, node_list, node_type=None):
+    cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster.id)
     host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster.id, "hosts")
     os.chmod(host_file, 0o755)
-    res = subprocess.run(["python3", host_file, "--list"], capture_output=True, text=True)
+    res = subprocess.run(["python3", host_file, "--root", cluster_dir, "--list"], capture_output=True, text=True)
     hosts_data = json.loads(res.stdout)
     session = get_session()
     nova_client = NovaClient()
@@ -312,7 +314,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
             # Give execute permissions to the host file
             os.chmod(host_file, 0o755)
             (network_id, network_name, bus_network_id, bus_network_name,
-             subnet_id, bussubnet_id) = get_networks(cluster, task_info, host_file)
+             subnet_id, bussubnet_id) = get_networks(cluster, task_info, host_file, cluster_dir)
             db_cluster.admin_network_id = network_id
             db_cluster.admin_subnet_id = subnet_id
             db_cluster.bus_network_id = bus_network_id
@@ -381,8 +383,9 @@ def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list, scale=False
         update_task_state(instructure_task)
         print("Terraform apply succeeded")
 
-        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tfvars.id, "hosts")
-        res = subprocess.run(["python3", host_file, "--list"], capture_output=True, text=True)
+        cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tfvars.id)
+        host_file = os.path.join(cluster_dir, "hosts")
+        res = subprocess.run(["python3", host_file, "--root", cluster_dir,"--list"], capture_output=True, text=True)
         if res.returncode != 0:
             # 更新数据库的状态为failed
             instructure_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
@@ -423,6 +426,18 @@ def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list, scale=False
             db_cluster.mem += mem_total
         db_cluster.status_msg = ""
         ClusterSQL.update_cluster(db_cluster)
+    except SoftTimeLimitExceeded:
+        query_params = {}
+        query_params["id"] = cluster_dict["id"]
+        count, db_clusters = ClusterSQL.list_cluster(query_params)
+        c = db_clusters[0]
+        if scale:
+            c.status = 'scale_error'
+            c.status_msg = "The scale cluster task has timed out."
+        else:
+            c.status = 'error'
+            c.status_msg = "The create_cluster task has timed out."
+        ClusterSQL.update_cluster(c)
     except Exception as e:
         # 发生错误时更新集群状态为"失败"
         query_params = {}
@@ -435,7 +450,6 @@ def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list, scale=False
             db_cluster.status = 'error'
         db_cluster.status_msg = replace_ansi_with_single_newline(str(e))
         ClusterSQL.update_cluster(db_cluster)
-        raise
 
 
 def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
@@ -486,7 +500,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
         TaskSQL.insert(etcd_task)
         ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
         os.chdir(ansible_dir)
-        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "hosts")
+        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id))
         playbook_file = os.path.join(WORK_DIR, "ansible-deploy", "cluster.yml")
         key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "id_rsa")
         private_key_content = None
@@ -605,7 +619,7 @@ def scale_kubernetes(cluster: ClusterObject, scale_nodes):
     try:
         ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
         os.chdir(ansible_dir)
-        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "hosts")
+        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id))
         playbook_file = os.path.join(WORK_DIR, "ansible-deploy", "scale.yml")
         key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "id_rsa")
         if os.path.exists(key_file_path):
@@ -1045,7 +1059,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         # Give execute permissions to the host file
         host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tf_dict["id"], "hosts")
         os.chmod(host_file, 0o755)  # rwxr-xr-x permission
-        master_ip, lb_ip, hosts_data = get_ips(cluster_tfvars, task_info, host_file)
+        master_ip, lb_ip, hosts_data = get_ips(cluster_tfvars, task_info, host_file, cluster_dir)
         # ensure /root/.ssh/known_hosts exists
         if os.path.exists("/root/.ssh/known_hosts"):
             for i in range(1, cluster_tfvars.number_of_k8s_masters + 1):
@@ -1154,7 +1168,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             update_task_state(task_info)
             raise Exception(error_msg)
 
-        res = subprocess.run(["python3", host_file, "--list"], capture_output=True, text=True)
+        res = subprocess.run(["python3", host_file, "--root",cluster_dir,"--list"], capture_output=True, text=True)
         if res.returncode != 0:
             # 更新数据库的状态为failed
             task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
@@ -1206,6 +1220,18 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         task_info.state = "success"
         task_info.detail = ""
         update_task_state(task_info)
+    except SoftTimeLimitExceeded:
+        query_params = {}
+        query_params["id"] = cluster_dict["id"]
+        count, db_clusters = ClusterSQL.list_cluster(query_params)
+        c = db_clusters[0]
+        if scale:
+            c.status = 'scale_error'
+            c.status_msg = "The scale k8s_cluster task has timed out."
+        else:
+            c.status = 'error'
+            c.status_msg = "The create_k8s_cluster task has timed out."
+        ClusterSQL.update_cluster(c)
     except Exception as e:
         # 发生错误时更新集群状态为"失败"
         print(f"deploy k8s cluster error")
@@ -1219,11 +1245,10 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             c.status = 'error'
         c.status_msg = replace_ansi_with_single_newline(str(e))
         ClusterSQL.update_cluster(c)
-        raise
 
 
-def get_ips(cluster_tfvars, task_info, host_file):
-    res = subprocess.run(["python3", host_file, "--list"], capture_output=True, text=True)
+def get_ips(cluster_tfvars, task_info, host_file, cluster_dir):
+    res = subprocess.run(["python3", host_file, "--root", cluster_dir, "--list"], capture_output=True, text=True)
     if res.returncode != 0:
         # 更新数据库的状态为failed
         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
@@ -1240,8 +1265,8 @@ def get_ips(cluster_tfvars, task_info, host_file):
     return master_ip, lb_ip, hosts_data
 
 
-def get_networks(cluster_tfvars, task_info, host_file):
-    res = subprocess.run(["python3", host_file, "--list"], capture_output=True, text=True)
+def get_networks(cluster_tfvars, task_info, host_file, cluster_dir):
+    res = subprocess.run(["python3", host_file,  "--root", cluster_dir,"--list"], capture_output=True, text=True)
     if res.returncode != 0:
         # 更新数据库的状态为failed
         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
@@ -1399,7 +1424,7 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
         # 1、在这里先找到cluster的文件夹，找到对应的目录，先通过发来的node_list组合成extravars的变量，再执行remove-node.yaml
         ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
         os.chdir(ansible_dir)
-        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), "hosts")
+        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id))
         playbook_file = os.path.join(WORK_DIR, "ansible-deploy", "remove-node.yml")
         key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), "id_rsa")
         private_key_content = ""
