@@ -65,6 +65,7 @@ data "openstack_compute_flavor_v2" "k8s_control" {
 resource "openstack_networking_secgroup_v2" "secgroup" {
   name        = var.cluster_name
   description = "cluster default security group"
+  tenant_id = var.tenant_id
 }
 
 # 入站规则 - 允许所有端口和协议

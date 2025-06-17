@@ -1,3 +1,4 @@
+import os
 import ansible_runner
 from ansible.plugins.callback import CallbackBase
 
@@ -29,12 +30,14 @@ def run_playbook(playbook_name, inventory, data_dir, ssh_key, extravars=None, li
     envvars = {
         "ANSIBLE_FORKS": 10,
         "ANSIBLE_BECOME": "True",
+        "CURRENT_DIR": inventory,
     }
+    inventory_file = os.path.join(inventory, "hosts")
     # 运行 Ansible playbook 异步
     thread, runner = ansible_runner.run_async(
         private_data_dir=data_dir,
         playbook=playbook_name,
-        inventory=inventory,
+        inventory=inventory_file,
         quiet=True,
         envvars=envvars,
         extravars=extravars,

@@ -516,6 +516,7 @@ class ClusterService:
             lb_enbale = False
             if cluster.type == "kubernetes":
                 lb_enbale = cluster.kube_info.loadbalancer_enabled
+
            
             cluster_info_db = self.convert_clusterinfo_todb(cluster)
             cluster.id = cluster_info_db.id
