@@ -250,38 +250,6 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
         #os.environ['OS_CLOUD']=region_name
         #判断是否存在名为cluster-router的路由
 
-        # 在这里添加需要排除重新创建的虚拟机，从output文件里面取得nodes再和数据库里面的nodes做比较，数据里面没有的就在state删除
-        if scale:
-            nodes_old_list, nodes_new_list, node_create_list = [], [], []
-            for node in cluster.nodes.keys():
-                nodes_old_list.append(node)
-            query_params = {"cluster_id": cluster.id}
-            if node_type != Instance:
-                count, nodes = NodeSQL.list_nodes(query_params, page=1, page_size=-1)
-                for node in nodes:
-                    if node.status == "creating":
-                        node_create_list.append(node.name.split(cluster.cluster_name + "-")[1])
-                        continue
-                    nodes_new_list.append(node.name.split(cluster.cluster_name + "-")[1])
-            else:
-                count, nodes = InstanceSQL.list_instances(query_params, page=1, page_size=-1)
-                for node in nodes:
-                    if node.status == "creating":
-                        node_create_list.append(node.name.split(cluster.cluster_name + "-")[1])
-                        continue
-                    nodes_new_list.append(node.name.split(cluster.cluster_name + "-")[1])
-            new_node_list = list(set(nodes_old_list) - set(nodes_new_list) - set(node_create_list))
-            state_remove(new_node_list)
-
-            with open("output.tfvars.json") as f:
-                content = json.loads(f.read())
-                content_new = copy.deepcopy(content)
-                for node in content["nodes"]:
-                    if node in new_node_list:
-                        del content_new["nodes"][node]
-            with open("output.tfvars.json", "w") as f:
-                json.dump(content_new, f, indent=4)
-
         res = subprocess.run([
             "terraform",
             "apply",
@@ -308,7 +276,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
         query_params = {}
         query_params["id"] = cluster.id
         count, data = ClusterSQL.list_cluster(query_params)
-        if count > 0:
+        if count > 0 and not scale:
             db_cluster = data[0]
             host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster.id, "hosts")
             # Give execute permissions to the host file
@@ -438,6 +406,7 @@ def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list, scale=False
             c.status = 'error'
             c.status_msg = "The create_cluster task has timed out."
         ClusterSQL.update_cluster(c)
+        raise
     except Exception as e:
         # 发生错误时更新集群状态为"失败"
         query_params = {}
@@ -450,7 +419,7 @@ def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list, scale=False
             db_cluster.status = 'error'
         db_cluster.status_msg = replace_ansi_with_single_newline(str(e))
         ClusterSQL.update_cluster(db_cluster)
-
+        raise
 
 def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
     """使用Ansible部署K8s集群"""
@@ -1205,6 +1174,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         c = db_clusters[0]
         kube_info = json.loads(c.kube_info)
         kube_info["kube_config"] = kube_config
+        kube_info["kube_lb_address"] = lb_ip
         c.kube_info = json.dumps(kube_info)
         c.status = 'running'
         if scale:
@@ -1212,7 +1182,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             c.cpu += cpu_total
             c.gpu += gpu_total
             c.mem += mem_total
-        c.error_message = ""
+        c.status_msg = ""
         ClusterSQL.update_cluster(c)
 
         # 更新数据库的状态为success
@@ -1232,6 +1202,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             c.status = 'error'
             c.status_msg = "The create_k8s_cluster task has timed out."
         ClusterSQL.update_cluster(c)
+        raise
     except Exception as e:
         # 发生错误时更新集群状态为"失败"
         print(f"deploy k8s cluster error")
@@ -1245,6 +1216,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             c.status = 'error'
         c.status_msg = replace_ansi_with_single_newline(str(e))
         ClusterSQL.update_cluster(c)
+        raise
 
 
 def get_ips(cluster_tfvars, task_info, host_file, cluster_dir):
@@ -1453,6 +1425,18 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
             raise Exception(f"Ansible remove node failed, please check log")
 
         # # 2、执行完删除k8s这些节点之后，再执行terraform销毁这些节点（这里是单独修改output.json文件还是需要通过之前生成的output.json文件生成）
+        # 在这里添加需要排除重新创建的虚拟机，从output文件里面取得nodes再和数据库里面的nodes做比较，数据里面没有的就在state删除
+        remove_node_list = extravars.get("node").split(",")
+        state_remove(remove_node_list)
+        with open("output.tfvars.json") as f:
+            content = json.loads(f.read())
+            content_new = copy.deepcopy(content)
+            for node in content["nodes"]:
+                if node in remove_node_list:
+                    del content_new["nodes"][node]
+        with open("output.tfvars.json", "w") as f:
+            json.dump(content_new, f, indent=4)
+
         # output_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id),
         #                            "terraform", "output.tfvars.json")
         # with open(output_file) as f:

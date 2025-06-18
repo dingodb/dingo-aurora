@@ -17,6 +17,7 @@ class NetworkConfigObject(BaseModel):
     bus_network_id: Optional[str] = Field(None, description="业务网络id")
     vip: Optional[str] = Field(None, description="管理网访问地址")
     floating_ip: Optional[bool] = Field(None, description="是否启用浮动ip")
+    kube_lb_address: Optional[str] = Field(None, description="kube_lb_address地址")
 
 
 class PortForwards(BaseModel):

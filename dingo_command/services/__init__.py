@@ -18,7 +18,8 @@ default_opts = [
     cfg.StrOpt('region_name', default=None, help='the openstack region name'),
     cfg.StrOpt('cluster_work_dir', default='/var/lib/dingo-command', help='the openstack region name'),
     cfg.StrOpt('auth_url', default=None, help='the openstack region name'),
-    cfg.StrOpt('k8s_master_image', default=None, help='the openstack region name')
+    cfg.StrOpt('k8s_master_image', default=None, help='the master image name'),
+    cfg.StrOpt('k8s_master_flavor', default=None, help='the master flavor name')
 ]
 
 # redis数据

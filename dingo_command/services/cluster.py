@@ -45,6 +45,7 @@ thin_border = Border(
 auth_url = CONF.DEFAULT.auth_url
 WORK_DIR = CONF.DEFAULT.cluster_work_dir
 image_master = CONF.DEFAULT.k8s_master_image
+image_flvaor = CONF.DEFAULT.k8s_master_flavor
 system_service = SystemService()
 
 class ClusterService:
@@ -64,17 +65,19 @@ class ClusterService:
         node_index = 1
         master_index = 1
         cluster_new = copy.deepcopy(cluster)
+        (master_cpu, master_gpu, master_mem, master_disk,
+         master_flavor_id) = self.get_master_flavor_info(image_flvaor)
+        master_operation_system, master_image_id = self.get_master_image_info(image_master)
+        worker_node = []
         for idx, node in enumerate(cluster.node_config):
             if node.role == "master" and node.type == "vm":
-                cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
-                operation_system = self.get_image_info(node.image)
                 for i in range(node.count):
                     k8s_masters[f"master-{int(master_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
-                        flavor=node.flavor_id,
+                        flavor=master_flavor_id,
                         floating_ip=True,
                         etcd=True,
-                        image_id=node.image
+                        image_id=master_image_id
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
@@ -84,21 +87,23 @@ class ClusterService:
                     instance_db.region = cluster.region_name
                     instance_db.user = node.user
                     instance_db.password = node.password
-                    instance_db.security_group = node.security_group
-                    instance_db.flavor_id = node.flavor_id
+                    instance_db.security_group = cluster.name
+                    instance_db.flavor_id = master_flavor_id
+                    instance_db.image_id = master_image_id
                     instance_db.status = "creating"
                     instance_db.status_msg = ""
+                    instance_db.floating_forward_ip = ""
+                    instance_db.ip_forward_rule = []
                     instance_db.project_id = ""
                     instance_db.server_id = ""
                     instance_db.openstack_id = ""
-                    instance_db.operation_system = operation_system
-                    instance_db.cpu = cpu
-                    instance_db.gpu = gpu
-                    instance_db.mem = mem
-                    instance_db.disk = disk
+                    instance_db.operation_system = master_operation_system
+                    instance_db.cpu = master_cpu
+                    instance_db.gpu = master_gpu
+                    instance_db.mem = master_mem
+                    instance_db.disk = master_disk
                     instance_db.ip_address = ""
-                    instance_db.name = cluster.name + f"master-{int(master_index)}"
-                    instance_db.floating_ip = cluster.forward_float_ip
+                    instance_db.name = cluster.name + f"-k8s-master-{int(master_index)}"
                     instance_db.create_time = datetime.now()
                     instance_db_list.append(instance_db)
 
@@ -111,21 +116,23 @@ class ClusterService:
                     node_db.role = node.role
                     node_db.user = node.user
                     node_db.password = node.password
-                    node_db.image = node.image
+                    node_db.image = master_image_id
                     node_db.instance_id = instance_db.id
                     node_db.project_id = cluster.project_id
                     node_db.auth_type = node.auth_type
-                    node_db.security_group = node.security_group
-                    node_db.flavor_id = node.flavor_id
-                    node_db.operation_system = operation_system
-                    node_db.cpu = cpu
-                    node_db.gpu = gpu
-                    node_db.mem = mem
-                    node_db.disk = disk
+                    node_db.security_group = cluster.name
+                    node_db.flavor_id = master_flavor_id
+                    node_db.operation_system = master_operation_system
+                    node_db.cpu = master_cpu
+                    node_db.gpu = master_gpu
+                    node_db.mem = master_mem
+                    node_db.disk = master_disk
                     node_db.status = "creating"
+                    node_db.floating_forward_ip = ""
+                    node_db.ip_forward_rule = []
                     node_db.status_msg = ""
                     node_db.admin_address = ""
-                    node_db.name = cluster.name + f"-master-{int(master_index)}"
+                    node_db.name = cluster.name + f"-k8s-master-{int(master_index)}"
                     node_db.bus_address = ""
                     node_db.create_time = datetime.now()
                     node_db_list.append(node_db)
@@ -212,6 +219,7 @@ class ClusterService:
                     node_db_list.append(node_db)
                     cluster_new = copy.deepcopy(cluster)
                     node_index=node_index+1
+                    worker_node.append(node)
             if node.role == "worker" and node.type == "baremetal":
                 cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
                 operation_system = self.get_image_info(node.image)
@@ -291,6 +299,8 @@ class ClusterService:
                     node_db_list.append(node_db)
                     cluster_new = copy.deepcopy(cluster)
                     node_index=node_index+1
+                    worker_node.append(node)
+        cluster.node_config = worker_node
         # 保存node信息到数据库
         NodeSQL.create_node_list(node_db_list)
         InstanceSQL.create_instance_list(instance_db_list)
@@ -417,6 +427,7 @@ class ClusterService:
                 private_key=cluster.private_key
             )
             #查询网络信息
+            res_cluster.network_config.kube_lb_address = kube_info.kube_lb_address
             if cluster.admin_network_id and cluster.admin_network_id != "":
                 res_cluster.network_config.admin_network_name = cluster.admin_network_name
             if cluster.admin_subnet_id and cluster.admin_subnet_id!= "":
@@ -466,6 +477,8 @@ class ClusterService:
             raise Fail(error_code=405, error_message="集群的node_config参数不能为空")
         else:
             for node_info in cluster.node_config:
+                if node_info.role == "master":
+                    continue
                 if node_info.count < 1:
                     raise Fail(error_code=405, error_message="集群的节点数量不能小于1")
                 if not node_info.image:
@@ -929,8 +942,38 @@ class ClusterService:
             else:
                 raise Fail("找不到集群对应的私钥文件")
         return private_key
-        
-        
+
+    def get_master_flavor_info(self, master_flavor_name):
+        nova_client = NovaClient()
+        flavor = nova_client.nova_get_flavor_by_name(master_flavor_name)
+        cpu = 0
+        gpu = 0
+        mem = 0
+        disk = 0
+        if flavor is not None:
+            cpu = flavor['vcpus']
+            mem = flavor['ram']
+            disk = flavor['disk']
+            if "extra_specs" in flavor and "pci_passthrough:alias" in flavor["extra_specs"]:
+                pci_alias = flavor['extra_specs']['pci_passthrough:alias']
+                if ':' in pci_alias:
+                    gpu = pci_alias.split(':')[1]
+        return int(cpu), int(gpu), int(mem), int(disk), flavor.get("id")
+
+    def get_master_image_info(self, master_image_name):
+        operation_system = ""
+        nova_client = NovaClient()
+        image = nova_client.get_image(master_image_name)
+        if image:
+            if image.get("os_version"):
+                operation_system = image.get("os_version")
+            elif image.get("os_distro"):
+                operation_system = image.get("os_distro")
+            else:
+                operation_system = image.get("name")
+        return operation_system, image.get("id")
+
+
 class TaskService:
     
     class TaskMessage(Enum):

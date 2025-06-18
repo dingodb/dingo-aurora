@@ -103,6 +103,20 @@ class NovaClient:
             raise Exception(f"nova规格请求失败: {response.text}")
         return response.json()['flavor']
 
+    # 根据name查询规格
+    def nova_get_flavor_by_name(self, flavor_name):
+        endpoint = self.get_service_endpoint('compute')
+        response = self.session.get(f"{endpoint}/flavors/detail")
+        if response.status_code != 200:
+            raise Exception(f"获取规格列表失败: {response.text}")
+        flavors = response.json()['flavors']
+        matched_flavors = [f for f in flavors if f['name'] == flavor_name]
+
+        if not matched_flavors:
+            raise ValueError(f"未找到名称为 '{flavor_name}' 的规格")
+
+        return matched_flavors[0]
+
     # 根据image_id查询规格
     def glance_get_image(self, image_id):
         endpoint = self.get_service_endpoint('image')
@@ -118,7 +132,7 @@ class NovaClient:
         response = self.session.get(f"{endpoint}/v2/images", params=params)
         if response.status_code != 200:
             raise Exception(f"nova规格请求失败: {response.text}")
-        return response.json()
+        return response.json()['images'][0]
 
     def nova_create_server(self, name, image_id, flavor_id, network_id, security_groups=None, user_data=None,
                            key_name=None, metadata=None, config_drive=False):

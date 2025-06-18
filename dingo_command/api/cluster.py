@@ -2,7 +2,7 @@ import os
 import tempfile
 from fastapi import Query
 from fastapi.responses import FileResponse
-from dingo_command.api.model.cluster import ClusterObject
+from dingo_command.api.model.cluster import ClusterObject, NodeConfigObject
 from dingo_command.common.nova_client import NovaClient
 from dingo_command.services.cluster import ClusterService,TaskService
 from dingo_command.services.custom_exception import Fail
@@ -23,6 +23,12 @@ async def get_token(x_auth_token: str = Header(None, alias="X-Auth-Token")):
 async def create_cluster(cluster_object:ClusterObject, token: str = Depends(get_token)):
     try:
         NovaClient(token)
+        if cluster_object.type == "kubernetes":
+            master_config = {}
+            master_config["count"] = cluster_object.kube_info.number_master
+            master_config["role"] = "master"
+            master_config["type"] = "vm"
+            cluster_object.node_config.append(NodeConfigObject(**master_config))
         cluster_id = cluster_service.create_cluster(cluster_object,token)
         # 操作日志
         #SystemService.create_system_log(OperateLogApiModel(operate_type="create", resource_type="flow", resource_id=cluster_id, resource_name=cluster_object.name, operate_flag=True))

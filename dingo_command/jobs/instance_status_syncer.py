@@ -54,9 +54,10 @@ def check_instance_status():
                                  f"{server.get('status')}")
                         if server.get("status") == "ERROR":
                             instance.status = "error"
+                            instance.status_msg = server.get("fault").get("details")
                         else:
                             instance.status = server.get("status")
-                        instance.status_msg = server.get("fault").get("details")
+                            instance.status_msg = ""
                         InstanceSQL.update_instance(instance)
             except Exception as e:
                 LOG.error(f"Error checking status for instance {instance.id}: {str(e)}")
@@ -94,9 +95,10 @@ def check_node_status():
                         LOG.info(f"Updating node {node.id} status from {node.status} to {server.get('status')}")
                         if server.get("status") == "ERROR":
                             node.status = "error"
+                            node.status_msg = server.get("fault").get("details")
                         else:
                             node.status = server.get("status")
-                        node.status_msg = server.get("fault").get("details")
+                            node.status_msg = ""
                         NodeSQL.update_node(node)
             except Exception as e:
                 LOG.error(f"Error checking status for node {node.id}: {str(e)}")
