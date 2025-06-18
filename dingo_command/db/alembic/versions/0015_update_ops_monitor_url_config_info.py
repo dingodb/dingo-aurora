@@ -23,21 +23,25 @@ def upgrade() -> None:
     op.alter_column(
         'ops_monitor_url_config_info',
         'url_catalog',
+        existing_type=sa.String(length=40),
         nullable=True
     )
     op.alter_column(
         'ops_monitor_url_config_info',
         'url_type',
+        existing_type=sa.String(length=40),
         nullable=True
     )
     op.alter_column(
         'ops_monitor_url_config_info',
         'user_id',
+        existing_type=sa.String(length=128),
         nullable=True
     )
     op.alter_column(
         'ops_monitor_url_config_info',
         'user_account',
+        existing_type=sa.String(length=128),
         nullable=True
     )
 
@@ -45,20 +49,24 @@ def downgrade() -> None:
     op.alter_column(
         'ops_monitor_url_config_info',
         'url_catalog',
+        existing_type=sa.String(length=40),
         nullable=False
     )
     op.alter_column(
         'ops_monitor_url_config_info',
         'url_type',
+        existing_type=sa.String(length=40),
         nullable=False
     )
     op.alter_column(
         'ops_monitor_url_config_info',
         'user_id',
+        existing_type=sa.String(length=128),
         nullable=False
     )
     op.alter_column(
         'ops_monitor_url_config_info',
         'user_account',
+        existing_type=sa.String(length=128),
         nullable=False
     )
