@@ -42,7 +42,8 @@ def run_playbook(playbook_name, inventory, data_dir, ssh_key, extravars=None, li
         envvars=envvars,
         extravars=extravars,
         ssh_key=ssh_key,
-        limit=limit
+        limit=limit,
+        forks=50,
     )
 
     return thread,runner

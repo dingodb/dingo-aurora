@@ -116,6 +116,8 @@ async def delete_node(node_info: NodeRemoveObject):
             node = node_service.get_node(id)
             if not node.get("data"):
                 continue
+            if node.get("data").role == "master":
+                raise HTTPException(status_code=400, detail="can't remove master node, please check")
             node_list.append(node.get("data"))
         if not node_list:
             raise HTTPException(status_code=400, detail="there are no nodes, please check")

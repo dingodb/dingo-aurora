@@ -176,6 +176,12 @@ def state_remove(node_list):
                 text=True,
                 check=True
             )
+            subprocess.run(
+                ["terraform", "state", "rm", f"module.compute.openstack_networking_port_v2.nodes_port[\"{node}\"]"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
         except Exception as e:
             if "No matching objects found" in str(e):
                 continue
@@ -1434,12 +1440,17 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
         # # 2、执行完删除k8s这些节点之后，再执行terraform销毁这些节点（这里是单独修改output.json文件还是需要通过之前生成的output.json文件生成）
         # 在这里添加需要排除重新创建的虚拟机，从output文件里面取得nodes再和数据库里面的nodes做比较，数据里面没有的就在state删除
         remove_node_list = extravars.get("node").split(",")
-        state_remove(remove_node_list)
+        remove_list = []
+        for remove_node in remove_node_list:
+            remove_list.append(remove_node.split(cluster_name + "-")[1])
+        terraform_dir = os.path.join(cluster_dir, "terraform")
+        os.chdir(terraform_dir)
+        state_remove(remove_list)
         with open("output.tfvars.json") as f:
             content = json.loads(f.read())
             content_new = copy.deepcopy(content)
             for node in content["nodes"]:
-                if node in remove_node_list:
+                if node in remove_list:
                     del content_new["nodes"][node]
         with open("output.tfvars.json", "w") as f:
             json.dump(content_new, f, indent=4)
