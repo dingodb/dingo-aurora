@@ -56,6 +56,7 @@ INSTANCE_SUBNET_NAME = "instance_subnet"
 TASK_TIMEOUT = CONF.DEFAULT.task_timeout
 SOFT_TASK_TIMEOUT = CONF.DEFAULT.soft_task_timeout
 
+runtime_task_name = "Check container-engine status"
 etcd_task_name = "Check etcd cluster status"
 control_plane_task_name = "Check control plane status"
 work_node_task_name = "Check k8s nodes status"
@@ -261,7 +262,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
             # 发生错误时更新任务状态为"失败"
             task_info.end_time =datetime.fromtimestamp(datetime.now().timestamp())
             task_info.state = "failed"
-            task_info.detail = res.stderr
+            task_info.detail = "deploy base infrastructure failed, reason: " + res.stderr
             update_task_state(task_info)
             print(f"Terraform apply error: {res.stderr}")
             set_instance_status(cluster, node_list, node_type=node_type)
@@ -423,6 +424,9 @@ def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list, scale=False
 
 def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
     """使用Ansible部署K8s集群"""
+    runtime_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
+                         start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                         msg=TaskService.TaskMessage.runtime_prepair.name)
     etcd_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
                          start_time=datetime.fromtimestamp(datetime.now().timestamp()),
                          msg=TaskService.TaskMessage.etcd_deploy.name)
@@ -465,8 +469,8 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
         render_templatefile(template_file, cluster_file, context)
 
         # 将templates下的ansible-deploy目录复制到WORK_DIR/cluster.id目录下
-        task_info = etcd_task
-        TaskSQL.insert(etcd_task)
+        task_info = runtime_task
+        TaskSQL.insert(runtime_task)
         ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
         os.chdir(ansible_dir)
         host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id))
@@ -490,7 +494,14 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
                     task_status = event['event'].split('_')[-1]  # 例如 runner_on_ok -> ok
                     # 处理 etcd 任务的特殊逻辑
                     # print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
-                    
+                    if task_name == runtime_task_name and host is not None:
+                        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                        task_info.state = "success"
+                        task_info.detail = TaskService.TaskDetail.runtime_prepair.value
+                        update_task_state(task_info)                  
+                        # 写入下一个任务
+                        task_info = etcd_task
+                        TaskSQL.insert(etcd_task)
                     if task_name == etcd_task_name and host is not None:
                         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
                         task_info.state = "success"
@@ -1040,7 +1051,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                 if result.returncode != 0:
                     task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
                     task_info.state = "failed"
-                    task_info.detail = str(result.stderr)
+                    task_info.detail = "Ansible kubernetes deployment failed, configure ssh-keygen error"
                     update_task_state(task_info)
                     raise Exception("Ansible kubernetes deployment failed, configure ssh-keygen error")
         if cluster_tfvars.password != "":
@@ -1062,7 +1073,8 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             if result.returncode != 0:
                 task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
                 task_info.state = "failed"
-                task_info.detail = str(result.stderr)
+                task_info.detail = "Ansible kubernetes deployment failed, configure sshpass error"
+                print(f"sshpass failed after {max_retries} retries: {result.stderr}")
                 update_task_state(task_info)
                 raise Exception("Ansible kubernetes deployment failed, configure sshpass error")
 
@@ -1185,11 +1197,6 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         c.status_msg = ""
         ClusterSQL.update_cluster(c)
 
-        # 更新数据库的状态为success
-        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-        task_info.state = "success"
-        task_info.detail = ""
-        update_task_state(task_info)
     except SoftTimeLimitExceeded:
         query_params = {}
         query_params["id"] = cluster_dict["id"]

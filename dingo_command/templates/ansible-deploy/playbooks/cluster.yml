@@ -16,6 +16,16 @@
     - { role: "container-engine", tags: "container-engine", when: deploy_container_engine }
     - { role: download, tags: download, when: "not skip_downloads" }
 
+- name: Check container-engine status
+  hosts: kube_control_plane[0]
+  gather_facts: false
+  tasks:
+    - name: Check container-engine status
+      debug:
+        msg: "Check container-engine status"
+      vars:
+        container_engine_deploy: true
+
 - name: Install etcd
   import_playbook: install_etcd.yml
 
@@ -54,7 +64,7 @@
   hosts: kube_control_plane[0]
   gather_facts: false
   tasks:
-    - name: Check etcd cluster status
+    - name: Check control plane status
       debug:
         msg: "Checking control plane status"
       vars:

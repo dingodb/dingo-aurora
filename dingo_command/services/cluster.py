@@ -980,6 +980,7 @@ class TaskService:
         instructure_check = "参数校验"
         instructure_create = "创建基础设施"
         pre_install = "安装前准备"
+        runtime_prepair = "运行时准备"
         etcd_deploy = "安装etcd"
         controler_deploy = "配置kubernetes控制面"
         worker_deploy = "配置kubernetes工作节点"
@@ -990,10 +991,51 @@ class TaskService:
         instructure_check = "instructure check passed"
         instructure_create = "instructure create success"
         pre_install = "install prepare success"
+        runtime_prepair = "runtime prepare success"
         etcd_deploy = "etcd deploy success"
         controler_deploy = "control plane deploy success"
         worker_deploy = "worker node deploy success"
         component_deploy = "component deploy success"
+        
+
+    def get_tasks_param(self, type):
+        tasks_with_title = []
+        if type == "baremetal":
+            task_dict = {
+                'msg': TaskService.TaskMessage.instructure_check.name,
+                'state': "waiting",
+                'detail': getattr(task, 'detail', None),
+                'create_time': None,
+                'update_time': None,
+                # 根据task名称匹配TaskMessage枚举值添加中文标题
+                'title': TaskService.TaskMessage.instructure_check.value
+            }
+            tasks_with_title.append(task_dict)
+            task_dict2 = {
+                'msg': TaskService.TaskMessage.instructure_create.name,
+                'state': "waiting",
+                'detail': getattr(task, 'detail', None),
+                'create_time': None,
+                'update_time': None,
+                # 根据task名称匹配TaskMessage枚举值添加中文标题
+                'title': TaskService.TaskMessage.instructure_create.value
+            }
+            tasks_with_title.append(task_dict2)
+
+        else:
+
+            for task in TaskService.TaskMessage:
+                task_dict = {
+                    'msg': task.name,
+                    'state': "waiting",
+                    'detail': getattr(task, 'detail', None),
+                    'create_time': None,
+                    'update_time': None,
+                    # 根据task名称匹配TaskMessage枚举值添加中文标题
+                    'title': task.value
+                }
+                tasks_with_title.append(task_dict)
+        return tasks_with_title 
         
     def get_tasks(self, cluster_id):
         if not cluster_id:
@@ -1008,7 +1050,23 @@ class TaskService:
             if not res :
                 return None
             # 返回第一条数据
-            return res
+            tasks_with_title = []
+            tasks = res[1]
+            for task in tasks:
+            # 根据task名称匹配TaskMessage枚举值
+                task_dict = {
+                    'task_id': getattr(task, 'task_id', None),
+                    'msg': getattr(task, 'msg', None),
+                    'cluster_id': getattr(task, 'cluster_id', None),
+                    'state': getattr(task, 'state', None),
+                    'detail': getattr(task, 'detail', None),
+                    'create_time': getattr(task, 'start_time', None),
+                    'update_time': getattr(task, 'end_time', None),
+                    # 根据task名称匹配TaskMessage枚举值添加中文标题
+                    'title': TaskService.TaskMessage[task.msg].value if hasattr(TaskService.TaskMessage, task.name) else task.name
+                }
+                tasks_with_title.append(task_dict)
+            return tasks_with_title
         except Exception as e:
             import traceback
             traceback.print_exc()
