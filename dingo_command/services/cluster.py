@@ -1005,8 +1005,8 @@ class TaskService:
                 'msg': TaskService.TaskMessage.instructure_check.name,
                 'state': "waiting",
                 'detail': getattr(task, 'detail', None),
-                'create_time': None,
-                'update_time': None,
+                'start_time': None,
+                'end_time': None,
                 # 根据task名称匹配TaskMessage枚举值添加中文标题
                 'title': TaskService.TaskMessage.instructure_check.value
             }
@@ -1015,8 +1015,8 @@ class TaskService:
                 'msg': TaskService.TaskMessage.instructure_create.name,
                 'state': "waiting",
                 'detail': getattr(task, 'detail', None),
-                'create_time': None,
-                'update_time': None,
+                'start_time': None,
+                'end_time': None,
                 # 根据task名称匹配TaskMessage枚举值添加中文标题
                 'title': TaskService.TaskMessage.instructure_create.value
             }
@@ -1029,8 +1029,8 @@ class TaskService:
                     'msg': task.name,
                     'state': "waiting",
                     'detail': getattr(task, 'detail', None),
-                    'create_time': None,
-                    'update_time': None,
+                    'start_time': None,
+                    'end_time': None,
                     # 根据task名称匹配TaskMessage枚举值添加中文标题
                     'title': task.value
                 }
@@ -1060,10 +1060,10 @@ class TaskService:
                     'cluster_id': getattr(task, 'cluster_id', None),
                     'state': getattr(task, 'state', None),
                     'detail': getattr(task, 'detail', None),
-                    'create_time': getattr(task, 'start_time', None),
-                    'update_time': getattr(task, 'end_time', None),
+                    'start_time': getattr(task, 'start_time', None),
+                    'end_time': getattr(task, 'end_time', None),
                     # 根据task名称匹配TaskMessage枚举值添加中文标题
-                    'title': TaskService.TaskMessage[task.msg].value if hasattr(TaskService.TaskMessage, task.name) else task.name
+                    'title': TaskService.TaskMessage[task.msg].value if hasattr(TaskService.TaskMessage, task.msg) else task.msg
                 }
                 tasks_with_title.append(task_dict)
             return tasks_with_title

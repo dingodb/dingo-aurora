@@ -475,6 +475,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
         render_templatefile(template_file, cluster_file, context)
 
         # 将templates下的ansible-deploy目录复制到WORK_DIR/cluster.id目录下
+        runtime_task.start_time = datetime.fromtimestamp(datetime.now().timestamp())
         task_info = runtime_task
         TaskSQL.insert(runtime_task)
         ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
@@ -506,6 +507,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
                         task_info.detail = TaskService.TaskDetail.runtime_prepair.value
                         update_task_state(task_info)                  
                         # 写入下一个任务
+                        etcd_task.start_time = datetime.fromtimestamp(datetime.now().timestamp())
                         task_info = etcd_task
                         TaskSQL.insert(etcd_task)
                     if task_name == etcd_task_name and host is not None:
@@ -514,6 +516,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
                         task_info.detail = TaskService.TaskDetail.etcd_deploy.value
                         update_task_state(task_info)                  
                         # 写入下一个任务
+                        control_plane_task.start_time = datetime.fromtimestamp(datetime.now().timestamp())
                         task_info = control_plane_task
                         TaskSQL.insert(control_plane_task)
                     if task_name == control_plane_task_name and host is not None:
@@ -522,13 +525,15 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
                         task_info.detail = TaskService.TaskDetail.controler_deploy.value
                         update_task_state(task_info)   
                         # 写入下一个任务
+                        worker_task.start_time = datetime.fromtimestamp(datetime.now().timestamp())
                         task_info = worker_task
                         TaskSQL.insert(worker_task)
                     if task_name == work_node_task_name and host is not None and task_status != "failed":
                         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
                         task_info.state = "success"
                         task_info.detail = TaskService.TaskDetail.worker_deploy.value
-                        update_task_state(task_info)   
+                        update_task_state(task_info)
+                        component_task.start_time = datetime.fromtimestamp(datetime.now().timestamp())   
                         task_info = component_task
                         TaskSQL.insert(component_task)
                     
