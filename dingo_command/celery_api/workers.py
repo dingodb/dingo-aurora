@@ -1303,6 +1303,34 @@ def load_tfvars_to_object(tfvars_path):
     return cluster_tfvars
 
 
+def update_cluster_status(cluster_id):
+    # 更新任务状态为"成功"
+    query_params = {}
+    query_params["id"] = cluster_id
+    count, db_clusters = ClusterSQL.list_cluster(query_params)
+    c = db_clusters[0]
+    c.status = 'deleted'
+    c.status_msg = ""
+    ClusterSQL.update_cluster(c)
+    print("Terraform destroy succeeded")
+    # delete instance
+    # 1. 查询与该集群关联的所有实例
+    query_params = {"cluster_id": cluster_id}
+    count, instances = InstanceSQL.list_instances(query_params, 1, -1, None, None)
+    session = get_session()
+    with session.begin():
+        for instance in instances:
+            db_instance = session.get(Instance, instance.id)
+            session.delete(db_instance)
+    # 1. 查询与该集群关联的所有实例
+    query_params = {"cluster_id": cluster_id}
+    count, nodes = NodeSQL.list_nodes(query_params, 1, -1, None, None)
+    with session.begin():
+        for n in nodes:
+            db_node = session.get(NodeInfo, n.id)
+            session.delete(db_node)
+
+
 @celery_app.task(bind=True)
 def delete_cluster(self, cluster_id, token):
     try:
@@ -1357,38 +1385,52 @@ def delete_cluster(self, cluster_id, token):
             print(f"Terraform error: {res.stderr}")
             raise Exception("delete cluster Error terraform init exception: {}".format(res.stderr))
 
-        res = subprocess.run(["terraform", "destroy", "-auto-approve", "-var-file=output.tfvars.json"],
-                             capture_output=True, text=True)
-        if res.returncode != 0:
+        os.environ["TF_LOG"] = "DEBUG"
+        resource_inuse = False
+        # 创建子进程并实时捕获输出
+        process = subprocess.Popen(
+            ["terraform", "destroy", "-auto-approve", "-var-file=output.tfvars.json"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            universal_newlines=True
+        )
+        # 实时读取输出流
+        try:
+            for line in process.stdout:
+                if "type" in line and "SecurityGroupInUse" in line:
+                    resource_inuse = True
+                    print("type with SecurityGroupInUse")
+                    process.terminate()
+                    break
+                if "type" in line and "SubnetInUse" in line:
+                    resource_inuse = True
+                    print("type with SubnetInUse")
+                    process.terminate()
+                    break
+                if "type" in line and "NetworkInUse" in line:
+                    resource_inuse = True
+                    print("type with NetworkInUse")
+                    process.terminate()
+                    break
+        finally:
+            # 确保回收资源
+            process.wait(timeout=60)
+            if process.returncode is None:
+                process.kill()
+            print(f"进程已终止，退出码: {process.returncode}")
+        if process.returncode != 0:
             # 发生错误时更新任务状态为"失败"
-            print(f"Terraform error: {res.stderr}")
-            raise Exception("delete cluster Error terraform destroy exception: {}".format(res.stderr))
+            if resource_inuse:
+                update_cluster_status(cluster_id)
+                return True
+            else:
+                print(f"Terraform error: {res.stderr}")
+                # 在这里判断具体的日志输出信息，如果出现删除安全组超时就判断为删除成功
+                raise Exception("delete cluster Error terraform destroy exception: {}".format(res.stderr))
         else:
-            # 更新任务状态为"成功"
-            query_params = {}
-            query_params["id"] = cluster_id
-            count, db_clusters = ClusterSQL.list_cluster(query_params)
-            c = db_clusters[0]
-            c.status = 'deleted'
-            c.status_msg = ""
-            ClusterSQL.update_cluster(c)
-            print("Terraform destroy succeeded")
-            # delete instance
-            # 1. 查询与该集群关联的所有实例
-            query_params = {"cluster_id": cluster_id}
-            count, instances = InstanceSQL.list_instances(query_params, 1, -1, None, None)
-            session = get_session()
-            with session.begin():
-                for instance in instances:
-                    db_instance = session.get(Instance, instance.id)
-                    session.delete(db_instance)
-            # 1. 查询与该集群关联的所有实例
-            query_params = {"cluster_id": cluster_id}
-            count, nodes = NodeSQL.list_nodes(query_params, 1, -1, None, None)
-            with session.begin():
-                for n in nodes:
-                    db_node = session.get(NodeInfo, n.id)
-                    session.delete(db_node)
+            update_cluster_status(cluster_id)
             return True
     except Exception as e:
 

@@ -1052,20 +1052,38 @@ class TaskService:
             # 返回第一条数据
             tasks_with_title = []
             tasks = res[1]
-            for task in tasks:
-            # 根据task名称匹配TaskMessage枚举值
+
+            for task in TaskService.TaskMessage:
+                for t in tasks:
+                    inprogress = False
+                    if t.msg == task.name:
+                        task_dict = {
+                            'task_id': getattr(t, 'task_id', None),
+                            'msg': getattr(t, 'msg', None),
+                            'cluster_id': getattr(t, 'cluster_id', None),
+                            'state': getattr(t, 'state', None),
+                            'detail': getattr(t, 'detail', None),
+                            'start_time': getattr(t, 'start_time', None),
+                            'end_time': getattr(t, 'end_time', None),
+                            # 根据task名称匹配TaskMessage枚举值添加中文标题
+                            'title': TaskService.TaskMessage[task.msg].value if hasattr(TaskService.TaskMessage, task.msg) else task.msg
+                        }
+                        tasks_with_title.append(task_dict)
+                        inprogress = True
+                        break
+                if inprogress:
+                    continue
                 task_dict = {
-                    'task_id': getattr(task, 'task_id', None),
-                    'msg': getattr(task, 'msg', None),
-                    'cluster_id': getattr(task, 'cluster_id', None),
-                    'state': getattr(task, 'state', None),
+                    'msg': task.name,
+                    'state': "waiting",
                     'detail': getattr(task, 'detail', None),
-                    'start_time': getattr(task, 'start_time', None),
-                    'end_time': getattr(task, 'end_time', None),
+                    'start_time': None,
+                    'end_time': None,
                     # 根据task名称匹配TaskMessage枚举值添加中文标题
-                    'title': TaskService.TaskMessage[task.msg].value if hasattr(TaskService.TaskMessage, task.msg) else task.msg
+                    'title': task.value
                 }
                 tasks_with_title.append(task_dict)
+
             return tasks_with_title
         except Exception as e:
             import traceback
