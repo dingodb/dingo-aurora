@@ -1,3 +1,5 @@
+from urllib.parse import unquote
+
 from dateutil import parser
 from datetime import datetime
 from datetime import timedelta
@@ -6,6 +8,8 @@ import pytz
 TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%SZ'
 # 东八区时间格式化
 TIMESTAMP_FORMAT_D8Q = '%Y-%m-%d-%H-%M-%S'
+# 东八区时间格式化转化为不带连字符-
+TIMESTAMP_FORMAT_D8Q_STR = '%Y%m%d%H%M%S'
 # excel中时间格式
 EXCEL_TIMESTAMP_FORMAT = '%Y-%m-%d %H:%M:%S'
 
@@ -55,3 +59,24 @@ def format_d8q_timestamp():
     cst_now = utc_now.astimezone(cst_timezone)
     # 格式化
     return cst_now.strftime(TIMESTAMP_FORMAT_D8Q)
+
+def format_d8q_timestamp_without_hyphens():
+    # 获取当前 UTC 时间
+    utc_now = get_now_time()
+    # 将 UTC 时间转换为东八区时间 (Asia/Shanghai)
+    cst_timezone = pytz.timezone('Asia/Shanghai')
+    cst_now = utc_now.astimezone(cst_timezone)
+    # 格式化
+    return cst_now.strftime(TIMESTAMP_FORMAT_D8Q_STR)
+
+def switch_time_to_time(begin, end):
+    return unquote(begin).replace(" ", "-").replace(":", "-") + "_to_" + unquote(end).replace(" ", "-").replace(":", "-")
+
+def convert_timestamp_to_date(begin, end):
+    dt_start = datetime.strptime(begin, "%Y-%m-%d %H:%M:%S")
+    dt_end = datetime.strptime(end, "%Y-%m-%d %H:%M:%S")
+
+    # 提取日期部分（自动去掉时间）
+    formatted_date_start = dt_start.date().isoformat()
+    formatted_date_end = dt_end.date().isoformat()
+    return formatted_date_start + "_to_" + formatted_date_end

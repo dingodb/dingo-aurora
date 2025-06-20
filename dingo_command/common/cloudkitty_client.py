@@ -114,8 +114,6 @@ class CloudKittyClient:
                         return endpoint['url']
         raise Exception(f"未找到服务: {service_type}")
 
-
-    # 添加cloudkitty计费汇总服务调用
     @_require_valid_token
     def get_storage_dataframes(self, filters=None):
         endpoint = self.get_service_endpoint('rating')

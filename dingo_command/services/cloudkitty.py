@@ -3,6 +3,7 @@ import os
 import platform
 import shutil
 from datetime import datetime
+from urllib.parse import unquote
 
 import pandas as pd
 from openpyxl.reader.excel import load_workbook
@@ -16,6 +17,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
 
 from dingo_command.common.cloudkitty_client import CloudKittyClient
 from dingo_command.utils.constant import RATING_SUMMARY_TEMPLATE_FILE_DIR
+from dingo_command.utils.datetime import switch_time_to_time, convert_timestamp_to_date
 
 LOG = log.getLogger(__name__)
 
@@ -52,7 +54,11 @@ class CloudKittyService:
             # 导出的excel数据
             excel_rating_summary_data = []
             # 读取数据数据
+            start_time_now1 = datetime.now()
             storage_dataFrames = CloudKittyClient().get_storage_dataframes(query_params)
+            print(f"========1=========get_storage_dataframes start - end = { (datetime.now() - start_time_now1).total_seconds()}s")
+
+            start_time_now2 = datetime.now()
             # 类型是空
             if storage_dataFrames is not None:
                 # 写入数据
@@ -79,6 +85,8 @@ class CloudKittyService:
                                        'Resources': resources_json,}
                     # 加入excel导出数据列表
                     excel_rating_summary_data.append(temp_rating_summary_data)
+            print(f"========2=========rating_detail_excel generate date start - end = {(datetime.now() - start_time_now2).total_seconds()}s")
+            start_time_now3 = datetime.now()
             # 加载模板文件
             book = load_workbook(result_file_path)
             sheet = book['ratingSummary']  # 默认使用第一个工作表
@@ -90,16 +98,15 @@ class CloudKittyService:
                     sheet.cell(row=start_row + idx, column=col_idx, value=value).border = thin_border
             # 保存修改
             book.save(result_file_path)
+            print(f"========3=========rating_detail_excel save book data start - end = {(datetime.now() - start_time_now3).total_seconds()}s")
         except Exception as e:
             import traceback
             traceback.print_exc()
             raise e
 
 
-    def generate_rating_summary_detail_pdf(self, result_file_pdf_path, detail, language):
+    def generate_rating_summary_detail_pdf(self, result_file_pdf_path, temp_data):
         try:
-            # 生成计费汇总租户详情数据
-            temp_data = self.generate_rating_summary_detail_data(detail, language)
             # 生成PDF文件
             self.create_rating_summary_detail_pdf_with_table(temp_data, result_file_pdf_path)
 
@@ -108,60 +115,10 @@ class CloudKittyService:
             traceback.print_exc()
             raise e
 
-    # def download_rating_summary_detail_execl(self, result_file_execl_path, detail, language):
-    #     if language is None or language == "EN":
-    #         # 模板路径
-    #         current_template_file = os.getcwd() + RATING_SUMMARY_DETAIL_EN_TEMPLATE_FILE_DIR
-    #     else:
-    #          # 模板路径
-    #          current_template_file = os.getcwd() + RATING_SUMMARY_DETAIL_ZH_TEMPLATE_FILE_DIR
-    #
-    #     # 对应类型的模板不存在
-    #     if current_template_file is None:
-    #         return None
-    #
-    #     try:
-    #         print(f"current_template_file:{current_template_file}, result_file_execl_path:{result_file_execl_path}")
-    #         # 复制模板文件到临时目录
-    #         shutil.copy2(current_template_file, result_file_execl_path)
-    #
-    #         # 生成计费汇总租户详情数据
-    #         temp_data = self.generate_rating_summary_detail_data(detail, language)
-    #
-    #         # 加载模板文件
-    #         book = load_workbook(result_file_execl_path)
-    #         detail_sheet = book['ratingSummaryDetail']
-    #
-    #         # 插入项目ID、开始时间、结束时间数据
-    #         start_row = 1
-    #         for idx, item in enumerate(temp_data):
-    #             # 获取字典的键值对
-    #             value = list(item.values())[0]
-    #             # 写入第二列
-    #             detail_sheet.cell(row=start_row + idx, column=2, value=value).border = thin_border
-    #
-    #         # 插入资源类型费率
-    #         start_row = 5  # 从第5行开始插入
-    #         for idx, item in enumerate(temp_data[4:]):
-    #             # 获取字典的键值对
-    #             key = list(item.keys())[0]
-    #             value = list(item.values())[0]
-    #
-    #             # 写入第一列和第二列
-    #             detail_sheet.cell(row=start_row + idx, column=1, value=key).border = thin_border
-    #             detail_sheet.cell(row=start_row + idx, column=2, value=value).border = thin_border
-    #
-    #         # 保存修改
-    #         book.save(result_file_execl_path)
-    #     except Exception as e:
-    #         import traceback
-    #         traceback.print_exc()
-    #         raise e
-
     def generate_rating_summary_detail_data(self, ratingSummaryDetailList, language):
         try:
             if ratingSummaryDetailList is None:
-                return None
+                return None, None
             temp_data = []
             # 项目名称
             tenant_name = None
@@ -177,10 +134,15 @@ class CloudKittyService:
                         tenant_id = ratingSummaryDetail.tenant_id
                         begin_datatime = ratingSummaryDetail.start_time
                         end_datatime = ratingSummaryDetail.end_time
+
+            # tenant_id_and_name_period = tenant_id + "_" + tenant_name
+            tenant_id_and_name_period = tenant_name
             if language is None or language == "EN":
                 temp_data.append({'Tenant Name': tenant_name + f"(ID: {tenant_id})"})
                 temp_data.append({'Begin Time': begin_datatime})
                 temp_data.append({'End Time': end_datatime})
+                # tenant_id_and_name_period = tenant_id_and_name_period + "_" + switch_time_to_time(begin_datatime, end_datatime)
+                tenant_id_and_name_period = tenant_id_and_name_period + "_" + convert_timestamp_to_date(unquote(begin_datatime), unquote(end_datatime))
                 # Res type、Rate
                 temp_data.append({'Res Type': 'Rate'})
             else:
@@ -200,15 +162,16 @@ class CloudKittyService:
                     else:
                         temp_total_rating_data.append({'总计':ratingSummaryDetail.total})
                 elif ratingSummaryDetail.service == "instance":
-                    temp_instance_flavor_data.append({'instance':ratingSummaryDetail.total})
-                    if ratingSummaryDetail.flavor is not None:
-                        for flavor in ratingSummaryDetail.flavor:
-                            flavor_name_final = "instance-flavor-"
-                            if flavor.flavor_name is None:
-                                flavor_name_final = flavor_name_final + "None"
-                            else:
-                                flavor_name_final = flavor_name_final + flavor.flavor_name
-                            temp_instance_flavor_data.append({flavor_name_final: flavor.rate})
+                    temp_instance_value = f"{ratingSummaryDetail.total or ''}(CPU: {ratingSummaryDetail.cpuTotal or ''}, GPU: {ratingSummaryDetail.gpuTotal or ''})"
+                    temp_instance_flavor_data.append({'instance':temp_instance_value})
+                    # if ratingSummaryDetail.flavor is not None:
+                    #     for flavor in ratingSummaryDetail.flavor:
+                    #         flavor_name_final = "instance-flavor-"
+                    #         if flavor.flavor_name is None:
+                    #             flavor_name_final = flavor_name_final + "None"
+                    #         else:
+                    #             flavor_name_final = flavor_name_final + flavor.flavor_name
+                    #         temp_instance_flavor_data.append({flavor_name_final: flavor.rate})
                 else:
                     temp_non_instance_data.append({ratingSummaryDetail.service:ratingSummaryDetail.total})
 
@@ -220,7 +183,7 @@ class CloudKittyService:
             if temp_total_rating_data is not None:
                 temp_data.extend(temp_total_rating_data)
             # print(f"整合后的数据：{temp_data}")
-            return temp_data
+            return temp_data, tenant_id_and_name_period
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -245,8 +208,8 @@ class CloudKittyService:
                         instance_total_value = value
                         if not is_has_instance_flavor_prefix:
                             table_data.append(["instance", value,"", ""])
-                    else:
-                        table_data.append(["instance", key.removeprefix("instance-flavor-"), value, instance_total_value])  # 同样四列
+                    # else:
+                        # table_data.append(["instance", key.removeprefix("instance-flavor-"), value, instance_total_value])  # 同样四列
                 else:
                     table_data.append([key, value, "", ""])
 

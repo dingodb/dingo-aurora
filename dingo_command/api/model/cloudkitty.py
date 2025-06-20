@@ -18,6 +18,8 @@ class CloudKittyRatingSummaryDetail(BaseModel):
     start_time: Optional[str] = Field(None, description="开始时间")
     total: Optional[str] = Field(None, description="总计")
     flavor: Optional[List[FlavorObject]] = Field(None, description="描述信息")
+    cpuTotal: Optional[float] = Field(None, description="CPU总计")
+    gpuTotal: Optional[float] = Field(None, description="GPU总计")
 
 class RatingModuleConfigHashMapMapping(BaseModel):
     mapping_id: Optional[str] = Field(None, description="映射ID")
