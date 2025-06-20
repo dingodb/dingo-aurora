@@ -459,7 +459,7 @@ downloads:
     enabled: true
     file: true
     version: "{{ kube_version }}"
-    dest: "{{ local_release_dir }}/kubeadm-{{ kube_version }}-{{ image_arch }}"
+    dest: "{{ local_release_dir }}/kubeadm"
     sha256: "{{ kubeadm_binary_checksum }}"
     url: "{{ kubeadm_download_url }}"
     unarchive: false
@@ -472,7 +472,7 @@ downloads:
     enabled: true
     file: true
     version: "{{ kube_version }}"
-    dest: "{{ local_release_dir }}/kubelet-{{ kube_version }}-{{ image_arch }}"
+    dest: "{{ local_release_dir }}/kubelet"
     sha256: "{{ kubelet_binary_checksum }}"
     url: "{{ kubelet_download_url }}"
     unarchive: false
@@ -485,7 +485,7 @@ downloads:
     enabled: true
     file: true
     version: "{{ kube_version }}"
-    dest: "{{ local_release_dir }}/kubectl-{{ kube_version }}-{{ image_arch }}"
+    dest: "{{ local_release_dir }}/kubectl"
     sha256: "{{ kubectl_binary_checksum }}"
     url: "{{ kubectl_download_url }}"
     unarchive: false
@@ -759,7 +759,7 @@ downloads:
     enabled: "{{ kube_network_plugin == 'calico' }}"
     file: true
     version: "{{ calico_ctl_version }}"
-    dest: "{{ local_release_dir }}/calicoctl-{{ calico_ctl_version }}-{{ image_arch }}"
+    dest: "{{ local_release_dir }}/calicoctl-linux-{{ image_arch }}"
     sha256: "{{ calicoctl_binary_checksum }}"
     url: "{{ calicoctl_download_url }}"
     unarchive: false

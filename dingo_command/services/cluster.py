@@ -977,7 +977,7 @@ class ClusterService:
 class TaskService:
     
     class TaskMessage(Enum):
-        instructure_check = "参数校验"
+        #instructure_check = "参数校验"
         instructure_create = "创建基础设施"
         pre_install = "安装前准备"
         runtime_prepair = "运行时准备"
@@ -988,7 +988,7 @@ class TaskService:
         
     
     class TaskDetail(Enum):
-        instructure_check = "instructure check passed"
+        #instructure_check = "instructure check passed"
         instructure_create = "instructure create success"
         pre_install = "install prepare success"
         runtime_prepair = "runtime prepare success"

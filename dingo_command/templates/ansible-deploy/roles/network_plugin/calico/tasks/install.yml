@@ -124,18 +124,10 @@
     - ('kube_control_plane' in group_names)
     - calico_datastore == "kdd"
   block:
-    - name: Calico | Extract calico package
-      unarchive:
-        src: "{{ local_release_dir }}/{{ calico_version }}.tar.gz"
-        dest: "{{ local_release_dir }}/"
-        remote_src: true
-        creates: "{{ local_release_dir }}/calico-{{ calico_version }}"
-      when:
-        - not kdd_path.stat.exists | default(false)
     
     - name: Calico | Create calico manifests for kdd
       assemble:
-        src: "/calico-{{ calico_version }}/libcalico-go/config/crd"
+        src: "{{ local_release_dir }}/calico-{{ calico_version }}/libcalico-go/config/crd"
         dest: "{{ kube_config_dir }}/kdd-crds.yml"
         mode: "0644"
         delimiter: "---\n"
