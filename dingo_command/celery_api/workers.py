@@ -210,11 +210,12 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
                     ["ssh-keygen", "-t", "rsa", "-b", "4096", "-C", "", "-f", os.path.join(str(cluster_dir), "id_rsa"),
                      "-N", ""], capture_output=True, text=True)
                 if res.returncode != 0:
-                    # 发生错误时更新任务状态为"失败"
-                    task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                    task_info.state = "failed"
-                    task_info.detail = res.stderr
-                    update_task_state(task_info)
+                    if not scale:
+                        # 发生错误时更新任务状态为"失败"
+                        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                        task_info.state = "failed"
+                        task_info.detail = res.stderr
+                        update_task_state(task_info)
                     print(f"ssh-keygen error: {res.stderr}")
                     return False, res.stderr
                 cluster.private_key_path = os.path.join(cluster_dir, "id_rsa")
@@ -244,11 +245,12 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
         os.environ['CURRENT_CLUSTER_DIR']=cluster_dir
         res = subprocess.run(["terraform", "init"], capture_output=True, text=True)
         if res.returncode != 0:
-            # 发生错误时更新任务状态为"失败"
-            task_info.end_time =datetime.fromtimestamp(datetime.now().timestamp())
-            task_info.state = "failed"
-            task_info.detail = res.stderr
-            update_task_state(task_info)
+            if not scale:
+                # 发生错误时更新任务状态为"失败"
+                task_info.end_time =datetime.fromtimestamp(datetime.now().timestamp())
+                task_info.state = "failed"
+                task_info.detail = res.stderr
+                update_task_state(task_info)
             print(f"Terraform init error: {res.stderr}")
             return False, replace_ansi_with_single_newline(res.stderr)
        
@@ -265,11 +267,12 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
             "-lock=false"
         ], capture_output=True, text=True) 
         if res.returncode != 0:
-            # 发生错误时更新任务状态为"失败"
-            task_info.end_time =datetime.fromtimestamp(datetime.now().timestamp())
-            task_info.state = "failed"
-            task_info.detail = "deploy base infrastructure failed, reason: " + res.stderr
-            update_task_state(task_info)
+            if not scale:
+                # 发生错误时更新任务状态为"失败"
+                task_info.end_time =datetime.fromtimestamp(datetime.now().timestamp())
+                task_info.state = "failed"
+                task_info.detail = "deploy base infrastructure failed, reason: " + res.stderr
+                update_task_state(task_info)
             print(f"Terraform apply error: {res.stderr}")
             set_instance_status(cluster, node_list, node_type=node_type)
             if node_type == NodeInfo and instance_list:
@@ -289,7 +292,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
             # Give execute permissions to the host file
             os.chmod(host_file, 0o755)
             (network_id, network_name, bus_network_id, bus_network_name,
-             subnet_id, bussubnet_id) = get_networks(cluster, task_info, host_file, cluster_dir)
+             subnet_id, bussubnet_id) = get_networks(cluster, task_info, host_file, cluster_dir, scale)
             db_cluster.admin_network_id = network_id
             db_cluster.admin_subnet_id = subnet_id
             db_cluster.bus_network_id = bus_network_id
@@ -305,28 +308,31 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
             #db_cluster.status = "running"
             ClusterSQL.update_cluster(db_cluster)
         if res.returncode != 0:
-            # 发生错误时更新任务状态为"失败"
-            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-            task_info.state = "failed"
-            task_info.detail = res.stderr
-            update_task_state(task_info)
+            if not scale:
+                # 发生错误时更新任务状态为"失败"
+                task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                task_info.state = "failed"
+                task_info.detail = res.stderr
+                update_task_state(task_info)
             print(f"Terraform error: {res.stderr}")
             return False, res.stderr
         else:
-            # 更新任务状态为"成功"
-            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-            task_info.state = "success"
-            task_info.detail = "base infrastructure created successfully"
-            update_task_state(task_info)
+            if not scale:
+                # 更新任务状态为"成功"
+                task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                task_info.state = "success"
+                task_info.detail = "base infrastructure created successfully"
+                update_task_state(task_info)
             print("Terraform apply succeeded")
             return True, ""
 
     except subprocess.CalledProcessError as e:
-        # 发生错误时更新任务状态为"失败"
-        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-        task_info.state = "failed"
-        task_info.detail = str(e)
-        update_task_state(task_info)
+        if not scale:
+            # 发生错误时更新任务状态为"失败"
+            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "failed"
+            task_info.detail = str(e)
+            update_task_state(task_info)
         print(f"Terraform error: {e}")
         return False, str(e)
 
@@ -342,31 +348,35 @@ def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list, scale=False
         cluster = ClusterObject(**cluster_dict)
 
         instance_list = json.loads(instance_bm_list)
-        instructure_task = Taskinfo(task_id=task_id, cluster_id=cluster_tf["id"], state="progress",
-                                    start_time=datetime.fromtimestamp(datetime.now().timestamp()),
-                                    msg=TaskService.TaskMessage.instructure_create.name)
-        TaskSQL.insert(instructure_task)
+        instructure_task = None
+        if not scale:
+            instructure_task = Taskinfo(task_id=task_id, cluster_id=cluster_tf["id"], state="progress",
+                                        start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                        msg=TaskService.TaskMessage.instructure_create.name)
+            TaskSQL.insert(instructure_task)
 
         terraform_result = create_infrastructure(cluster_tfvars, instructure_task,
                                                  scale=scale, node_list=instance_list, node_type=Instance)
 
         if not terraform_result[0]:
             raise Exception(f"Terraform infrastructure creation failed, reason: {terraform_result[1]}")
-        instructure_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-        instructure_task.state = "success"
-        instructure_task.detail = TaskService.TaskDetail.instructure_create.value
-        update_task_state(instructure_task)
+        if not scale:
+            instructure_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            instructure_task.state = "success"
+            instructure_task.detail = TaskService.TaskDetail.instructure_create.value
+            update_task_state(instructure_task)
         print("Terraform apply succeeded")
 
         cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tfvars.id)
         host_file = os.path.join(cluster_dir, "hosts")
         res = subprocess.run(["python3", host_file, "--root", cluster_dir,"--list"], capture_output=True, text=True)
         if res.returncode != 0:
-            # 更新数据库的状态为failed
-            instructure_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-            instructure_task.state = "failed"
-            instructure_task.detail = str(res.stderr)
-            update_task_state(instructure_task)
+            if not scale:
+                # 更新数据库的状态为failed
+                instructure_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                instructure_task.state = "failed"
+                instructure_task.detail = str(res.stderr)
+                update_task_state(instructure_task)
             raise Exception(f"Error generating Ansible inventory: {str(res.stderr)}")
         hosts = res.stdout
         # todo 添加节点时，需要将节点信息写入到inventory/inventory.yaml文件中
@@ -1018,11 +1028,13 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         cluster = ClusterObject(**cluster_dict)
         node_list = json.loads(node_list)
         instance_list = json.loads(instance_list)
-        # 将task_info存入数据库
-        task_info = Taskinfo(task_id=task_id, cluster_id=cluster_tf_dict["id"], state="progress",
-                             start_time=datetime.fromtimestamp(datetime.now().timestamp()),
-                             msg=TaskService.TaskMessage.instructure_create.name)
-        TaskSQL.insert(task_info)
+        task_info = None
+        if not scale:
+            # 将task_info存入数据库
+            task_info = Taskinfo(task_id=task_id, cluster_id=cluster_tf_dict["id"], state="progress",
+                                 start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                 msg=TaskService.TaskMessage.instructure_create.name)
+            TaskSQL.insert(task_info)
 
         cinder_client = CinderClient()
         volume_type = cinder_client.list_volum_type()
@@ -1042,15 +1054,16 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         # 根据生成inventory
         # 复制script下面的host文件到WORK_DIR/cluster.id目录下
         # 执行python3 host --list，将生成的内容转换为yaml格式写入到inventory/inventory.yaml文件中
-        # 将task_info存入数据库
-        task_info = Taskinfo(task_id=task_id, cluster_id=cluster_tf_dict["id"], state="progress",
-                             start_time=datetime.fromtimestamp(datetime.now().timestamp()),
-                             msg=TaskService.TaskMessage.pre_install.name)
-        TaskSQL.insert(task_info)
+        if not scale:
+            # 将task_info存入数据库
+            task_info = Taskinfo(task_id=task_id, cluster_id=cluster_tf_dict["id"], state="progress",
+                                 start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                 msg=TaskService.TaskMessage.pre_install.name)
+            TaskSQL.insert(task_info)
         # Give execute permissions to the host file
         host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tf_dict["id"], "hosts")
         os.chmod(host_file, 0o755)  # rwxr-xr-x permission
-        master_ip, lb_ip, hosts_data = get_ips(cluster_tfvars, task_info, host_file, cluster_dir)
+        master_ip, lb_ip, hosts_data = get_ips(cluster_tfvars, task_info, host_file, cluster_dir, scale)
         # ensure /root/.ssh/known_hosts exists
         if os.path.exists("/root/.ssh/known_hosts"):
             for i in range(1, cluster_tfvars.number_of_k8s_masters + 1):
@@ -1060,10 +1073,11 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                 cmd = f'ssh-keygen -f "/root/.ssh/known_hosts" -R "{tmp_ip}"'
                 result = subprocess.run(cmd, shell=True, capture_output=True)
                 if result.returncode != 0:
-                    task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                    task_info.state = "failed"
-                    task_info.detail = "Ansible kubernetes deployment failed, configure ssh-keygen error"
-                    update_task_state(task_info)
+                    if not scale:
+                        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                        task_info.state = "failed"
+                        task_info.detail = "Ansible kubernetes deployment failed, configure ssh-keygen error"
+                        update_task_state(task_info)
                     raise Exception("Ansible kubernetes deployment failed, configure ssh-keygen error")
         if cluster_tfvars.password != "":
             master_node_name = f"{cluster_tfvars.cluster_name}-k8s-master-1"
@@ -1082,11 +1096,12 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                         print(f"sshpass failed, retry {retry_count}/{max_retries} after 5s...")
                         time.sleep(5)
             if result.returncode != 0:
-                task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                task_info.state = "failed"
-                task_info.detail = "Ansible kubernetes deployment failed, configure sshpass error"
+                if not scale:
+                    task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                    task_info.state = "failed"
+                    task_info.detail = "Ansible kubernetes deployment failed, configure sshpass error"
+                    update_task_state(task_info)
                 print(f"sshpass failed after {max_retries} retries: {result.stderr}")
-                update_task_state(task_info)
                 raise Exception("Ansible kubernetes deployment failed, configure sshpass error")
 
         # 执行ansible命令验证是否能够连接到所有节点
@@ -1154,19 +1169,21 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         # 如果超时后仍然无法连接所有节点，则抛出错误
         if not connection_success:
             error_msg = f"{int(time.time() - start_time)}s retry node can not connect: {', '.join(nodes_result['unreachable_nodes'])}"
-            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-            task_info.state = "failed"
-            task_info.detail = error_msg
-            update_task_state(task_info)
+            if not scale:
+                task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                task_info.state = "failed"
+                task_info.detail = error_msg
+                update_task_state(task_info)
             raise Exception(error_msg)
 
         res = subprocess.run(["python3", host_file, "--root",cluster_dir,"--list"], capture_output=True, text=True)
         if res.returncode != 0:
-            # 更新数据库的状态为failed
-            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-            task_info.state = "failed"
-            task_info.detail = str(res.stderr)
-            update_task_state(task_info)
+            if not scale:
+                # 更新数据库的状态为failed
+                task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                task_info.state = "failed"
+                task_info.detail = str(res.stderr)
+                update_task_state(task_info)
             raise Exception(f"Error generating Ansible inventory: {str(res.stderr)}")
         hosts = res.stdout
         hosts_data = json.loads(hosts)
@@ -1175,10 +1192,11 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         master_ip = hosts_data["_meta"]["hostvars"][master_node_name]["ip"]
         float_ip = hosts_data["_meta"]["hostvars"][master_node_name]["ansible_host"]
         ssh_port = hosts_data["_meta"]["hostvars"][master_node_name].get("ansible_port", 22)
-        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-        task_info.state = "success"
-        task_info.detail = TaskService.TaskDetail.pre_install.value
-        update_task_state(task_info)
+        if not scale:
+            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "success"
+            task_info.detail = TaskService.TaskDetail.pre_install.value
+            update_task_state(task_info)
         # 2. 使用Ansible部署K8s集群
         cluster.id = cluster_tf_dict["id"]
         if scale:
@@ -1237,14 +1255,15 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         raise
 
 
-def get_ips(cluster_tfvars, task_info, host_file, cluster_dir):
+def get_ips(cluster_tfvars, task_info, host_file, cluster_dir, scale):
     res = subprocess.run(["python3", host_file, "--root", cluster_dir, "--list"], capture_output=True, text=True)
     if res.returncode != 0:
-        # 更新数据库的状态为failed
-        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-        task_info.state = "failed"
-        task_info.detail = str(res.stderr)
-        update_task_state(task_info)
+        if scale:
+            # 更新数据库的状态为failed
+            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "failed"
+            task_info.detail = str(res.stderr)
+            update_task_state(task_info)
         raise Exception("Error generating Ansible inventory")
     hosts = res.stdout
     hosts_data = json.loads(hosts)
@@ -1255,14 +1274,15 @@ def get_ips(cluster_tfvars, task_info, host_file, cluster_dir):
     return master_ip, lb_ip, hosts_data
 
 
-def get_networks(cluster_tfvars, task_info, host_file, cluster_dir):
+def get_networks(cluster_tfvars, task_info, host_file, cluster_dir, scale):
     res = subprocess.run(["python3", host_file,  "--root", cluster_dir,"--list"], capture_output=True, text=True)
     if res.returncode != 0:
-        # 更新数据库的状态为failed
-        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-        task_info.state = "failed"
-        task_info.detail = str(res.stderr)
-        update_task_state(task_info)
+        if scale:
+            # 更新数据库的状态为failed
+            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "failed"
+            task_info.detail = str(res.stderr)
+            update_task_state(task_info)
         raise Exception("Error generating Ansible inventory")
     hosts = res.stdout
     hosts_data = json.loads(hosts)
@@ -1385,7 +1405,8 @@ def delete_cluster(self, cluster_id, token):
             print(f"Terraform error: {res.stderr}")
             raise Exception("delete cluster Error terraform init exception: {}".format(res.stderr))
 
-        os.environ["TF_LOG"] = "DEBUG"
+        env = os.environ.copy()
+        env["TF_LOG"] = "DEBUG"
         resource_inuse = False
         # 创建子进程并实时捕获输出
         process = subprocess.Popen(
@@ -1394,7 +1415,8 @@ def delete_cluster(self, cluster_id, token):
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
-            universal_newlines=True
+            universal_newlines=True,
+            env=env
         )
         # 实时读取输出流
         try:

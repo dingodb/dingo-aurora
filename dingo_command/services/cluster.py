@@ -476,11 +476,11 @@ class ClusterService:
         if not cluster.node_config:
             raise Fail(error_code=405, error_message="集群的node_config参数不能为空")
         else:
+            if len(cluster.node_config) == 1:
+                raise Fail(error_code=405, error_message="集群的节点数量不能小于1")
             for node_info in cluster.node_config:
                 if node_info.role == "master":
                     continue
-                if node_info.count < 1:
-                    raise Fail(error_code=405, error_message="集群的节点数量不能小于1")
                 if not node_info.image:
                     raise Fail(error_code=405, error_message="集群节点的image参数不能为空")
                 if not node_info.flavor_id:
@@ -1066,7 +1066,7 @@ class TaskService:
                             'start_time': getattr(t, 'start_time', None),
                             'end_time': getattr(t, 'end_time', None),
                             # 根据task名称匹配TaskMessage枚举值添加中文标题
-                            'title': TaskService.TaskMessage[task.msg].value if hasattr(TaskService.TaskMessage, task.msg) else task.msg
+                            'title': TaskService.TaskMessage[t.msg].value if hasattr(TaskService.TaskMessage, t.msg) else t.msg
                         }
                         tasks_with_title.append(task_dict)
                         inprogress = True

@@ -459,7 +459,7 @@ downloads:
     enabled: true
     file: true
     version: "{{ kube_version }}"
-    dest: "{{ local_release_dir }}/kube-{{ kube_version }}/kubeadm"
+    dest: "{{ local_release_dir }}/kubeadm"
     sha256: "{{ kubeadm_binary_checksum }}"
     url: "{{ kubeadm_download_url }}"
     unarchive: false
@@ -472,7 +472,7 @@ downloads:
     enabled: true
     file: true
     version: "{{ kube_version }}"
-    dest: "{{ local_release_dir }}/kube-{{ kube_version }}/kubelet"
+    dest: "{{ local_release_dir }}/kubelet"
     sha256: "{{ kubelet_binary_checksum }}"
     url: "{{ kubelet_download_url }}"
     unarchive: false
@@ -485,7 +485,7 @@ downloads:
     enabled: true
     file: true
     version: "{{ kube_version }}"
-    dest: "{{ local_release_dir }}/kube-{{ kube_version }}/kubectl"
+    dest: "{{ local_release_dir }}/kubectl"
     sha256: "{{ kubectl_binary_checksum }}"
     url: "{{ kubectl_download_url }}"
     unarchive: false
