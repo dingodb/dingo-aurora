@@ -55,6 +55,10 @@ INSTANCE_ROUTER_NAME = "instance_router"
 INSTANCE_SUBNET_NAME = "instance_subnet"
 TASK_TIMEOUT = CONF.DEFAULT.task_timeout
 SOFT_TASK_TIMEOUT = CONF.DEFAULT.soft_task_timeout
+PUSHGATEWAY_URL = CONF.DEFAULT.pushgateway_url
+
+
+
 
 runtime_task_name = "Check container-engine status"
 etcd_task_name = "Check etcd cluster status"
@@ -119,6 +123,7 @@ class ClusterTFVarsObject(BaseModel):
     bastion_floatip_id: Optional[str] = Field(None, description="堡垒机浮动ip的id")
     bastion_fips: Optional[list[str]] = Field(None, description="堡垒机浮动ip的地址")
     etcd_volume_type: Optional[str] = Field(None, description="堡垒机浮动ip的地址")
+    pushgateway_url: Optional[str] = Field("", description="Prometheus Pushgateway的URL")
 
 def replace_ansi_with_single_newline(text):
     ansi_pattern = re.compile(r'\x1b\[[\d;]*[a-zA-Z]')
@@ -1039,6 +1044,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         cinder_client = CinderClient()
         volume_type = cinder_client.list_volum_type()
         cluster_tfvars.etcd_volume_type = volume_type
+        cluster_tfvars.pushgateway_url = PUSHGATEWAY_URL
         terraform_result = create_infrastructure(cluster_tfvars, task_info, scale=scale,
                                                  node_list=node_list, node_type=NodeInfo, instance_list=instance_list)
 
