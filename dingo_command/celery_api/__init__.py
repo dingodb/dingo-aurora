@@ -25,6 +25,7 @@ default_opts = [
     cfg.StrOpt('cluster_router_name', default='cluster-router', help='cluster-router'),
     cfg.IntOpt('task_timeout', default=3600, help='cluster-router'),
     cfg.IntOpt('soft_task_timeout', default=3600, help='cluster-router'),
+    cfg.StrOpt('pushgateway_url', default="", help='the cluster router id'),
 ]
 
 CONF.register_group(default_group)

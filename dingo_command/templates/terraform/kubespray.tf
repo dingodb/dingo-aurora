@@ -141,6 +141,7 @@ module "compute" {
   auth_url = var.auth_url
   tenant_id = var.tenant_id
   etcd_volume_type = var.etcd_volume_type
+  pushgateway_url = var.pushgateway_url
 }
 
 module "loadbalancer" {

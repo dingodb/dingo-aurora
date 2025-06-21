@@ -55,6 +55,10 @@ INSTANCE_ROUTER_NAME = "instance_router"
 INSTANCE_SUBNET_NAME = "instance_subnet"
 TASK_TIMEOUT = CONF.DEFAULT.task_timeout
 SOFT_TASK_TIMEOUT = CONF.DEFAULT.soft_task_timeout
+PUSHGATEWAY_URL = CONF.DEFAULT.pushgateway_url
+
+
+
 
 runtime_task_name = "Check container-engine status"
 etcd_task_name = "Check etcd cluster status"
@@ -119,6 +123,7 @@ class ClusterTFVarsObject(BaseModel):
     bastion_floatip_id: Optional[str] = Field(None, description="堡垒机浮动ip的id")
     bastion_fips: Optional[list[str]] = Field(None, description="堡垒机浮动ip的地址")
     etcd_volume_type: Optional[str] = Field(None, description="堡垒机浮动ip的地址")
+    pushgateway_url: Optional[str] = Field("", description="Prometheus Pushgateway的URL")
 
 def replace_ansi_with_single_newline(text):
     ansi_pattern = re.compile(r'\x1b\[[\d;]*[a-zA-Z]')
@@ -443,19 +448,6 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
     runtime_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
                          start_time=datetime.fromtimestamp(datetime.now().timestamp()),
                          msg=TaskService.TaskMessage.runtime_prepair.name)
-    etcd_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
-                         start_time=datetime.fromtimestamp(datetime.now().timestamp()),
-                         msg=TaskService.TaskMessage.etcd_deploy.name)
-    control_plane_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
-                                  start_time=datetime.fromtimestamp(datetime.now().timestamp()),
-                                  msg=TaskService.TaskMessage.controler_deploy.name)
-    worker_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
-                           start_time=datetime.fromtimestamp(datetime.now().timestamp()),
-                           msg=TaskService.TaskMessage.worker_deploy.name)
-    component_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
-                              start_time=datetime.fromtimestamp(datetime.now().timestamp()),
-                              msg=TaskService.TaskMessage.component_deploy.name)
-
     try:
         # #替换
         # # 定义上下文字典，包含所有要替换的变量值
@@ -517,36 +509,44 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
                         task_info.detail = TaskService.TaskDetail.runtime_prepair.value
                         update_task_state(task_info)                  
                         # 写入下一个任务
-                        etcd_task.start_time = datetime.fromtimestamp(datetime.now().timestamp())
-                        task_info = etcd_task
+                        etcd_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
+                                             start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                             msg=TaskService.TaskMessage.etcd_deploy.name)
                         TaskSQL.insert(etcd_task)
+                        task_info = etcd_task
                     if task_name == etcd_task_name and host is not None:
                         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
                         task_info.state = "success"
                         task_info.detail = TaskService.TaskDetail.etcd_deploy.value
                         update_task_state(task_info)                  
                         # 写入下一个任务
-                        control_plane_task.start_time = datetime.fromtimestamp(datetime.now().timestamp())
-                        task_info = control_plane_task
+                        control_plane_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
+                                                      start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                                      msg=TaskService.TaskMessage.controler_deploy.name)
                         TaskSQL.insert(control_plane_task)
+                        task_info = control_plane_task
                     if task_name == control_plane_task_name and host is not None:
                         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
                         task_info.state = "success"
                         task_info.detail = TaskService.TaskDetail.controler_deploy.value
                         update_task_state(task_info)   
                         # 写入下一个任务
-                        worker_task.start_time = datetime.fromtimestamp(datetime.now().timestamp())
-                        task_info = worker_task
+                        worker_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
+                                               start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                               msg=TaskService.TaskMessage.worker_deploy.name)
                         TaskSQL.insert(worker_task)
+                        task_info = worker_task
                     if task_name == work_node_task_name and host is not None and task_status != "failed":
                         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
                         task_info.state = "success"
                         task_info.detail = TaskService.TaskDetail.worker_deploy.value
                         update_task_state(task_info)
-                        component_task.start_time = datetime.fromtimestamp(datetime.now().timestamp())   
-                        task_info = component_task
+                        component_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
+                                                  start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                                  msg=TaskService.TaskMessage.component_deploy.name)
                         TaskSQL.insert(component_task)
-                    
+                        task_info = component_task
+
             #time.sleep(0.01)
             continue
         log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "ansible_debug.log")
@@ -1039,6 +1039,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         cinder_client = CinderClient()
         volume_type = cinder_client.list_volum_type()
         cluster_tfvars.etcd_volume_type = volume_type
+        cluster_tfvars.pushgateway_url = PUSHGATEWAY_URL
         terraform_result = create_infrastructure(cluster_tfvars, task_info, scale=scale,
                                                  node_list=node_list, node_type=NodeInfo, instance_list=instance_list)
 
@@ -1448,9 +1449,9 @@ def delete_cluster(self, cluster_id, token):
                 update_cluster_status(cluster_id)
                 return True
             else:
-                print(f"Terraform error: {res.stderr}")
+                print(f"Terraform error: {process.stderr}")
                 # 在这里判断具体的日志输出信息，如果出现删除安全组超时就判断为删除成功
-                raise Exception("delete cluster Error terraform destroy exception: {}".format(res.stderr))
+                raise Exception("delete cluster Error terraform destroy exception: {}".format(process.stderr))
         else:
             update_cluster_status(cluster_id)
             return True
@@ -1503,7 +1504,7 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
             log_file.write(format(runner.stdout.read()))
         thread.join()
         if runner.rc != 0:
-            print("{}".format(runner.stdout.read()))
+            # print("{}".format(runner.stdout.read()))
             raise Exception(f"Ansible remove node failed, please check log")
 
         # # 2、执行完删除k8s这些节点之后，再执行terraform销毁这些节点（这里是单独修改output.json文件还是需要通过之前生成的output.json文件生成）

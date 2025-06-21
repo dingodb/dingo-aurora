@@ -336,15 +336,15 @@ class InstanceService:
 
     def check_node_param(self, cluster: ScaleNodeObject):
         if not cluster.node_config:
-            raise Fail(error_code=405, error_message="扩容的node_config参数不能为空")
+            raise Fail(error_code=405, error_message="The node_config parameter for expansion cannot be empty")
         else:
             for node_info in cluster.node_config:
                 if node_info.count < 1:
-                    raise Fail(error_code=405, error_message="扩容的节点数量不能小于1")
+                    raise Fail(error_code=405, error_message="The number of expanded nodes cannot be less than 1")
                 if not node_info.image:
-                    raise Fail(error_code=405, error_message="扩容节点的image参数不能为空")
+                    raise Fail(error_code=405, error_message="Image parameter of expansion node cannot be empty")
                 if not node_info.flavor_id:
-                    raise Fail(error_code=405, error_message="扩容节点的flavor参数不能为空")
+                    raise Fail(error_code=405, error_message="Flavor parameter of expansion node cannot be empty")
 
     def create_baremetal(self, cluster_info, cluster: ScaleNodeObject, token):
         # 扩容baremetal集群的节点

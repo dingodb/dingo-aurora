@@ -312,3 +312,5 @@ variable "tenant_id" {
 
 variable "forward_float_ip_id" {}
 variable "etcd_volume_type" {}
+
+variable "pushgateway_url" {}

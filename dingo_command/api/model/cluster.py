@@ -157,6 +157,7 @@ class ClusterTFVarsObject(BaseModel):
     image_master: Optional[str] = Field(None, description="master节点的镜像")
     router_id: Optional[str] = Field(None, description="路由id")
     bastion_floatip_id: Optional[str] = Field(None, description="堡垒机浮动ip的id")
+    pushgateway_url: Optional[str] = Field("", description="Prometheus Pushgateway的URL")
 
 class NodeRemoveObject(BaseModel):
     cluster_id: Optional[str] = Field(None, description="集群id")

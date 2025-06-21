@@ -507,3 +507,10 @@ variable "etcd_volume_type" {
   type    = string
   default = ""
 }
+
+
+variable "pushgateway_url" {
+  description = "URL of the Pushgateway for monitoring"
+  type        = string
+  default     = ""
+}

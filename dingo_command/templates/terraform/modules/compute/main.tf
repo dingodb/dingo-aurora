@@ -17,8 +17,9 @@ data "cloudinit_config" "cloudinit" {
     content = templatefile("${path.module}/templates/cloudinit.yaml.tmpl", {
       extra_partitions = [],
       netplan_critical_dhcp_interface = "",
-      ssh_user = var.ssh_user
-      password = var.password
+      ssh_user = var.ssh_user,
+      password = var.password,
+      pushgateway_url = var.pushgateway_url
     })
   }
 }
@@ -29,8 +30,9 @@ data "cloudinit_config" "master-cloudinit" {
     content = templatefile("${path.module}/templates/cloudinit-master.yaml.tmpl", {
       extra_partitions = [],
       netplan_critical_dhcp_interface = "",
-      ssh_user = var.ssh_user
-      password = var.password
+      ssh_user = var.ssh_user,
+      password = var.password,
+      pushgateway_url = var.pushgateway_url
     })
   }
 }

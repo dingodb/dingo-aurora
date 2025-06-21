@@ -470,27 +470,29 @@ class ClusterService:
             for c in res.get("data"):
                 if c.status != "deleted":
                     # 如果查询结果不为空，说明集群名称已存在+
-                    raise Fail(error_code=405, error_message="集群名称已存在")
+                    raise Fail(error_code=405, error_message="Cluster name already exists")
         if cluster.type not in ("kubernetes", "baremetal"):
-            raise Fail(error_code=405, error_message="集群类型必须为kubernetes或baremetal")
+            raise Fail(error_code=405, error_message="Cluster type must be kubernetes or baremetal")
         if not cluster.node_config:
-            raise Fail(error_code=405, error_message="集群的node_config参数不能为空")
+            raise Fail(error_code=405, error_message="Cluster node_config parameter cannot be empty")
         else:
-            if len(cluster.node_config) == 1:
-                raise Fail(error_code=405, error_message="集群的节点数量不能小于1")
+            if len(cluster.node_config) == 1 and cluster.type == "kubernetes":
+                raise Fail(error_code=405, error_message="The number of nodes in the cluster cannot be less than 1.")
             for node_info in cluster.node_config:
                 if node_info.role == "master":
                     continue
                 if not node_info.image:
-                    raise Fail(error_code=405, error_message="集群节点的image参数不能为空")
+                    raise Fail(error_code=405, error_message="The image parameter of cluster node cannot be empty")
                 if not node_info.flavor_id:
-                    raise Fail(error_code=405, error_message="集群节点的flavor参数不能为空")
+                    raise Fail(error_code=405, error_message="The flavor parameter of cluster node cannot be empty")
         if cluster.port_forwards:
             for port_info in cluster.port_forwards:
                 if not port_info.internal_port:
-                    raise Fail(error_code=405, error_message="节点端口转发规则的内部端口参数不能为空")
+                    raise Fail(error_code=405, error_message="The internal port parameter of node port "
+                                                             "forwarding rule cannot be null.")
                 if not port_info.protocol:
-                    raise Fail(error_code=405, error_message="节点端口转发规则的协议必须为tcp或者udp")
+                    raise Fail(error_code=405, error_message="The protocol for node port forwarding rules "
+                                                             "must be tcp or udp")
         return True
     
     def generate_random_cidr(self):
@@ -1052,7 +1054,7 @@ class TaskService:
             # 返回第一条数据
             tasks_with_title = []
             tasks = res[1]
-
+            inprogress = False
             for task in TaskService.TaskMessage:
                 for t in tasks:
                     inprogress = False
