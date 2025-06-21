@@ -448,6 +448,10 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
     runtime_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
                          start_time=datetime.fromtimestamp(datetime.now().timestamp()),
                          msg=TaskService.TaskMessage.runtime_prepair.name)
+    etcd_task = Taskinfo()
+    control_plane_task = Taskinfo()
+    worker_task = Taskinfo()
+    component_task = Taskinfo()
     try:
         # #替换
         # # 定义上下文字典，包含所有要替换的变量值
@@ -493,6 +497,10 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
         print(f"start deploy kubernetes cluster: {str(cluster.id)}")
         thread, runner = run_playbook(playbook_file, host_file, ansible_dir, ssh_key=private_key_content)
         # 处理并打印事件日志
+        runtime_bool = False
+        etcd_bool = False
+        controller_bool = False
+        worker_bool = False
         while runner.status not in ['canceled', 'successful', 'timeout', 'failed']:
             # 处理事件日志
             for event in runner.events:
@@ -504,49 +512,56 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
                     # 处理 etcd 任务的特殊逻辑
                     # print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
                     if task_name == runtime_task_name and host is not None:
-                        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                        task_info.state = "success"
-                        task_info.detail = TaskService.TaskDetail.runtime_prepair.value
-                        update_task_state(task_info)                  
-                        # 写入下一个任务
-                        etcd_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
-                                             start_time=datetime.fromtimestamp(datetime.now().timestamp()),
-                                             msg=TaskService.TaskMessage.etcd_deploy.name)
-                        TaskSQL.insert(etcd_task)
-                        task_info = etcd_task
+                        if not runtime_bool:
+                            runtime_bool = True
+                            runtime_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                            runtime_task.state = "success"
+                            runtime_task.detail = TaskService.TaskDetail.runtime_prepair.value
+                            update_task_state(runtime_task)
+                            # 写入下一个任务
+                            etcd_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
+                                                 start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                                 msg=TaskService.TaskMessage.etcd_deploy.name)
+                            TaskSQL.insert(etcd_task)
+                            task_info = etcd_task
                     if task_name == etcd_task_name and host is not None:
-                        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                        task_info.state = "success"
-                        task_info.detail = TaskService.TaskDetail.etcd_deploy.value
-                        update_task_state(task_info)                  
-                        # 写入下一个任务
-                        control_plane_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
-                                                      start_time=datetime.fromtimestamp(datetime.now().timestamp()),
-                                                      msg=TaskService.TaskMessage.controler_deploy.name)
-                        TaskSQL.insert(control_plane_task)
-                        task_info = control_plane_task
+                        if not etcd_bool:
+                            etcd_bool = True
+                            etcd_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                            etcd_task.state = "success"
+                            etcd_task.detail = TaskService.TaskDetail.etcd_deploy.value
+                            update_task_state(etcd_task)
+                            # 写入下一个任务
+                            control_plane_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
+                                                          start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                                          msg=TaskService.TaskMessage.controler_deploy.name)
+                            TaskSQL.insert(control_plane_task)
+                            task_info = control_plane_task
                     if task_name == control_plane_task_name and host is not None:
-                        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                        task_info.state = "success"
-                        task_info.detail = TaskService.TaskDetail.controler_deploy.value
-                        update_task_state(task_info)   
-                        # 写入下一个任务
-                        worker_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
-                                               start_time=datetime.fromtimestamp(datetime.now().timestamp()),
-                                               msg=TaskService.TaskMessage.worker_deploy.name)
-                        TaskSQL.insert(worker_task)
-                        task_info = worker_task
+                        if not controller_bool:
+                            controller_bool = True
+                            control_plane_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                            control_plane_task.state = "success"
+                            control_plane_task.detail = TaskService.TaskDetail.controler_deploy.value
+                            update_task_state(control_plane_task)
+                            # 写入下一个任务
+                            worker_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
+                                                   start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                                   msg=TaskService.TaskMessage.worker_deploy.name)
+                            TaskSQL.insert(worker_task)
+                            task_info = worker_task
                     if task_name == work_node_task_name and host is not None and task_status != "failed":
-                        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                        task_info.state = "success"
-                        task_info.detail = TaskService.TaskDetail.worker_deploy.value
-                        update_task_state(task_info)
-                        component_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
-                                                  start_time=datetime.fromtimestamp(datetime.now().timestamp()),
-                                                  msg=TaskService.TaskMessage.component_deploy.name)
-                        TaskSQL.insert(component_task)
-                        task_info = component_task
-
+                        if not worker_bool:
+                            worker_bool = True
+                            worker_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                            worker_task.state = "success"
+                            worker_task.detail = TaskService.TaskDetail.worker_deploy.value
+                            update_task_state(worker_task)
+                            component_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
+                                                      start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                                      msg=TaskService.TaskMessage.component_deploy.name)
+                            TaskSQL.insert(component_task)
+                            task_info = component_task
             #time.sleep(0.01)
             continue
         log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "ansible_debug.log")
@@ -562,10 +577,10 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
             update_task_state(task_info)
             raise Exception("Deploy kubernetes failed, please check log")
 
-        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-        task_info.state = "success"
-        task_info.detail = TaskService.TaskDetail.component_deploy.value
-        update_task_state(task_info)
+        component_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+        component_task.state = "success"
+        component_task.detail = TaskService.TaskDetail.component_deploy.value
+        update_task_state(component_task)
         return True, ""
     
     except Exception as e:
@@ -1413,7 +1428,7 @@ def delete_cluster(self, cluster_id, token):
         process = subprocess.Popen(
             ["terraform", "destroy", "-auto-approve", "-var-file=output.tfvars.json"],
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
             universal_newlines=True,
@@ -1449,9 +1464,10 @@ def delete_cluster(self, cluster_id, token):
                 update_cluster_status(cluster_id)
                 return True
             else:
-                print(f"Terraform error: {process.stderr}")
+                std_err_msg = "".join(process.stderr)
+                print(f"Terraform error: {std_err_msg}")
                 # 在这里判断具体的日志输出信息，如果出现删除安全组超时就判断为删除成功
-                raise Exception("delete cluster Error terraform destroy exception: {}".format(process.stderr))
+                raise Exception("delete cluster Error terraform destroy exception: {}".format(std_err_msg))
         else:
             update_cluster_status(cluster_id)
             return True
