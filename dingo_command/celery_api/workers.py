@@ -1426,9 +1426,9 @@ def delete_cluster(self, cluster_id, token):
         resource_inuse = False
         # 创建子进程并实时捕获输出
         process = subprocess.Popen(
-            ["terraform", "destroy", "-auto-approve", "-var-file=output.tfvars.json"],
+            ["terraform", "destroy", "-auto-approve", "-var-file=output.tfvars.json", "-lock=false"],
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
             universal_newlines=True,
@@ -1464,10 +1464,9 @@ def delete_cluster(self, cluster_id, token):
                 update_cluster_status(cluster_id)
                 return True
             else:
-                std_err_msg = "".join(process.stderr)
-                print(f"Terraform error: {std_err_msg}")
+                print(f"Terraform error: {process.stderr}")
                 # 在这里判断具体的日志输出信息，如果出现删除安全组超时就判断为删除成功
-                raise Exception("delete cluster Error terraform destroy exception: {}".format(std_err_msg))
+                raise Exception("delete cluster Error terraform destroy exception: {}".format(process.stderr))
         else:
             update_cluster_status(cluster_id)
             return True
