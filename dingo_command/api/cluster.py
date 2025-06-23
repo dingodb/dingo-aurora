@@ -4,7 +4,7 @@ from fastapi import Query
 from fastapi.responses import FileResponse
 from dingo_command.api.model.cluster import ClusterObject, NodeConfigObject
 from dingo_command.common.nova_client import NovaClient
-from dingo_command.services.cluster import ClusterService,TaskService
+from dingo_command.services.cluster import ClusterService,TaskService, master_flvaor
 from dingo_command.services.custom_exception import Fail
 from fastapi import APIRouter, HTTPException, Depends, Header
 
@@ -28,6 +28,7 @@ async def create_cluster(cluster_object:ClusterObject, token: str = Depends(get_
             master_config["count"] = cluster_object.kube_info.number_master
             master_config["role"] = "master"
             master_config["type"] = "vm"
+            master_config["flavor_id"] = master_flvaor
             cluster_object.node_config.append(NodeConfigObject(**master_config))
         cluster_id = cluster_service.create_cluster(cluster_object,token)
         # 操作日志

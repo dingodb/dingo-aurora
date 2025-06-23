@@ -44,8 +44,8 @@ thin_border = Border(
 )
 auth_url = CONF.DEFAULT.auth_url
 WORK_DIR = CONF.DEFAULT.cluster_work_dir
-image_master = CONF.DEFAULT.k8s_master_image
-image_flvaor = CONF.DEFAULT.k8s_master_flavor
+master_image = CONF.DEFAULT.k8s_master_image
+master_flvaor = CONF.DEFAULT.k8s_master_flavor
 system_service = SystemService()
 
 class ClusterService:
@@ -66,8 +66,8 @@ class ClusterService:
         master_index = 1
         cluster_new = copy.deepcopy(cluster)
         (master_cpu, master_gpu, master_mem, master_disk,
-         master_flavor_id) = self.get_master_flavor_info(image_flvaor)
-        master_operation_system, master_image_id = self.get_master_image_info(image_master)
+         master_flavor_id) = self.get_master_flavor_info(master_flvaor)
+        master_operation_system, master_image_id = self.get_master_image_info(master_image)
         worker_node = []
         for idx, node in enumerate(cluster.node_config):
             if node.role == "master" and node.type == "vm":
@@ -575,7 +575,7 @@ class ClusterService:
                 auth_url = auth_url,
                 tenant_id=cluster.project_id,
                 forward_float_ip_id = cluster.forward_float_ip_id,
-                image_master = image_master
+                image_master = master_image
                 )
             if cluster.node_config[0].auth_type == "password":
                 tfvars.password = cluster.node_config[0].password
@@ -722,6 +722,12 @@ class ClusterService:
         gpu_total = 0
         gpu_mem_total = 0
         for idx, node in enumerate(cluster.node_config):
+            # 在这里添加master节点的cpu、mem等信息
+            if node.role == "master" and node.type == "vm":
+                cpu, gpu, mem, disk, flavor_id = self.get_master_flavor_info(node.flavor_id)
+                cpu_total += cpu * node.count
+                mem_total += mem * node.count
+                gpu_total += gpu * node.count
             if node.role == "worker" and node.type == "vm":
                 flavor = nova_client.nova_get_flavor(node.flavor_id)
                 if flavor is not None:

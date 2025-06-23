@@ -19,7 +19,8 @@ data "cloudinit_config" "cloudinit" {
       netplan_critical_dhcp_interface = "",
       ssh_user = var.ssh_user,
       password = var.password,
-      pushgateway_url = var.pushgateway_url
+      pushgateway_url = var.pushgateway_url，
+      az = var.az
     })
   }
 }

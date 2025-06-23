@@ -48,17 +48,21 @@ def check_instance_status():
                     server = nova_client.nova_get_server_detail(server_id)
 
                     # 如果状态发生变化，更新集群状态
-                    if (server.get("status") == "ERROR" and instance.status != "error" or
-                            server.get("status") != "ACTIVE" and instance.status == "running"):
-                        LOG.info(f"Updating instance {instance.id} status from {instance.status} to "
-                                 f"{server.get('status')}")
-                        if server.get("status") == "ERROR":
-                            instance.status = "error"
-                            instance.status_msg = server.get("fault").get("details")
-                        else:
-                            instance.status = server.get("status")
-                            instance.status_msg = ""
-                        InstanceSQL.update_instance(instance)
+                    # if (server.get("status") == "ERROR" and instance.status != "error" or
+                    #         server.get("status") != "ACTIVE" and instance.status == "running" or
+                    #         server.get("status") == "ACTIVE" and instance.status != "running"):
+                    LOG.info(f"Updating instance {instance.id} status from {instance.status} to "
+                             f"{server.get('status')}")
+                    if server.get("status") == "ERROR" and instance.status != "error" :
+                        instance.status = "error"
+                        instance.status_msg = server.get("fault").get("details")
+                    elif server.get("status") == "ACTIVE" and instance.status != "running":
+                        instance.status = "running"
+                        instance.status_msg = ""
+                    elif server.get("status") != "ACTIVE" and instance.status == "running":
+                        instance.status = server.get("status")
+                        instance.status_msg = ""
+                    InstanceSQL.update_instance(instance)
             except Exception as e:
                 LOG.error(f"Error checking status for instance {instance.id}: {str(e)}")
                 if "could not be found." in str(e):
@@ -90,16 +94,20 @@ def check_node_status():
                     server = nova_client.nova_get_server_detail(server_id)
 
                     # 如果状态发生变化，更新集群状态
-                    if (server.get("status") == "ERROR" and node.status != "error" or
-                            server.get("status") != "ACTIVE" and node.status == "running"):
-                        LOG.info(f"Updating node {node.id} status from {node.status} to {server.get('status')}")
-                        if server.get("status") == "ERROR":
-                            node.status = "error"
-                            node.status_msg = server.get("fault").get("details")
-                        else:
-                            node.status = server.get("status")
-                            node.status_msg = ""
-                        NodeSQL.update_node(node)
+                    # if (server.get("status") == "ERROR" and node.status != "error" or
+                    #         server.get("status") != "ACTIVE" and node.status == "running" or
+                    #         server.get("status") == "ACTIVE" and node.status != "running"):
+                    LOG.info(f"Updating node {node.id} status from {node.status} to {server.get('status')}")
+                    if server.get("status") == "ERROR" and node.status != "error" :
+                        node.status = "error"
+                        node.status_msg = server.get("fault").get("details")
+                    elif server.get("status") == "ACTIVE" and node.status != "running":
+                        node.status = "running"
+                        node.status_msg = ""
+                    elif server.get("status") != "ACTIVE" and node.status == "running":
+                        node.status = server.get("status")
+                        node.status_msg = ""
+                    NodeSQL.update_node(node)
             except Exception as e:
                 LOG.error(f"Error checking status for node {node.id}: {str(e)}")
                 if "could not be found." in str(e):

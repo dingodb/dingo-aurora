@@ -159,5 +159,33 @@ write_files:
 
       echo -e "\n安装完成！node_exporter 已成功安装并运行。"
       echo "访问地址: http://$(hostname -I | awk '{print $1}'):9100/metrics"
+  - path: /opt/configure_ssh.sh
+    permissions: '0755'
+    owner: root:root
+    content: |
+      #!/bin/bash
+      # 配置SSH参数
+      
+      # 备份原配置文件
+      cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup
+      
+      # 修改MaxStartups
+      if grep -q "^MaxStartups" /etc/ssh/sshd_config; then
+          sed -i 's/^MaxStartups.*/MaxStartups 100:30:200/' /etc/ssh/sshd_config
+      else
+          echo "MaxStartups 100:30:200" >> /etc/ssh/sshd_config
+      fi
+      
+      # 修改MaxSessions
+      if grep -q "^MaxSessions" /etc/ssh/sshd_config; then
+          sed -i 's/^MaxSessions.*/MaxSessions 100/' /etc/ssh/sshd_config
+      else
+          echo "MaxSessions 100" >> /etc/ssh/sshd_config
+      fi
+      
+      # 重启SSH服务
+      systemctl restart sshd
+      echo "SSH配置已更新并重启服务"
 runcmd:
+  - /bin/bash /opt/configure_ssh.sh > /opt/ssh_config.log
   - /bin/bash /opt/install_node_exporter.sh > /opt/install.log
