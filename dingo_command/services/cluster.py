@@ -1043,7 +1043,41 @@ class TaskService:
                     'title': task.value
                 }
                 tasks_with_title.append(task_dict)
-        return tasks_with_title 
+        return tasks_with_title
+
+    def handle_task(self, tasks, task_service, tasks_with_title):
+        inprogress = False
+        for task in task_service:
+            for t in tasks:
+                inprogress = False
+                if t.msg == task.name:
+                    task_dict = {
+                        'task_id': getattr(t, 'task_id', None),
+                        'msg': getattr(t, 'msg', None),
+                        'cluster_id': getattr(t, 'cluster_id', None),
+                        'state': getattr(t, 'state', None),
+                        'detail': getattr(t, 'detail', None),
+                        'start_time': getattr(t, 'start_time', None),
+                        'end_time': getattr(t, 'end_time', None),
+                        # 根据task名称匹配TaskMessage枚举值添加中文标题
+                        'title': task_service[t.msg].value if hasattr(task_service, t.msg) else t.msg
+                    }
+                    tasks_with_title.append(task_dict)
+                    inprogress = True
+                    break
+            if inprogress:
+                continue
+            task_dict = {
+                'msg': task.name,
+                'state': "waiting",
+                'detail': getattr(task, 'detail', None),
+                'start_time': None,
+                'end_time': None,
+                # 根据task名称匹配TaskMessage枚举值添加中文标题
+                'title': task.value
+            }
+            tasks_with_title.append(task_dict)
+        return tasks_with_title
         
     def get_tasks(self, cluster_id):
         if not cluster_id:
@@ -1054,44 +1088,19 @@ class TaskService:
             query_params = {}
             query_params["cluster_id"] = cluster_id
             res = TaskSQL.list(query_params, None, None)
+            cluster = ClusterService().get_cluster(cluster_id)
             # 空
             if not res :
                 return None
             # 返回第一条数据
             tasks_with_title = []
             tasks = res[1]
-            inprogress = False
-            for task in TaskService.TaskMessage:
-                for t in tasks:
-                    inprogress = False
-                    if t.msg == task.name:
-                        task_dict = {
-                            'task_id': getattr(t, 'task_id', None),
-                            'msg': getattr(t, 'msg', None),
-                            'cluster_id': getattr(t, 'cluster_id', None),
-                            'state': getattr(t, 'state', None),
-                            'detail': getattr(t, 'detail', None),
-                            'start_time': getattr(t, 'start_time', None),
-                            'end_time': getattr(t, 'end_time', None),
-                            # 根据task名称匹配TaskMessage枚举值添加中文标题
-                            'title': TaskService.TaskMessage[t.msg].value if hasattr(TaskService.TaskMessage, t.msg) else t.msg
-                        }
-                        tasks_with_title.append(task_dict)
-                        inprogress = True
-                        break
-                if inprogress:
-                    continue
-                task_dict = {
-                    'msg': task.name,
-                    'state': "waiting",
-                    'detail': getattr(task, 'detail', None),
-                    'start_time': None,
-                    'end_time': None,
-                    # 根据task名称匹配TaskMessage枚举值添加中文标题
-                    'title': task.value
-                }
-                tasks_with_title.append(task_dict)
-
+            if cluster.type == "baremetal":
+                tasks_with_title = self.handle_task(tasks, TaskService.TaskBaremetalMessage, tasks_with_title)
+            elif cluster.type == "kubernetes":
+                tasks_with_title = self.handle_task(tasks, TaskService.TaskMessage, tasks_with_title)
+            else:
+                pass
             return tasks_with_title
         except Exception as e:
             import traceback
