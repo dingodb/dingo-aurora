@@ -162,7 +162,7 @@ class CloudKittyService:
                     else:
                         temp_total_rating_data.append({'总计':ratingSummaryDetail.total})
                 elif ratingSummaryDetail.service == "instance":
-                    temp_instance_value = f"{ratingSummaryDetail.total or ''}(CPU: {ratingSummaryDetail.cpuTotal or ''}, GPU: {ratingSummaryDetail.gpuTotal or ''})"
+                    temp_instance_value = f"{ratingSummaryDetail.total or '0'}(CPU:{ratingSummaryDetail.cpuTotal or '0'}, GPU:{ratingSummaryDetail.gpuTotal or '0'})"
                     temp_instance_flavor_data.append({'instance':temp_instance_value})
                     # if ratingSummaryDetail.flavor is not None:
                     #     for flavor in ratingSummaryDetail.flavor:

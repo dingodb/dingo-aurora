@@ -1,4 +1,6 @@
 # 资源的api接口
+from typing import List
+
 from fastapi import APIRouter, HTTPException, Query
 
 from dingo_command.services.custom_exception import Fail
@@ -68,3 +70,13 @@ async def fetch_resource_statistic_overview_data():
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         raise HTTPException(status_code=400, detail="fetch resource statistic overview error")
+
+@router.post("/resources/gpu_count_info", summary="查询裸金属的GPU卡数(根据裸机名称查询)", description="查询裸金属的GPU卡数(根据裸机名称查询)")
+async def query_instances_gpu_count(instance_names: List[str]):
+    try:
+        # 查询资源统计概览相关数据
+        return resources_service.query_instances_gpu_count_info(instance_names)
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="query resource gpu count error")

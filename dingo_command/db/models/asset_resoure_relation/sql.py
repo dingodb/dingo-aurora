@@ -294,3 +294,16 @@ class AssetResourceRelationSQL:
         with session.begin():
             return session.query(ResourceMetrics).delete()
 
+    @classmethod
+    def query_instances_gpu_count_info(cls, instance_names):
+        session = get_session()
+        with session.begin():
+            query = session.query(AssetResourceRelationInfo.resource_name.label("resource_name"),
+                                  ResourceMetrics.data.label("resource_gpu_count"),
+                                  )
+            # 外连接 根据实例资源名称 对应 裸金属节点id 关联
+            query = query.outerjoin(ResourceMetrics, ResourceMetrics.resource_id == AssetResourceRelationInfo.resource_id)
+            # 资源名称在传入参数内，且metric name为gpu_count
+            query = query.filter(AssetResourceRelationInfo.resource_name.in_(instance_names)).filter(ResourceMetrics.name == "gpu_count")
+            return query.all()
+

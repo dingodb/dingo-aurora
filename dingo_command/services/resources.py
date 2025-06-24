@@ -196,3 +196,15 @@ class ResourcesService:
 
         # 返回
         return temp
+
+    def query_instances_gpu_count_info(self, instance_names):
+        if instance_names is None:
+            return None
+
+        result = {instance_name: "-" for instance_name in instance_names}
+        instances_gpu_count_info = AssetResourceRelationSQL.query_instances_gpu_count_info(instance_names)
+        if instances_gpu_count_info is not None:
+            for gpu_count_info in instances_gpu_count_info:
+                if gpu_count_info.resource_gpu_count is not None:
+                    result[gpu_count_info.resource_name] = gpu_count_info.resource_gpu_count
+        return result
