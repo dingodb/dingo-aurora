@@ -1,7 +1,7 @@
 from fastapi import Query, Header, Depends
 from fastapi import APIRouter, HTTPException
 from dingo_command.api.model.cluster import ScaleNodeObject, NodeRemoveObject
-from dingo_command.services.cluster import ClusterService
+from dingo_command.services.cluster import ClusterService, TaskService
 from dingo_command.services.node import NodeService
 from dingo_command.services.custom_exception import Fail
 from dingo_command.common.nova_client import NovaClient
@@ -61,6 +61,38 @@ async def get_node(node_id: str):
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"get node error {str(e)}")
 
+
+@router.get("/node/scale/progress", summary="扩容进度", description="扩容进度")
+async def get_cluster_progress(cluster_id:str):
+    try:
+        # 集群信息存入数据库
+        task_service = TaskService()
+        result = task_service.get_scale_tasks(cluster_id)
+        # 操作日志
+        #SystemService.create_system_log(OperateLogApiModel(operate_type="create", resource_type="flow", resource_id=result, resource_name=cluster_object.name, operate_flag=True))
+        return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"get scale progress error {str(e)}")
+
+@router.get("/node/remove/progress", summary="扩容进度", description="扩容进度")
+async def get_cluster_progress(cluster_id:str):
+    try:
+        # 集群信息存入数据库
+        task_service = TaskService()
+        result = task_service.get_remove_tasks(cluster_id)
+        # 操作日志
+        #SystemService.create_system_log(OperateLogApiModel(operate_type="create", resource_type="flow", resource_id=result, resource_name=cluster_object.name, operate_flag=True))
+        return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"get remove progress error {str(e)}")
 
 @router.post("/node", summary="扩容节点", description="扩容节点")
 async def create_node(cluster: ScaleNodeObject, token: str = Depends(get_token)):

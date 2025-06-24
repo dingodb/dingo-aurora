@@ -11,19 +11,6 @@ data "openstack_images_image_v2" "image_master" {
   name = var.image_master
 }
 
-data "cloudinit_config" "cloudinit" {
-  part {
-    content_type =  "text/cloud-config"
-    content = templatefile("${path.module}/templates/cloudinit.yaml.tmpl", {
-      extra_partitions = [],
-      netplan_critical_dhcp_interface = "",
-      ssh_user = var.ssh_user,
-      password = var.password,
-      pushgateway_url = var.pushgateway_url，
-      az = var.az
-    })
-  }
-}
 
 data "cloudinit_config" "master-cloudinit" {
   part {
@@ -435,6 +422,22 @@ resource "openstack_networking_port_v2" "nodes_port" {
 #   }
 # }
 
+data "cloudinit_config" "nodes_cloudinit" {
+  for_each = var.number_of_nodes == 0 && var.number_of_nodes_no_floating_ip == 0 ? var.nodes : {}
+  
+  part {
+    content_type = "text/cloud-config"
+    content = templatefile("${path.module}/templates/cloudinit.yaml.tmpl", {
+      extra_partitions = [],
+      netplan_critical_dhcp_interface = "",
+      ssh_user = var.ssh_user,
+      password = var.password,
+      pushgateway_url = var.pushgateway_url,
+      az = each.value.az
+    })
+  }
+}
+
 resource "openstack_compute_instance_v2" "nodes" {
   for_each          = var.number_of_nodes == 0 && var.number_of_nodes_no_floating_ip == 0 ? var.nodes : {}
   name              = "${var.cluster_name}-${each.key}"
@@ -443,10 +446,7 @@ resource "openstack_compute_instance_v2" "nodes" {
   image_id          = local.nodes_settings[each.key].use_local_disk == true ? null: local.nodes_settings[each.key].image_id
   flavor_id         = each.value.flavor
   key_pair          = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : ""
-  user_data         = each.value.cloudinit != null ? templatefile("${path.module}/templates/cloudinit.yaml.tmpl", {
-    extra_partitions = each.value.cloudinit.extra_partitions,
-    netplan_critical_dhcp_interface = each.value.cloudinit.netplan_critical_dhcp_interface,
-  }) : data.cloudinit_config.cloudinit.rendered
+  user_data         = data.cloudinit_config.nodes_cloudinit[each.key].rendered
   dynamic "block_device" {
     for_each = local.nodes_settings[each.key].use_local_disk == true ? [local.nodes_settings[each.key].image_id] : []
     content {

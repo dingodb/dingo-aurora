@@ -57,14 +57,22 @@ TASK_TIMEOUT = CONF.DEFAULT.task_timeout
 SOFT_TASK_TIMEOUT = CONF.DEFAULT.soft_task_timeout
 PUSHGATEWAY_URL = CONF.DEFAULT.pushgateway_url
 
-
-
-
 runtime_task_name = "Check container-engine status"
 etcd_task_name = "Check etcd cluster status"
 control_plane_task_name = "Check control plane status"
 work_node_task_name = "Check k8s nodes status"
 
+# scale_swap = "Disable swap"
+# scale_stop_kubelet = "Stop kubelet"
+scale_install_crictl = "Install crictl"
+scale_download_images = "Download | Download files / images"
+scale_get_token = "Set kubeadm_token to generated token"
+scale_install_calico = "Calico install"
+
+remove_from_cluster = "Remove member from cluster"
+remove_cri_pods = "Reset | stop all cri pods"
+remove_iptables = "Clear IPVS virtual server table"
+remove_file_dirs = "Reset | delete some files and directories"
 
 class PortForwards(BaseModel):
     internal_port: Optional[int] = Field(None, description="转发的内部端口")
@@ -215,12 +223,11 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
                     ["ssh-keygen", "-t", "rsa", "-b", "4096", "-C", "", "-f", os.path.join(str(cluster_dir), "id_rsa"),
                      "-N", ""], capture_output=True, text=True)
                 if res.returncode != 0:
-                    if not scale:
-                        # 发生错误时更新任务状态为"失败"
-                        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                        task_info.state = "failed"
-                        task_info.detail = res.stderr
-                        update_task_state(task_info)
+                    # 发生错误时更新任务状态为"失败"
+                    task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                    task_info.state = "failed"
+                    task_info.detail = res.stderr
+                    update_task_state(task_info)
                     print(f"ssh-keygen error: {res.stderr}")
                     return False, res.stderr
                 cluster.private_key_path = os.path.join(cluster_dir, "id_rsa")
@@ -250,12 +257,11 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
         os.environ['CURRENT_CLUSTER_DIR']=cluster_dir
         res = subprocess.run(["terraform", "init"], capture_output=True, text=True)
         if res.returncode != 0:
-            if not scale:
-                # 发生错误时更新任务状态为"失败"
-                task_info.end_time =datetime.fromtimestamp(datetime.now().timestamp())
-                task_info.state = "failed"
-                task_info.detail = res.stderr
-                update_task_state(task_info)
+            # 发生错误时更新任务状态为"失败"
+            task_info.end_time =datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "failed"
+            task_info.detail = res.stderr
+            update_task_state(task_info)
             print(f"Terraform init error: {res.stderr}")
             return False, replace_ansi_with_single_newline(res.stderr)
        
@@ -272,12 +278,11 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
             "-lock=false"
         ], capture_output=True, text=True) 
         if res.returncode != 0:
-            if not scale:
-                # 发生错误时更新任务状态为"失败"
-                task_info.end_time =datetime.fromtimestamp(datetime.now().timestamp())
-                task_info.state = "failed"
-                task_info.detail = "deploy base infrastructure failed, reason: " + res.stderr
-                update_task_state(task_info)
+            # 发生错误时更新任务状态为"失败"
+            task_info.end_time =datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "failed"
+            task_info.detail = "deploy base infrastructure failed, reason: " + res.stderr
+            update_task_state(task_info)
             print(f"Terraform apply error: {res.stderr}")
             set_instance_status(cluster, node_list, node_type=node_type)
             if node_type == NodeInfo and instance_list:
@@ -297,7 +302,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
             # Give execute permissions to the host file
             os.chmod(host_file, 0o755)
             (network_id, network_name, bus_network_id, bus_network_name,
-             subnet_id, bussubnet_id) = get_networks(cluster, task_info, host_file, cluster_dir, scale)
+             subnet_id, bussubnet_id) = get_networks(cluster, task_info, host_file, cluster_dir)
             db_cluster.admin_network_id = network_id
             db_cluster.admin_subnet_id = subnet_id
             db_cluster.bus_network_id = bus_network_id
@@ -312,32 +317,21 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
                 db_cluster.bus_network_cidr = bus_subnet.get("cidr")
             #db_cluster.status = "running"
             ClusterSQL.update_cluster(db_cluster)
-        if res.returncode != 0:
-            if not scale:
-                # 发生错误时更新任务状态为"失败"
-                task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                task_info.state = "failed"
-                task_info.detail = res.stderr
-                update_task_state(task_info)
-            print(f"Terraform error: {res.stderr}")
-            return False, res.stderr
-        else:
-            if not scale:
-                # 更新任务状态为"成功"
-                task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                task_info.state = "success"
-                task_info.detail = "base infrastructure created successfully"
-                update_task_state(task_info)
-            print("Terraform apply succeeded")
-            return True, ""
+
+        # 更新任务状态为"成功"
+        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+        task_info.state = "success"
+        task_info.detail = "base infrastructure created successfully"
+        update_task_state(task_info)
+        print("Terraform apply succeeded")
+        return True, ""
 
     except subprocess.CalledProcessError as e:
-        if not scale:
-            # 发生错误时更新任务状态为"失败"
-            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-            task_info.state = "failed"
-            task_info.detail = str(e)
-            update_task_state(task_info)
+        # 发生错误时更新任务状态为"失败"
+        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+        task_info.state = "failed"
+        task_info.detail = str(e)
+        update_task_state(task_info)
         print(f"Terraform error: {e}")
         return False, str(e)
 
@@ -346,6 +340,8 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
 def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list, scale=False):
     try:
         task_id = str(self.request.id)
+        if scale:
+            update_task_info(task_id, cluster_dict.get("id"), cluster_dict.get("name"))
         cluster_id = cluster_tf["id"]
         print(f"tf: {cluster_tf}, cluster_dict: {cluster_dict}")
         print(f"Task ID: {task_id}, Cluster ID: {cluster_id}")
@@ -353,36 +349,38 @@ def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list, scale=False
         cluster = ClusterObject(**cluster_dict)
 
         instance_list = json.loads(instance_bm_list)
-        instructure_task = None
         if not scale:
             instructure_task = Taskinfo(task_id=task_id, cluster_id=cluster_tf["id"], state="progress",
                                         start_time=datetime.fromtimestamp(datetime.now().timestamp()),
                                         msg=TaskService.TaskMessage.instructure_create.name)
             TaskSQL.insert(instructure_task)
-
+        else:
+            instructure_task = Taskinfo(task_id=task_id, cluster_id=cluster_tf["id"], state="progress",
+                                        start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                        msg=TaskService.TaskScaleBaremetalMessage.scale_instructure.name)
+            TaskSQL.insert(instructure_task)
         terraform_result = create_infrastructure(cluster_tfvars, instructure_task,
                                                  scale=scale, node_list=instance_list, node_type=Instance)
-
         if not terraform_result[0]:
             raise Exception(f"Terraform infrastructure creation failed, reason: {terraform_result[1]}")
-        if not scale:
-            instructure_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-            instructure_task.state = "success"
-            instructure_task.detail = TaskService.TaskDetail.instructure_create.value
-            update_task_state(instructure_task)
-        print("Terraform apply succeeded")
 
         cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tfvars.id)
         host_file = os.path.join(cluster_dir, "hosts")
-        res = subprocess.run(["python3", host_file, "--root", cluster_dir,"--list"], capture_output=True, text=True)
+        res = subprocess.run(["python3", host_file, "--root", cluster_dir, "--list"], capture_output=True, text=True)
         if res.returncode != 0:
-            if not scale:
-                # 更新数据库的状态为failed
-                instructure_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                instructure_task.state = "failed"
-                instructure_task.detail = str(res.stderr)
-                update_task_state(instructure_task)
+            # 更新数据库的状态为failed
+            instructure_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            instructure_task.state = "failed"
+            instructure_task.detail = str(res.stderr)
+            update_task_state(instructure_task)
             raise Exception(f"Error generating Ansible inventory: {str(res.stderr)}")
+
+        instructure_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+        instructure_task.state = "success"
+        instructure_task.detail = TaskService.TaskDetail.instructure_create.value
+        update_task_state(instructure_task)
+        print("Terraform apply succeeded")
+
         hosts = res.stdout
         # todo 添加节点时，需要将节点信息写入到inventory/inventory.yaml文件中
         # 如果是密码登录与master节点1做免密
@@ -630,9 +628,18 @@ def update_ansible_status(task_info, event, task_name, host, task_status):
             update_task_state(task_info)
 
 
-def scale_kubernetes(cluster: ClusterObject, scale_nodes):
+def scale_kubernetes(cluster: ClusterObject, scale_nodes, task_id):
     """使用Ansible扩容K8s集群"""
     try:
+        runtime_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
+                                start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                msg=TaskService.TaskScaleNodeMessage.scale_runtime_prepair.name)
+        etcd_task = Taskinfo()
+        control_plane_task = Taskinfo()
+        worker_task = Taskinfo()
+        component_task = Taskinfo()
+        task_info = runtime_task
+        TaskSQL.insert(runtime_task)
         ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
         os.chdir(ansible_dir)
         host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id))
@@ -647,6 +654,10 @@ def scale_kubernetes(cluster: ClusterObject, scale_nodes):
         thread, runner = run_playbook(playbook_file, host_file, ansible_dir,
                                       ssh_key=private_key_content, limit=scale_nodes)
         # 处理并打印事件日志
+        runtime_bool = False
+        etcd_bool = False
+        controller_bool = False
+        worker_bool = False
         while runner.status not in ['canceled', 'successful', 'timeout', 'failed']:
             for event in runner.events:
                 # 检查事件是否包含 task 信息
@@ -655,6 +666,58 @@ def scale_kubernetes(cluster: ClusterObject, scale_nodes):
                     host = event['event_data'].get('host')
                     task_status = event['event'].split('_')[-1]  # 例如 runner_on_ok -> ok
                     # print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
+                    # print(f"task_name is: {task_name}")
+                    if task_name == scale_install_crictl and host is not None:
+                        if not runtime_bool:
+                            runtime_bool = True
+                            runtime_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                            runtime_task.state = "success"
+                            runtime_task.detail = TaskService.TaskDetail.scale_runtime_prepair.value
+                            update_task_state(runtime_task)
+                            # 写入下一个任务
+                            etcd_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
+                                                 start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                                 msg=TaskService.TaskScaleNodeMessage.scale_check_file.name)
+                            TaskSQL.insert(etcd_task)
+                            task_info = etcd_task
+                    if task_name == scale_download_images and host is not None:
+                        if not etcd_bool:
+                            etcd_bool = True
+                            etcd_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                            etcd_task.state = "success"
+                            etcd_task.detail = TaskService.TaskDetail.scale_install_file.value
+                            update_task_state(etcd_task)
+                            # 写入下一个任务
+                            control_plane_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
+                                                          start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                                          msg=TaskService.TaskScaleNodeMessage.scale_check_image.name)
+                            TaskSQL.insert(control_plane_task)
+                            task_info = control_plane_task
+                    if task_name == scale_get_token and host is not None:
+                        if not controller_bool:
+                            controller_bool = True
+                            control_plane_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                            control_plane_task.state = "success"
+                            control_plane_task.detail = TaskService.TaskDetail.scale_download_images.value
+                            update_task_state(control_plane_task)
+                            # 写入下一个任务
+                            worker_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
+                                                   start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                                   msg=TaskService.TaskScaleNodeMessage.scale_join_cluster.name)
+                            TaskSQL.insert(worker_task)
+                            task_info = worker_task
+                    if task_name == scale_install_calico and host is not None and task_status != "failed":
+                        if not worker_bool:
+                            worker_bool = True
+                            worker_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                            worker_task.state = "success"
+                            worker_task.detail = TaskService.TaskDetail.scale_join_cluster.value
+                            update_task_state(worker_task)
+                            component_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
+                                                      start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                                      msg=TaskService.TaskScaleNodeMessage.scale_install_calico.name)
+                            TaskSQL.insert(component_task)
+                            task_info = component_task
             time.sleep(0.01)
             continue
         log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "ansible_scale.log")
@@ -662,7 +725,17 @@ def scale_kubernetes(cluster: ClusterObject, scale_nodes):
             log_file.write(format(runner.stdout.read()))
         thread.join()
         if runner.rc != 0:
+            # 更新数据库的状态为failed
+            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "failed"
+            task_info.detail = "ansible deploy kubernetes error"
+            update_task_state(task_info)
             raise Exception("Deploy kubernetes with sacle node failed, please check log")
+        # 这里component_task为None就报错
+        component_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+        component_task.state = "success"
+        component_task.detail = TaskService.TaskDetail.scale_install_calico.value
+        update_task_state(component_task)
         return True, ""
     except Exception as e:
         print(f"Ansible error: {e}")
@@ -1033,22 +1106,39 @@ def remove_bastion_fip_from_state(cluster_dir):
         print(f"操作失败: {e.stderr}")
         return False
 
+def update_task_info(task_id, cluster_id, cluster_name):
+    session = get_session()
+    with session.begin():
+        db_cluster = session.get(Cluster, (cluster_id, cluster_name))
+        if not db_cluster.extra:
+            extra_dict = {}
+        else:
+            extra_dict = json.loads(db_cluster.extra)
+        extra_dict["task_id"] = task_id
+        db_cluster.extra = json.dumps(extra_dict)
+
 @celery_app.task(bind=True,time_limit=TASK_TIMEOUT, soft_time_limit=SOFT_TASK_TIMEOUT)
 def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_list, scale_nodes=None, scale=False):
     try:
         task_id = self.request.id.__str__()
+        if scale:
+            update_task_info(task_id, cluster_dict.get("id"), cluster_dict.get("name"))
         print(f"tf: {cluster_tf_dict},cluster_dict: {cluster_dict}")
         print(f"Task ID: {task_id}")
         cluster_tfvars = ClusterTFVarsObject(**cluster_tf_dict)
         cluster = ClusterObject(**cluster_dict)
         node_list = json.loads(node_list)
         instance_list = json.loads(instance_list)
-        task_info = None
         if not scale:
             # 将task_info存入数据库
             task_info = Taskinfo(task_id=task_id, cluster_id=cluster_tf_dict["id"], state="progress",
                                  start_time=datetime.fromtimestamp(datetime.now().timestamp()),
                                  msg=TaskService.TaskMessage.instructure_create.name)
+            TaskSQL.insert(task_info)
+        else:
+            task_info = Taskinfo(task_id=task_id, cluster_id=cluster_tf_dict["id"], state="progress",
+                                 start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                 msg=TaskService.TaskScaleNodeMessage.scale_instructure.name)
             TaskSQL.insert(task_info)
 
         cinder_client = CinderClient()
@@ -1076,6 +1166,11 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                                  start_time=datetime.fromtimestamp(datetime.now().timestamp()),
                                  msg=TaskService.TaskMessage.pre_install.name)
             TaskSQL.insert(task_info)
+        else:
+            task_info = Taskinfo(task_id=task_id, cluster_id=cluster_tf_dict["id"], state="progress",
+                                 start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                 msg=TaskService.TaskScaleNodeMessage.scale_pre_install.name)
+            TaskSQL.insert(task_info)
         # Give execute permissions to the host file
         host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tf_dict["id"], "hosts")
         os.chmod(host_file, 0o755)  # rwxr-xr-x permission
@@ -1089,11 +1184,10 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                 cmd = f'ssh-keygen -f "/root/.ssh/known_hosts" -R "{tmp_ip}"'
                 result = subprocess.run(cmd, shell=True, capture_output=True)
                 if result.returncode != 0:
-                    if not scale:
-                        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                        task_info.state = "failed"
-                        task_info.detail = "Ansible kubernetes deployment failed, configure ssh-keygen error"
-                        update_task_state(task_info)
+                    task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                    task_info.state = "failed"
+                    task_info.detail = "Ansible kubernetes deployment failed, configure ssh-keygen error"
+                    update_task_state(task_info)
                     raise Exception("Ansible kubernetes deployment failed, configure ssh-keygen error")
         if cluster_tfvars.password != "":
             master_node_name = f"{cluster_tfvars.cluster_name}-k8s-master-1"
@@ -1112,11 +1206,10 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                         print(f"sshpass failed, retry {retry_count}/{max_retries} after 5s...")
                         time.sleep(5)
             if result.returncode != 0:
-                if not scale:
-                    task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                    task_info.state = "failed"
-                    task_info.detail = "Ansible kubernetes deployment failed, configure sshpass error"
-                    update_task_state(task_info)
+                task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                task_info.state = "failed"
+                task_info.detail = "Ansible kubernetes deployment failed, configure sshpass error"
+                update_task_state(task_info)
                 print(f"sshpass failed after {max_retries} retries: {result.stderr}")
                 raise Exception("Ansible kubernetes deployment failed, configure sshpass error")
 
@@ -1185,21 +1278,19 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         # 如果超时后仍然无法连接所有节点，则抛出错误
         if not connection_success:
             error_msg = f"{int(time.time() - start_time)}s retry node can not connect: {', '.join(nodes_result['unreachable_nodes'])}"
-            if not scale:
-                task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                task_info.state = "failed"
-                task_info.detail = error_msg
-                update_task_state(task_info)
+            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "failed"
+            task_info.detail = error_msg
+            update_task_state(task_info)
             raise Exception(error_msg)
 
         res = subprocess.run(["python3", host_file, "--root",cluster_dir,"--list"], capture_output=True, text=True)
         if res.returncode != 0:
-            if not scale:
-                # 更新数据库的状态为failed
-                task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                task_info.state = "failed"
-                task_info.detail = str(res.stderr)
-                update_task_state(task_info)
+            # 更新数据库的状态为failed
+            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "failed"
+            task_info.detail = str(res.stderr)
+            update_task_state(task_info)
             raise Exception(f"Error generating Ansible inventory: {str(res.stderr)}")
         hosts = res.stdout
         hosts_data = json.loads(hosts)
@@ -1208,15 +1299,15 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         master_ip = hosts_data["_meta"]["hostvars"][master_node_name]["ip"]
         float_ip = hosts_data["_meta"]["hostvars"][master_node_name]["ansible_host"]
         ssh_port = hosts_data["_meta"]["hostvars"][master_node_name].get("ansible_port", 22)
-        if not scale:
-            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-            task_info.state = "success"
-            task_info.detail = TaskService.TaskDetail.pre_install.value
-            update_task_state(task_info)
+        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+        task_info.state = "success"
+        task_info.detail = TaskService.TaskDetail.pre_install.value
+        update_task_state(task_info)
+
         # 2. 使用Ansible部署K8s集群
         cluster.id = cluster_tf_dict["id"]
         if scale:
-            ansible_result = scale_kubernetes(cluster, scale_nodes)
+            ansible_result = scale_kubernetes(cluster, scale_nodes, task_id)
         else:
             ansible_result = deploy_kubernetes(cluster, lb_ip, task_id)
         if not ansible_result[0]:
@@ -1274,12 +1365,11 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
 def get_ips(cluster_tfvars, task_info, host_file, cluster_dir, scale):
     res = subprocess.run(["python3", host_file, "--root", cluster_dir, "--list"], capture_output=True, text=True)
     if res.returncode != 0:
-        if scale:
-            # 更新数据库的状态为failed
-            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-            task_info.state = "failed"
-            task_info.detail = str(res.stderr)
-            update_task_state(task_info)
+        # 更新数据库的状态为failed
+        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+        task_info.state = "failed"
+        task_info.detail = str(res.stderr)
+        update_task_state(task_info)
         raise Exception("Error generating Ansible inventory")
     hosts = res.stdout
     hosts_data = json.loads(hosts)
@@ -1290,15 +1380,14 @@ def get_ips(cluster_tfvars, task_info, host_file, cluster_dir, scale):
     return master_ip, lb_ip, hosts_data
 
 
-def get_networks(cluster_tfvars, task_info, host_file, cluster_dir, scale):
+def get_networks(cluster_tfvars, task_info, host_file, cluster_dir):
     res = subprocess.run(["python3", host_file,  "--root", cluster_dir,"--list"], capture_output=True, text=True)
     if res.returncode != 0:
-        if scale:
-            # 更新数据库的状态为failed
-            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-            task_info.state = "failed"
-            task_info.detail = str(res.stderr)
-            update_task_state(task_info)
+        # 更新数据库的状态为failed
+        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+        task_info.state = "failed"
+        task_info.detail = str(res.stderr)
+        update_task_state(task_info)
         raise Exception("Error generating Ansible inventory")
     hosts = res.stdout
     hosts_data = json.loads(hosts)
@@ -1370,6 +1459,11 @@ def update_cluster_status(cluster_id):
 @celery_app.task(bind=True)
 def delete_cluster(self, cluster_id, token):
     try:
+        task_id = str(self.request.id)
+        task_info = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
+                             start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                             msg=TaskService.TaskDeleteMessage.delete_instructure.name)
+        TaskSQL.insert(task_info)
         cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_id)
         terraform_dir = os.path.join(cluster_dir, "terraform")
         # 进入到terraform目录、
@@ -1400,6 +1494,10 @@ def delete_cluster(self, cluster_id, token):
                 with session.begin():
                     db_node = session.get(NodeInfo, n.id)
                     session.delete(db_node)
+            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "success"
+            task_info.detail = "delete cluster successfully"
+            update_task_state(task_info)
             return True
 
         terraform_dir = os.path.join(cluster_dir, "terraform")
@@ -1419,6 +1517,10 @@ def delete_cluster(self, cluster_id, token):
         if res.returncode != 0:
             # 发生错误时更新任务状态为"失败"
             print(f"Terraform error: {res.stderr}")
+            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "failed"
+            task_info.detail = f"delete cluster, reason: {replace_ansi_with_single_newline(res.stderr)}"
+            update_task_state(task_info)
             raise Exception("delete cluster Error terraform init exception: {}".format(res.stderr))
 
         env = os.environ.copy()
@@ -1462,16 +1564,27 @@ def delete_cluster(self, cluster_id, token):
             # 发生错误时更新任务状态为"失败"
             if resource_inuse:
                 update_cluster_status(cluster_id)
+                task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                task_info.state = "success"
+                task_info.detail = "delete cluster successfully"
+                update_task_state(task_info)
                 return True
             else:
                 print(f"Terraform error: {process.stderr}")
+                task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                task_info.state = "failed"
+                task_info.detail = f"delete cluster, reason: {replace_ansi_with_single_newline(process.stderr)}"
+                update_task_state(task_info)
                 # 在这里判断具体的日志输出信息，如果出现删除安全组超时就判断为删除成功
                 raise Exception("delete cluster Error terraform destroy exception: {}".format(process.stderr))
         else:
+            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "success"
+            task_info.detail = "delete cluster successfully"
+            update_task_state(task_info)
             update_cluster_status(cluster_id)
             return True
     except Exception as e:
-
         query_params = {}
         query_params["id"] = cluster_id
         count, db_clusters = ClusterSQL.list_cluster(query_params)
@@ -1485,6 +1598,17 @@ def delete_cluster(self, cluster_id, token):
 @celery_app.task(bind=True)
 def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extravars):
     try:
+        task_id = str(self.request.id)
+        update_task_info(task_id, cluster_id, cluster_name)
+        runtime_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
+                                start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                msg=TaskService.TaskRemoveNodeMessage.remove_pre_install.name)
+        TaskSQL.insert(runtime_task)
+        task_info = runtime_task
+        etcd_task = Taskinfo()
+        control_plane_task = Taskinfo()
+        worker_task = Taskinfo()
+        component_task = Taskinfo()
         node_list = json.loads(node_list)
         instance_list = json.loads(instance_list)
         extravars["skip_confirmation"] = "true"
@@ -1504,6 +1628,10 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
         thread, runner = run_playbook(playbook_file, host_file, ansible_dir,
                                       ssh_key=private_key_content, extravars=extravars)
         # 处理并打印事件日志
+        runtime_bool = False
+        etcd_bool = False
+        controller_bool = False
+        worker_bool = False
         while runner.status not in ['canceled', 'successful', 'timeout', 'failed']:
             for event in runner.events:
                 # 检查事件是否包含 task 信息
@@ -1512,6 +1640,58 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
                     host = event['event_data'].get('host')
                     task_status = event['event'].split('_')[-1]  # 例如 runner_on_ok -> ok
                     #print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
+                    if task_name == remove_from_cluster and host is not None:
+                        if not runtime_bool:
+                            runtime_bool = True
+                            runtime_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                            runtime_task.state = "success"
+                            runtime_task.detail = TaskService.TaskDetail.remove_pre_install.value
+                            update_task_state(runtime_task)
+                            # 写入下一个任务
+                            etcd_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
+                                                 start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                                 msg=TaskService.TaskRemoveNodeMessage.remove_from_cluster.name)
+                            TaskSQL.insert(etcd_task)
+                            task_info = etcd_task
+                    if task_name == remove_cri_pods and host is not None:
+                        if not etcd_bool:
+                            etcd_bool = True
+                            etcd_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                            etcd_task.state = "success"
+                            etcd_task.detail = TaskService.TaskDetail.remove_from_cluster.value
+                            update_task_state(etcd_task)
+                            # 写入下一个任务
+                            control_plane_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
+                                                          start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                                          msg=TaskService.TaskRemoveNodeMessage.remove_cri_pods.name)
+                            TaskSQL.insert(control_plane_task)
+                            task_info = control_plane_task
+                    if task_name == remove_iptables and host is not None:
+                        if not controller_bool:
+                            controller_bool = True
+                            control_plane_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                            control_plane_task.state = "success"
+                            control_plane_task.detail = TaskService.TaskDetail.remove_cri_pods.value
+                            update_task_state(control_plane_task)
+                            # 写入下一个任务
+                            worker_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
+                                                   start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                                   msg=TaskService.TaskRemoveNodeMessage.remove_iptables.name)
+                            TaskSQL.insert(worker_task)
+                            task_info = worker_task
+                    if task_name == remove_file_dirs and host is not None and task_status != "failed":
+                        if not worker_bool:
+                            worker_bool = True
+                            worker_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                            worker_task.state = "success"
+                            worker_task.detail = TaskService.TaskDetail.remove_iptables.value
+                            update_task_state(worker_task)
+                            component_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
+                                                      start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                                      msg=TaskService.TaskRemoveNodeMessage.remove_file_dirs.name)
+                            TaskSQL.insert(component_task)
+                            task_info = component_task
+
             time.sleep(0.01)
             continue
         log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), "ansible_remove.log")
@@ -1520,6 +1700,10 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
         thread.join()
         if runner.rc != 0:
             # print("{}".format(runner.stdout.read()))
+            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "failed"
+            task_info.detail = "Ansible remove node failed, please check log"
+            update_task_state(task_info)
             raise Exception(f"Ansible remove node failed, please check log")
 
         # # 2、执行完删除k8s这些节点之后，再执行terraform销毁这些节点（这里是单独修改output.json文件还是需要通过之前生成的output.json文件生成）
@@ -1567,6 +1751,10 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
 
         # 3、然后需要更新node节点的数据库的信息和集群的数据库信息
         # 更新集群cluster的状态为running，删除缩容节点的数据库信息
+        component_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+        component_task.state = "success"
+        component_task.detail = TaskService.TaskDetail.remove_file_dirs.value
+        update_task_state(task_info)
         session = get_session()
         with session.begin():
             for node in node_list:
@@ -1604,6 +1792,12 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
 @celery_app.task(bind=True)
 def delete_baremetal(self, cluster_id, cluster_name, instance_list, token):
     try:
+        task_id = str(self.request.id)
+        update_task_info(task_id, cluster_id, cluster_name)
+        task_info = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
+                             start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                             msg=TaskService.TaskRemoveBaremetalMessage.remove_instructure_create.name)
+        TaskSQL.insert(task_info)
         instance_list = json.loads(instance_list)
         # 执行terraform销毁这些节点（这里需要通过之前生成的output.json文件生成）
         output_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id),
@@ -1636,12 +1830,20 @@ def delete_baremetal(self, cluster_id, cluster_name, instance_list, token):
         if res.returncode != 0:
             # 发生错误时更新集群务状态为"失败"
             print(f"Terraform error: {res.stderr}")
+            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "failed"
+            task_info.detail = f"remove node failed, reason: {replace_ansi_with_single_newline(res.stderr)}"
+            update_task_state(task_info)
             with session.begin():
                 db_cluster = session.get(Cluster, (cluster_id, cluster_name))
                 db_cluster.status = 'error'
                 error_msg = replace_ansi_with_single_newline(res.stderr)
                 db_cluster.status_msg = f"delete baremetal error: {error_msg}"
             return False
+        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+        task_info.state = "success"
+        task_info.detail = "remove node successfully"
+        update_task_state(task_info)
         with session.begin():
             for node in instance_list:
                 # 根据 node.id 删除节点

@@ -61,7 +61,7 @@ disable_root: false
 %{~ endif }
 
 write_files:
-  - path: ${pushgateway_url}
+  - path: /opt/install_node_exporter.sh
     permissions: '0755'
     owner: root:root
     content: |
@@ -130,8 +130,7 @@ write_files:
 
       [Service]
       Type=oneshot
-      %{ if 
-       == "" ~}
+      %{ if az == "" ~}
       ExecStart=/bin/bash -c '/usr/bin/curl -s http://localhost:9100/metrics | /usr/bin/curl --data-binary @- "${pushgateway_url}/metrics/job/baremetal/instance/%H"'
       %{ else ~}
       ExecStart=/bin/bash -c '/usr/bin/curl -s http://localhost:9100/metrics | /usr/bin/curl --data-binary @- "${pushgateway_url}/metrics/job/vm/instance/%H"'

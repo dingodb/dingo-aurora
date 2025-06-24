@@ -87,6 +87,7 @@ class ClusterObject(DingoopsObject):
     node_count: Optional[int] = Field(0, description="节点数量")
     status_msg: Optional[str] = Field(None, description="集群状态信息")
     private_key: Optional[str] = Field(None, description="集群私钥")
+    extra: Optional[str] = Field(None, description="extra信息")
     forward_float_ip_id: Optional[str] = Field(None, description="集群浮动ip的id")
     forward_float_ip: Optional[str] = Field(None, description="集群浮动ip")
     port_forwards: Optional[List[PortForwards]] = Field(None, description="端口转发配置")

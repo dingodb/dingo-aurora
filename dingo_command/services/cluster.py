@@ -993,8 +993,37 @@ class TaskService:
         controler_deploy = "配置kubernetes控制面"
         worker_deploy = "配置kubernetes工作节点"
         component_deploy = "安装组件"
-        
-    
+
+    class TaskBaremetalMessage(Enum):
+        instructure_create = "创建基础设施"
+
+    class TaskScaleBaremetalMessage(Enum):
+        scale_instructure = "扩容基础设施"
+
+    class TaskScaleNodeMessage(Enum):
+        scale_instructure = "扩容基础设施"
+        scale_pre_install = "扩容前准备"
+        scale_runtime_prepair = "运行时准备"
+        scale_check_file = "检查二进制文件"
+        scale_check_image = "检查镜像"
+        scale_join_cluster = "加入集群"
+        scale_install_calico = "安装calico"
+        # scale_calico_check = "检查calico安装是否完成"
+
+    class TaskRemoveBaremetalMessage(Enum):
+        remove_instructure_create = "缩容基础设施"
+
+    class TaskRemoveNodeMessage(Enum):
+        # remove_instructure_create = "缩容缩容基础设施"
+        remove_pre_install = "缩容前准备"
+        remove_from_cluster = "从集群中移除"
+        remove_cri_pods = "清理节点的pod"
+        remove_iptables = "清理iptables或者ipvs"
+        remove_file_dirs = "清理文件和目录"
+
+    class TaskDeleteMessage(Enum):
+        delete_instructure = "删除基础设施"
+
     class TaskDetail(Enum):
         #instructure_check = "instructure check passed"
         instructure_create = "instructure create success"
@@ -1004,7 +1033,20 @@ class TaskService:
         controler_deploy = "control plane deploy success"
         worker_deploy = "worker node deploy success"
         component_deploy = "component deploy success"
-        
+
+        scale_instructure = "instructure create success"
+        scale_pre_install = "install prepare success"
+        scale_runtime_prepair = "runtime prepare success"
+        scale_install_file = "install file success"
+        scale_download_images = "download images success"
+        scale_join_cluster = "join cluster success"
+        scale_install_calico = "install calico cni"
+
+        remove_pre_install = "remove prepare success"
+        remove_from_cluster = "remove member from cluster success"
+        remove_cri_pods = "remove pods from node success"
+        remove_iptables = "clear iptables or ipvs success"
+        remove_file_dirs = "delete some files and directories success"
 
     def get_tasks_param(self, type):
         tasks_with_title = []
@@ -1045,10 +1087,12 @@ class TaskService:
                 tasks_with_title.append(task_dict)
         return tasks_with_title
 
-    def handle_task(self, tasks, task_service, tasks_with_title):
+    def handle_task(self, tasks, task_service, tasks_with_title, task_id=None):
         inprogress = False
         for task in task_service:
             for t in tasks:
+                if task_id and t.task_id != task_id:
+                    continue
                 inprogress = False
                 if t.msg == task.name:
                     task_dict = {
@@ -1090,7 +1134,7 @@ class TaskService:
             res = TaskSQL.list(query_params, None, None)
             cluster = ClusterService().get_cluster(cluster_id)
             # 空
-            if not res :
+            if not res or not cluster:
                 return None
             # 返回第一条数据
             tasks_with_title = []
@@ -1101,6 +1145,98 @@ class TaskService:
                 tasks_with_title = self.handle_task(tasks, TaskService.TaskMessage, tasks_with_title)
             else:
                 pass
+            return tasks_with_title
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+
+    def get_scale_tasks(self, cluster_id):
+        if not cluster_id:
+            return None
+        # 详情
+        try:
+            # 根据id查询
+            query_params = {}
+            query_params["cluster_id"] = cluster_id
+            res = TaskSQL.list(query_params, None, None)
+            cluster = ClusterService().get_cluster(cluster_id)
+            # 空
+            if not res or not cluster:
+                return None
+            # 返回第一条数据
+            task_id = None
+            if cluster.extra:
+                task_dict = json.loads(cluster.extra)
+                if task_dict.get("task_id"):
+                    task_id = task_dict.get("task_id")
+
+            tasks_with_title = []
+            tasks = res[1]
+            if cluster.type == "baremetal":
+                tasks_with_title = self.handle_task(tasks, TaskService.TaskScaleBaremetalMessage,
+                                                    tasks_with_title, task_id)
+            elif cluster.type == "kubernetes":
+                tasks_with_title = self.handle_task(tasks, TaskService.TaskScaleNodeMessage, tasks_with_title, task_id)
+            else:
+                pass
+            return tasks_with_title
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+
+    def get_remove_tasks(self, cluster_id):
+        if not cluster_id:
+            return None
+        # 详情
+        try:
+            # 根据id查询
+            query_params = {}
+            query_params["cluster_id"] = cluster_id
+            res = TaskSQL.list(query_params, None, None)
+            cluster = ClusterService().get_cluster(cluster_id)
+            # 空
+            if not res or not cluster:
+                return None
+            # 返回第一条数据
+            task_id = None
+            if cluster.extra:
+                task_dict = json.loads(cluster.extra)
+                if task_dict.get("task_id"):
+                    task_id = task_dict.get("task_id")
+
+            tasks_with_title = []
+            tasks = res[1]
+            if cluster.type == "baremetal":
+                tasks_with_title = self.handle_task(tasks, TaskService.TaskRemoveBaremetalMessage,
+                                                    tasks_with_title, task_id)
+            elif cluster.type == "kubernetes":
+                tasks_with_title = self.handle_task(tasks, TaskService.TaskRemoveNodeMessage, tasks_with_title, task_id)
+            else:
+                pass
+            return tasks_with_title
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+
+    def get_delete_tasks(self, cluster_id):
+        if not cluster_id:
+            return None
+        # 详情
+        try:
+            # 根据id查询
+            query_params = {}
+            query_params["cluster_id"] = cluster_id
+            res = TaskSQL.list(query_params, None, None)
+            # 空
+            if not res:
+                return None
+            # 返回第一条数据
+            tasks_with_title = []
+            tasks = res[1]
+            tasks_with_title = self.handle_task(tasks, TaskService.TaskDeleteMessage, tasks_with_title)
             return tasks_with_title
         except Exception as e:
             import traceback
