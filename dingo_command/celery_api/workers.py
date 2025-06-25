@@ -667,7 +667,7 @@ def scale_kubernetes(cluster: ClusterObject, scale_nodes, task_id):
                     task_status = event['event'].split('_')[-1]  # 例如 runner_on_ok -> ok
                     # print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
                     # print(f"task_name is: {task_name}")
-                    if task_name == scale_install_crictl and host is not None:
+                    if task_name == scale_download_images and host is not None:
                         if not runtime_bool:
                             runtime_bool = True
                             runtime_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
@@ -680,7 +680,7 @@ def scale_kubernetes(cluster: ClusterObject, scale_nodes, task_id):
                                                  msg=TaskService.TaskScaleNodeMessage.scale_check_file.name)
                             TaskSQL.insert(etcd_task)
                             task_info = etcd_task
-                    if task_name == scale_download_images and host is not None:
+                    if task_name == scale_get_token and host is not None:
                         if not etcd_bool:
                             etcd_bool = True
                             etcd_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
@@ -693,7 +693,7 @@ def scale_kubernetes(cluster: ClusterObject, scale_nodes, task_id):
                                                           msg=TaskService.TaskScaleNodeMessage.scale_check_image.name)
                             TaskSQL.insert(control_plane_task)
                             task_info = control_plane_task
-                    if task_name == scale_get_token and host is not None:
+                    if task_name == scale_install_calico and host is not None and task_status != "failed":
                         if not controller_bool:
                             controller_bool = True
                             control_plane_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
@@ -706,18 +706,18 @@ def scale_kubernetes(cluster: ClusterObject, scale_nodes, task_id):
                                                    msg=TaskService.TaskScaleNodeMessage.scale_join_cluster.name)
                             TaskSQL.insert(worker_task)
                             task_info = worker_task
-                    if task_name == scale_install_calico and host is not None and task_status != "failed":
-                        if not worker_bool:
-                            worker_bool = True
-                            worker_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                            worker_task.state = "success"
-                            worker_task.detail = TaskService.TaskDetail.scale_join_cluster.value
-                            update_task_state(worker_task)
-                            component_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
-                                                      start_time=datetime.fromtimestamp(datetime.now().timestamp()),
-                                                      msg=TaskService.TaskScaleNodeMessage.scale_install_calico.name)
-                            TaskSQL.insert(component_task)
-                            task_info = component_task
+                    # if task_name == scale_install_calico and host is not None and task_status != "failed":
+                    #     if not worker_bool:
+                    #         worker_bool = True
+                    #         worker_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                    #         worker_task.state = "success"
+                    #         worker_task.detail = TaskService.TaskDetail.scale_join_cluster.value
+                    #         update_task_state(worker_task)
+                    #         component_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
+                    #                                   start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                    #                                   msg=TaskService.TaskScaleNodeMessage.scale_install_calico.name)
+                    #         TaskSQL.insert(component_task)
+                    #         task_info = component_task
             time.sleep(0.01)
             continue
         log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "ansible_scale.log")
@@ -732,10 +732,10 @@ def scale_kubernetes(cluster: ClusterObject, scale_nodes, task_id):
             update_task_state(task_info)
             raise Exception("Deploy kubernetes with sacle node failed, please check log")
         # 这里component_task为None就报错
-        component_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-        component_task.state = "success"
-        component_task.detail = TaskService.TaskDetail.scale_install_calico.value
-        update_task_state(component_task)
+        worker_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+        worker_task.state = "success"
+        worker_task.detail = TaskService.TaskDetail.scale_join_cluster.value
+        update_task_state(worker_task)
         return True, ""
     except Exception as e:
         print(f"Ansible error: {e}")
@@ -1796,7 +1796,7 @@ def delete_baremetal(self, cluster_id, cluster_name, instance_list, token):
         update_task_info(task_id, cluster_id, cluster_name)
         task_info = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
                              start_time=datetime.fromtimestamp(datetime.now().timestamp()),
-                             msg=TaskService.TaskRemoveBaremetalMessage.remove_instructure_create.name)
+                             msg=TaskService.TaskRemoveBaremetalMessage.remove_instructure.name)
         TaskSQL.insert(task_info)
         instance_list = json.loads(instance_list)
         # 执行terraform销毁这些节点（这里需要通过之前生成的output.json文件生成）

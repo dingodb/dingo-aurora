@@ -1007,11 +1007,11 @@ class TaskService:
         scale_check_file = "检查二进制文件"
         scale_check_image = "检查镜像"
         scale_join_cluster = "加入集群"
-        scale_install_calico = "安装calico"
+        # scale_install_calico = "安装calico"
         # scale_calico_check = "检查calico安装是否完成"
 
     class TaskRemoveBaremetalMessage(Enum):
-        remove_instructure_create = "缩容基础设施"
+        remove_instructure = "缩容基础设施"
 
     class TaskRemoveNodeMessage(Enum):
         # remove_instructure_create = "缩容缩容基础设施"
