@@ -990,7 +990,7 @@ class TaskService:
         pre_install = "安装前准备"
         runtime_prepair = "运行时准备"
         etcd_deploy = "安装etcd"
-        controler_deploy = "配置kubernetes控制面"
+        controller_deploy = "配置kubernetes控制面"
         worker_deploy = "配置kubernetes工作节点"
         component_deploy = "安装组件"
 
@@ -1030,7 +1030,7 @@ class TaskService:
         pre_install = "install prepare success"
         runtime_prepair = "runtime prepare success"
         etcd_deploy = "etcd deploy success"
-        controler_deploy = "control plane deploy success"
+        controller_deploy = "control plane deploy success"
         worker_deploy = "worker node deploy success"
         component_deploy = "component deploy success"
 

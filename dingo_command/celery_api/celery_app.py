@@ -53,7 +53,7 @@ try:
 
         include=get_task_packages(os.path.join("dingo_command", "tasks")),
     )
-    celery_app.conf.broker_transport_options = { 'master_name': "kolla" }
+    celery_app.conf.broker_transport_options = { 'master_name': "kolla", 'visibility_timeout': 8000 }
     celery_app.conf.result_backend_transport_options = {'master_name': "kolla"}
 
     celery_app.config_from_object(Config)

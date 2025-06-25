@@ -532,7 +532,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
                             # 写入下一个任务
                             control_plane_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
                                                           start_time=datetime.fromtimestamp(datetime.now().timestamp()),
-                                                          msg=TaskService.TaskMessage.controler_deploy.name)
+                                                          msg=TaskService.TaskMessage.controller_deploy.name)
                             TaskSQL.insert(control_plane_task)
                             task_info = control_plane_task
                     if task_name == control_plane_task_name and host is not None:
@@ -540,7 +540,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
                             controller_bool = True
                             control_plane_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
                             control_plane_task.state = "success"
-                            control_plane_task.detail = TaskService.TaskDetail.controler_deploy.value
+                            control_plane_task.detail = TaskService.TaskDetail.controller_deploy.value
                             update_task_state(control_plane_task)
                             # 写入下一个任务
                             worker_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
