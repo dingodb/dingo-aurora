@@ -17,7 +17,11 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
 
 from dingo_command.common.cloudkitty_client import CloudKittyClient
 from dingo_command.utils.constant import RATING_SUMMARY_TEMPLATE_FILE_DIR
-from dingo_command.utils.datetime import switch_time_to_time, convert_timestamp_to_date
+from dingo_command.utils.datetime import utc_to_system_time, convert_timestamp_to_date
+from concurrent.futures import ThreadPoolExecutor
+import pandas as pd
+from openpyxl.utils.dataframe import dataframe_to_rows
+import functools
 
 LOG = log.getLogger(__name__)
 
@@ -49,60 +53,56 @@ class CloudKittyService:
             traceback.print_exc()
             raise e
 
+    @functools.lru_cache(maxsize=32)
+    def cached_utc_to_local(self, time_str):
+        """带缓存的时区转换"""
+        return utc_to_system_time(time_str) if time_str else None
+
     def query_data_and_create_rating_summary_excel(self, result_file_path, query_params):
         try:
-            # 导出的excel数据
-            excel_rating_summary_data = []
-            # 读取数据数据
-            start_time_now1 = datetime.now()
-            storage_dataFrames = CloudKittyClient().get_storage_dataframes(query_params)
-            print(f"========1=========get_storage_dataframes start - end = { (datetime.now() - start_time_now1).total_seconds()}s")
+            # 1. 并行获取数据
+            start_time = datetime.now()
+            storage_dataFrames = self._fetch_data_parallel(query_params)
+            print(f"Data fetch time: {(datetime.now() - start_time).total_seconds():.2f}s")
 
-            start_time_now2 = datetime.now()
-            # 类型是空
-            if storage_dataFrames is not None:
-                # 写入数据
-                for temp in storage_dataFrames:
-                    begin_str = None
-                    if temp is not None and "begin" in temp:
-                        # 转换为datetime对象
-                        dt = datetime.strptime(temp["begin"], "%Y-%m-%dT%H:%M:%S")
-                        # 格式化为不带T的字符串
-                        begin_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-                    end_str = None
-                    if temp is not None and "end" in temp:
-                        # 转换为datetime对象
-                        dt = datetime.strptime(temp["end"], "%Y-%m-%dT%H:%M:%S")
-                        # 格式化为不带T的字符串
-                        end_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-                    project_id = temp["tenant_id"] if temp is not None and "tenant_id" in temp else None
-                    resources_json = json.dumps(temp["resources"]) if temp is not None and "resources" in temp else None
+            # 2. 使用向量化处理数据
+            excel_data = []
+            for temp in filter(None, storage_dataFrames):  # 过滤None
+                excel_data.append({
+                    'Begin': self.cached_utc_to_local(temp.get("begin")),
+                    'End': self.cached_utc_to_local(temp.get("end")),
+                    'Project ID': temp.get("tenant_id"),
+                    'Resources': json.dumps(temp["resources"]) if "resources" in temp else None
+                })
 
-                    # 修改或添加新数据
-                    temp_rating_summary_data = {'Begin': begin_str,
-                                       'End': end_str,
-                                       'Project ID': project_id,
-                                       'Resources': resources_json,}
-                    # 加入excel导出数据列表
-                    excel_rating_summary_data.append(temp_rating_summary_data)
-            print(f"========2=========rating_detail_excel generate date start - end = {(datetime.now() - start_time_now2).total_seconds()}s")
-            start_time_now3 = datetime.now()
-            # 加载模板文件
+            start_time = datetime.now()
+
+            # 3. 批量写入Excel
             book = load_workbook(result_file_path)
-            sheet = book['ratingSummary']  # 默认使用第一个工作表
-            # 确定起始写入行号
-            start_row = 2  # 自动追加到最后一行之后
-            # 写入数据到模板文件
-            for idx, row in pd.DataFrame(excel_rating_summary_data).iterrows():
-                for col_idx, value in enumerate(row, start=1):  # 列从 1 开始
-                    sheet.cell(row=start_row + idx, column=col_idx, value=value).border = thin_border
-            # 保存修改
+            sheet = book['ratingSummary']
+
+            # 使用pandas加速并批量写入
+            data_df = pd.DataFrame(excel_data)
+            self._write_to_excel_bulk(sheet, data_df, start_row=2)
+
             book.save(result_file_path)
-            print(f"========3=========rating_detail_excel save book data start - end = {(datetime.now() - start_time_now3).total_seconds()}s")
+            print(f"Excel save time: {(datetime.now() - start_time).total_seconds():.2f}s")
+
         except Exception as e:
             import traceback
             traceback.print_exc()
             raise e
+
+    def _fetch_data_parallel(self, query_params):
+        """并行获取数据"""
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            return list(executor.map(lambda x: CloudKittyClient().get_storage_dataframes(x), [query_params]))[0]
+
+    def _write_to_excel_bulk(self, sheet, data_df, start_row):
+        """批量写入优化"""
+        for r_idx, row in enumerate(dataframe_to_rows(data_df, index=False, header=False), start_row):
+            for c_idx, value in enumerate(row, 1):
+                sheet.cell(row=r_idx, column=c_idx, value=value).border = thin_border
 
 
     def generate_rating_summary_detail_pdf(self, result_file_pdf_path, temp_data):

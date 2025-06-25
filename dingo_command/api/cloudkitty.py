@@ -13,7 +13,7 @@ from dingo_command.services.cloudkitty import CloudKittyService
 from dingo_command.utils import file_utils
 
 from dingo_command.utils.constant import EXCEL_TEMP_DIR
-from dingo_command.utils.datetime import format_d8q_timestamp, format_d8q_timestamp_without_hyphens, switch_time_to_time, convert_timestamp_to_date
+from dingo_command.utils.datetime import convert_timestamp_to_date, system_time_to_utc
 from fastapi import APIRouter, HTTPException, Query
 
 LOG = log.getLogger(__name__)
@@ -41,9 +41,9 @@ async def download_rating_summary_execl(begin: str = Query(None, description="�
         # 声明查询条件的dict
         query_params = {}
         if begin:
-            query_params['begin'] = unquote(begin)
+            query_params['begin'] = system_time_to_utc(unquote(begin))
         if end:
-            query_params['end'] = unquote(end)
+            query_params['end'] = system_time_to_utc(unquote(end))
         if tenant_id:
             query_params['tenant_id'] = tenant_id
         if resource_type:

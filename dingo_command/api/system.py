@@ -42,3 +42,21 @@ async def create_system_log(system_log:OperateLogApiModel):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail="system log create error")
+
+@router.get("/system/time_range", summary="根据类型查询系统时间范围")
+async def get_system_time_range(time_type: str = Query(None, description="时间类型. current_month:当月；one_hour_ago：最近一小时；one_day_ago：最近一天；one_week_ago：最近7天；month30_ago：最近30天"),):
+    try:
+        return system_service.get_system_time_range(time_type)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail="get system time range error")
+
+@router.get("/system/current_time", summary="获取系统当前时间")
+async def get_system_current_time():
+    try:
+        return system_service.get_system_current_time()
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail="get system current time error")

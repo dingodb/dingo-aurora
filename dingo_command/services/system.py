@@ -7,6 +7,7 @@ from oslo_log import log
 
 from dingo_command.db.models.system.models import OperateLog
 from dingo_command.db.models.system.sql import SystemSQL
+from dingo_command.utils.datetime import get_system_time_range, get_system_current_time
 
 LOG = log.getLogger(__name__)
 
@@ -92,3 +93,23 @@ class SystemService:
         )
         # 返回数据
         return system_log_info_db
+
+    def get_system_time_range(self, time_type):
+        try:
+            begin, end = get_system_time_range(time_type)
+            result = {}
+            result['begin'] = begin
+            result['end'] = end
+            return result
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+
+    def get_system_current_time(self):
+        try:
+            return get_system_current_time()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e

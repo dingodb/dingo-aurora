@@ -140,7 +140,7 @@ class CloudKittyClient:
         headers = {'Content-Type': 'application/json'}
         response = self._session.put(f"{endpoint}/v1/rating/module_config/hashmap/thresholds/{threshold_id}", data=thresholding.json(), headers=headers)
         if response.status_code != 200:
-            print(f"cloudkitty[{endpoint}/v1/rating/module_config/hashmap/thresholds/{mapping_id}] status_code:{response.status_code}, 请求失败: {response.text}")
+            print(f"cloudkitty[{endpoint}/v1/rating/module_config/hashmap/thresholds/{threshold_id}] status_code:{response.status_code}, 请求失败: {response.text}")
             raise Exception(f"{response.text}")
         return response.json()
 
