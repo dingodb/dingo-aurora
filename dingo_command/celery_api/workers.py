@@ -1106,7 +1106,7 @@ def remove_bastion_fip_from_state(cluster_dir):
         print(f"操作失败: {e.stderr}")
         return False
 
-def update_task_info(task_id, cluster_id, cluster_name):
+def update_task_info(task_id, cluster_id, cluster_name, node_count=None):
     session = get_session()
     with session.begin():
         db_cluster = session.get(Cluster, (cluster_id, cluster_name))
@@ -1115,14 +1115,24 @@ def update_task_info(task_id, cluster_id, cluster_name):
         else:
             extra_dict = json.loads(db_cluster.extra)
         extra_dict["task_id"] = task_id
+        if node_count:
+            extra_dict["node_count"] = int(extra_dict.get("node_count", 0)) + int(node_count)
         db_cluster.extra = json.dumps(extra_dict)
+
+def update_cluster_node_count(node_count, db_cluster):
+    if not db_cluster.extra:
+        extra_dict = {}
+    else:
+        extra_dict = json.loads(db_cluster.extra)
+    extra_dict["node_count"] = int(extra_dict.get("node_count", 0)) + int(node_count)
+    db_cluster.extra = json.dumps(extra_dict)
 
 @celery_app.task(bind=True,time_limit=TASK_TIMEOUT, soft_time_limit=SOFT_TASK_TIMEOUT)
 def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_list, scale_nodes=None, scale=False):
     try:
         task_id = self.request.id.__str__()
         if scale:
-            update_task_info(task_id, cluster_dict.get("id"), cluster_dict.get("name"))
+            update_task_info(task_id, cluster_dict.get("id"), cluster_dict.get("name"), len(scale_nodes.split(",")))
         print(f"tf: {cluster_tf_dict},cluster_dict: {cluster_dict}")
         print(f"Task ID: {task_id}")
         cluster_tfvars = ClusterTFVarsObject(**cluster_tf_dict)
@@ -1330,6 +1340,8 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             c.cpu += cpu_total
             c.gpu += gpu_total
             c.mem += mem_total
+        else:
+            update_cluster_node_count(len([node for node in node_list if node.get("role") != "master"]), c)
         c.status_msg = ""
         ClusterSQL.update_cluster(c)
 
