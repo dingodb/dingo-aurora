@@ -56,12 +56,14 @@ def check_instance_status():
                     if server.get("status") == "ERROR" and instance.status != "error" :
                         instance.status = "error"
                         instance.status_msg = server.get("fault").get("details")
-                    elif server.get("status") == "ACTIVE" and instance.status != "running":
+                    elif server.get("status") == "ACTIVE" and instance.status not in  ("deleting", "running"):
                         instance.status = "running"
                         instance.status_msg = ""
                     elif server.get("status") != "ACTIVE" and instance.status == "running":
                         instance.status = server.get("status")
                         instance.status_msg = ""
+                    else:
+                        return
                     InstanceSQL.update_instance(instance)
             except Exception as e:
                 LOG.error(f"Error checking status for instance {instance.id}: {str(e)}")
@@ -101,12 +103,14 @@ def check_node_status():
                     if server.get("status") == "ERROR" and node.status != "error" :
                         node.status = "error"
                         node.status_msg = server.get("fault").get("details")
-                    elif server.get("status") == "ACTIVE" and node.status != "running":
+                    elif server.get("status") == "ACTIVE" and node.status not in  ("deleting", "running"):
                         node.status = "running"
                         node.status_msg = ""
                     elif server.get("status") != "ACTIVE" and node.status == "running":
                         node.status = server.get("status")
                         node.status_msg = ""
+                    else:
+                        return
                     NodeSQL.update_node(node)
             except Exception as e:
                 LOG.error(f"Error checking status for node {node.id}: {str(e)}")

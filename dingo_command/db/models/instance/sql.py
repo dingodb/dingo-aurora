@@ -78,10 +78,14 @@ class InstanceSQL:
 
     @classmethod
     def update_instance_list(cls, instance_list):
-        # Session = sessionmaker(bind=engine, expire_on_commit=False)
-        # session = Session()
-        for instance in instance_list:
-            cls.update_instance(instance)
+        session = get_session()
+        try:
+            with session.begin():
+                # 使用bulk_save_objects替代循环merge
+                session.bulk_save_objects(instance_list, update_changed_only=True)
+        except Exception as e:
+            session.rollback()
+            raise
 
     @classmethod
     def delete_instance_list(cls, instance_list):

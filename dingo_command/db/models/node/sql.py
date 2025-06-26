@@ -78,10 +78,14 @@ class NodeSQL:
 
     @classmethod
     def update_node_list(cls, node_list):
-        # Session = sessionmaker(bind=engine, expire_on_commit=False)
-        # session = Session()
-        for node in node_list:
-            cls.update_node(node)
+        session = get_session()
+        try:
+            with session.begin():
+                # 使用bulk_save_objects替代循环merge
+                session.bulk_save_objects(node_list, update_changed_only=True)
+        except Exception as e:
+            session.rollback()
+            raise
 
     @classmethod
     def delete_node_list(cls, node_list):
