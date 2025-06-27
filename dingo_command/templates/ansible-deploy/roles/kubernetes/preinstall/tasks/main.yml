@@ -99,7 +99,7 @@
 - name: Containerd | Store generated default base_runtime_spec
   set_fact:
     containerd_default_base_runtime_spec: "{{ ctr_oci_spec.stdout | from_json }}"
-
+    
 
 - name: Containerd | Write base_runtime_specs
   copy:
@@ -167,3 +167,19 @@
   when:
     - kube_network_plugin == 'calico'
     - not ignore_assert_errors
+
+- name: Add nameservers block to the beginning of resolv.conf
+  blockinfile:
+    path: /etc/resolv.conf
+    block: |-
+      {% for nameserver in nameservers %}
+      nameserver {{ nameserver }}
+      {% endfor %}
+    state: present
+    insertbefore: BOF
+    create: true
+    backup: true
+    marker: "# Custom nameservers {mark}"
+    mode: "0644"
+  run_once: false
+  delegate_to: "{{ inventory_hostname }}"

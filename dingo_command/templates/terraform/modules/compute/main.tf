@@ -8,9 +8,8 @@ data "openstack_images_image_v2" "vm_image" {
 
 data "openstack_images_image_v2" "image_master" {
   count = var.image_master_uuid == "" ?  1 : 0
-  name = var.image_master
+  image_id = var.image_master
 }
-
 
 data "cloudinit_config" "master-cloudinit" {
   part {

@@ -12,6 +12,9 @@
       {% for item in nameserverentries %}
       nameserver {{ item }}
       {% endfor %}
+      {% for nameserver in nameservers %}
+      nameserver {{ nameserver }}
+      {% endfor %}
       options ndots:{{ ndots }} timeout:{{ dns_timeout | default('2') }} attempts:{{ dns_attempts | default('2') }}
     state: present
     insertbefore: BOF

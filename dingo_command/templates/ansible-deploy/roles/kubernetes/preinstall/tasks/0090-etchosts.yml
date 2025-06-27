@@ -72,6 +72,20 @@
         backup: "{{ leave_etc_backup_files }}"
         unsafe_writes: true
       loop: "{{ etc_hosts_localhosts_dict_target | default({}) | dict2items }}"
+- name: Hosts | Add custom hosts entries from list
+  blockinfile:
+    path: /etc/hosts
+    block: |-
+      {% for host_entry in custom_hosts %}
+      {{ host_entry }}
+      {% endfor %}
+    state: present
+    create: true
+    backup: "{{ leave_etc_backup_files }}"
+    unsafe_writes: true
+    marker: "# Custom hosts entries {mark}"
+    mode: "0644"
+  when: custom_hosts is defined and custom_hosts | length > 0
 
 # gather facts to update ansible_fqdn
 - name: Update facts

@@ -140,6 +140,7 @@
     enabled: true
     daemon-reload: true
     masked: false
+  timeout: 180
   listen: Restart containerd
 
 - name: Containerd | wait for containerd

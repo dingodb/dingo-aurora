@@ -80,6 +80,7 @@ coredns_server: "{{ upstream_dns_servers if dns_early else coredns_server_by_mod
 
 _nameserverentries:
   late:
+    - "{{ nameservers }}"
     - "{{ nodelocaldns_ip if enable_nodelocaldns else coredns_server }}"
   early:
     - "{{ nameservers }}"

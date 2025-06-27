@@ -56,6 +56,8 @@ INSTANCE_SUBNET_NAME = "instance_subnet"
 TASK_TIMEOUT = CONF.DEFAULT.task_timeout
 SOFT_TASK_TIMEOUT = CONF.DEFAULT.soft_task_timeout
 PUSHGATEWAY_URL = CONF.DEFAULT.pushgateway_url
+CUSTOM_HOSTS = CONF.DEFAULT.custom_hosts
+NAMESERVERS = CONF.DEFAULT.nameservers
 
 runtime_task_name = "Check container-engine status"
 etcd_task_name = "Check etcd cluster status"
@@ -472,6 +474,8 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
             "kube_vip_address": lb_ip,
             "kube_proxy_mode": cluster.kube_info.kube_proxy_mode,
             "container_manager": cluster.kube_info.runtime,
+            "custom_hosts": CUSTOM_HOSTS,
+            "nameservers": NAMESERVERS,
         }
         target_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "group_vars", "k8s_cluster")
         os.makedirs(target_dir, exist_ok=True)
@@ -499,6 +503,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
         etcd_bool = False
         controller_bool = False
         worker_bool = False
+        log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "ansible_debug.log")
         while runner.status not in ['canceled', 'successful', 'timeout', 'failed']:
             # 处理事件日志
             for event in runner.events:
@@ -562,7 +567,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
                             task_info = component_task
             #time.sleep(0.01)
             continue
-        log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "ansible_debug.log")
+        #log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "ansible_debug.log")
         with open(log_file, "a") as log_file:
             log_file.write(format(runner.stdout.read()))
         thread.join()

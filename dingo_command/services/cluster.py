@@ -796,6 +796,7 @@ class ClusterService:
                     instance_db.security_group = node.security_group
                     instance_db.flavor_id = node.flavor_id
                     instance_db.operation_system = operation_system
+                    instance_db.server_id = ""
                     instance_db.cpu = cpu
                     instance_db.gpu = gpu
                     instance_db.mem = mem
@@ -843,6 +844,7 @@ class ClusterService:
                     instance_db.gpu = gpu
                     instance_db.mem = mem
                     instance_db.disk = disk
+                    instance_db.server_id = ""
                     instance_db.status = "creating"
                     instance_db.floating_forward_ip = forward_float_ip_id
                     instance_db.ip_forward_rule = cluster_new.dict().get("port_forwards")
@@ -971,7 +973,7 @@ class ClusterService:
     def get_master_image_info(self, master_image_name):
         operation_system = ""
         nova_client = NovaClient()
-        image = nova_client.get_image(master_image_name)
+        image = nova_client.glance_get_image(master_image_name)
         if image:
             if image.get("os_version"):
                 operation_system = image.get("os_version")

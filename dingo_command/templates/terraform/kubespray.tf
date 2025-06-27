@@ -145,6 +145,7 @@ module "compute" {
 }
 
 module "loadbalancer" {
+  count  = var.k8s_master_loadbalancer_enabled ? 1 : 0
   source = "./modules/loadbalancer"
 
   cluster_name                          = var.cluster_name

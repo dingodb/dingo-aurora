@@ -16,7 +16,6 @@ runcmd:
   - chown nobody:nogroup ${partition.mount_path}
   - mount ${partition.partition_path} ${partition.mount_path}
 %{~ endfor ~}
-
 %{~ if netplan_critical_dhcp_interface != "" }
 write_files:
   - path: /etc/netplan/90-critical-dhcp.yaml
@@ -53,7 +52,6 @@ chpasswd:
 %{~ endif }
 ## in some cases direct root ssh access via ssh key is required
 disable_root: false
-
 ## in some cases additional CA certs are required
 #ca-certs:
 #  trusted: |
@@ -131,10 +129,11 @@ write_files:
       [Service]
       Type=oneshot
       %{ if az == "" ~}
-      ExecStart=/bin/bash -c '/usr/bin/curl -s http://localhost:9100/metrics | /usr/bin/curl --data-binary @- "${pushgateway_url}/metrics/job/baremetal/instance/%H"'
+      ExecStart=/bin/bash -c "/usr/bin/curl -u admin:rGgKjrSHsTSGgNPZohWIRggEcrHIoqcnHrKsEnmE -s http://localhost:9100/metrics | /usr/bin/curl --data-binary @- '${pushgateway_url}/metrics/job/baremetal/instance/%H'"
       %{ else ~}
-      ExecStart=/bin/bash -c '/usr/bin/curl -s http://localhost:9100/metrics | /usr/bin/curl --data-binary @- "${pushgateway_url}/metrics/job/vm/instance/%H"'
+      ExecStart=/bin/bash -c "/usr/bin/curl -u admin:rGgKjrSHsTSGgNPZohWIRggEcrHIoqcnHrKsEnmE -s http://localhost:9100/metrics | /usr/bin/curl --data-binary @- '${pushgateway_url}/metrics/job/vm/instance/%H'"
       %{ endif ~}
+      Restart=on-failure
       EOF
 
 

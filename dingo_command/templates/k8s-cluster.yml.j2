@@ -74,7 +74,8 @@ kube_network_plugin: ${kube_network_plugin}
 
 # Setting multi_networking to true will install Multus: https://github.com/k8snetworkplumbingwg/multus-cni
 kube_network_plugin_multus: false
-
+custom_hosts: ${custom_hosts}
+nameservers: ${nameservers}
 # Kubernetes internal network for services, unused block of space.
 kube_service_addresses: ${service_cidr}
 

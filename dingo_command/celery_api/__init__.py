@@ -26,6 +26,8 @@ default_opts = [
     cfg.IntOpt('task_timeout', default=3600, help='cluster-router'),
     cfg.IntOpt('soft_task_timeout', default=3600, help='cluster-router'),
     cfg.StrOpt('pushgateway_url', default="", help='the cluster router id'),
+    cfg.ListOpt('custome_hosts', default=[], help='the cluster router id'),
+    cfg.ListOpt('nameservers', default=[], help='the cluster router id'),
 ]
 
 CONF.register_group(default_group)
@@ -41,7 +43,10 @@ redis_opts = [
 ]
 
 
-# 注册默认配置
+# 注册默认配置\
+
+
+
 CONF.register_group(default_group)
 CONF.register_opts(default_opts, default_group)
 # 注册redis配置

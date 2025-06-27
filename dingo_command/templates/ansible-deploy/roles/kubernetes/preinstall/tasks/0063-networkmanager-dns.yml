@@ -36,3 +36,8 @@
     mode: '0600'
     backup: "{{ leave_etc_backup_files }}"
   notify: Preinstall | update resolvconf for networkmanager
+
+
+
+
+
