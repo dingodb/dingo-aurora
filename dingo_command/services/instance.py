@@ -430,8 +430,8 @@ class InstanceService:
             ClusterSQL.update_cluster(cluster_info_db)
             # 写入节点的状态为正在deleting的状态
             # 写入instance的状态为正在deleting的状态
-            instance_db_list, instance_dict = self.update_instances_todb(node_list)
-            InstanceSQL.update_instance_list(instance_db_list)
+            instance_dict = self.update_instances_todb(node_list)
+            # InstanceSQL.update_instance_list(instance_db_list)
 
             # 调用celery_app项目下的work.py中的delete_cluster方法
             result = celery_app.send_task("dingo_command.celery_api.workers.delete_baremetal",
@@ -591,28 +591,27 @@ class InstanceService:
     def update_instances_todb(self, node_list):
         session = get_session()
         instance_info_list = []
-        instance_db_list = []
-        for node in node_list:
-            db_instance = session.get(InstanceDB, node.id)
-            db_instance.status = "deleting"
-            db_instance.update_time = datetime.now()
-            instance_dict = {
-                "id": db_instance.id,
-                "name": db_instance.name,
-                "cluster_id": db_instance.cluster_id,
-                "cluster_name": db_instance.cluster_name,
-                "server_id": db_instance.server_id,
-                "cpu": db_instance.cpu,
-                "gpu": db_instance.gpu,
-                "mem": db_instance.mem,
-                "disk": db_instance.disk,
-                "ip_address": db_instance.ip_address,
-                "node_type": db_instance.node_type,
-                "region": db_instance.region,
-                "user": db_instance.user,
-                "password": db_instance.password,
-            }
-            instance_db_list.append(db_instance)
-            instance_info_list.append(instance_dict)
+        with session.begin():
+            for node in node_list:
+                db_instance = session.get(InstanceDB, node.id)
+                db_instance.status = "deleting"
+                db_instance.update_time = datetime.now()
+                instance_dict = {
+                    "id": db_instance.id,
+                    "name": db_instance.name,
+                    "cluster_id": db_instance.cluster_id,
+                    "cluster_name": db_instance.cluster_name,
+                    "server_id": db_instance.server_id,
+                    "cpu": db_instance.cpu,
+                    "gpu": db_instance.gpu,
+                    "mem": db_instance.mem,
+                    "disk": db_instance.disk,
+                    "ip_address": db_instance.ip_address,
+                    "node_type": db_instance.node_type,
+                    "region": db_instance.region,
+                    "user": db_instance.user,
+                    "password": db_instance.password,
+                }
+                instance_info_list.append(instance_dict)
         instance_list_json = json.dumps(instance_info_list)
-        return instance_db_list, instance_list_json
+        return instance_list_json

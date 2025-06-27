@@ -138,27 +138,26 @@ class NodeService:
     def update_instances_todb(self, node_list):
         session = get_session()
         instance_info_list = []
-        instance_db_list = []
-        for node in node_list:
-            db_instance = session.get(InstanceDB, node.instance_id)
-            db_instance.status = "deleting"
-            db_instance.update_time = datetime.now()
-            instance_dict = {
-                "id": db_instance.id,
-                "name": db_instance.name,
-                "cluster_id": db_instance.cluster_id,
-                "cluster_name": db_instance.cluster_name,
-                "server_id": db_instance.server_id,
-                "ip_address": db_instance.ip_address,
-                "node_type": db_instance.node_type,
-                "region": db_instance.region,
-                "user": db_instance.user,
-                "password": db_instance.password,
-            }
-            instance_db_list.append(db_instance)
-            instance_info_list.append(instance_dict)
+        with session.begin():
+            for node in node_list:
+                db_instance = session.get(InstanceDB, node.instance_id)
+                db_instance.status = "deleting"
+                db_instance.update_time = datetime.now()
+                instance_dict = {
+                    "id": db_instance.id,
+                    "name": db_instance.name,
+                    "cluster_id": db_instance.cluster_id,
+                    "cluster_name": db_instance.cluster_name,
+                    "server_id": db_instance.server_id,
+                    "ip_address": db_instance.ip_address,
+                    "node_type": db_instance.node_type,
+                    "region": db_instance.region,
+                    "user": db_instance.user,
+                    "password": db_instance.password,
+                }
+                instance_info_list.append(instance_dict)
         instance_list_json = json.dumps(instance_info_list)
-        return instance_db_list, instance_list_json
+        return instance_list_json
 
     def generate_random_port(self):
         """从 20000 到 40000 范围内随机生成一个端口号"""
@@ -507,10 +506,11 @@ class NodeService:
             traceback.print_exc()
             raise e
 
-    def delete_node(self, cluster_id, cluster_name, node_list):
+    def delete_node(self, cluster_id, cluster_name, node_list, node_err_list):
         # 详情
         try:
             extravars = {}
+            node_err_info = {}
             node_name_list = []
             for node in node_list:
                 node_name_list.append(node.name)
@@ -523,12 +523,20 @@ class NodeService:
             node_db_list, node_dict = self.update_nodes_todb(node_list)
             NodeSQL.update_node_list(node_db_list)
             # 写入instance的状态为正在deleting的状态
-            instance_db_list, instance_dict = self.update_instances_todb(node_list)
-            InstanceSQL.update_instance_list(instance_db_list)
-
+            instance_dict = self.update_instances_todb(node_list)
+            # InstanceSQL.update_instance_list(instance_db_list)
+            if node_err_list:
+                node_err_name_list = []
+                for node in node_err_list:
+                    node_err_name_list.append(node.name)
+                node_err_info["node_err"] = ",".join(node_err_name_list)
+                node_err_list_json, instance_err_list_json = self.get_dict_node_instance_info(node_err_list)
+                node_err_info["node_err_dict"] = node_err_list_json
+                node_err_info["instance_err_dict"] = instance_err_list_json
             # 调用celery_app项目下的work.py中的delete_cluster方法
             result = celery_app.send_task("dingo_command.celery_api.workers.delete_node",
-                                          args=[cluster_id, cluster_name, node_dict, instance_dict, extravars])
+                                          args=[cluster_id, cluster_name, node_dict,
+                                                instance_dict, extravars, node_err_info])
             return result.id
         except Exception as e:
             import traceback
@@ -759,4 +767,36 @@ class NodeService:
             else:
                 operation_system = image.get("name")
         return operation_system
+
+    def get_dict_node_instance_info(self, node_err_list):
+        node_info_list = []
+        instance_info_list = []
+        session = get_session()
+        for node in node_err_list:
+            node_dict = {
+                "id": node.id,
+                "name": node.name,
+                "cluster_id": node.cluster_id,
+                "cluster_name": node.cluster_name,
+                "instance_id": node.instance_id,
+                "server_id": node.server_id,
+                "admin_address": node.admin_address,
+                "status": node.status
+            }
+            db_instance = session.get(InstanceDB, node.instance_id)
+            instance_dict = {
+                "id": db_instance.id,
+                "name": db_instance.name,
+                "cluster_id": db_instance.cluster_id,
+                "cluster_name": db_instance.cluster_name,
+                "server_id": db_instance.server_id,
+                "ip_address": db_instance.ip_address,
+                "status": db_instance.status,
+                "node_type": db_instance.node_type,
+            }
+            instance_info_list.append(instance_dict)
+            node_info_list.append(node_dict)
+        node_err_list_json = json.dumps(node_info_list)
+        instance_err_list_json = json.dumps(instance_info_list)
+        return node_err_list_json, instance_err_list_json
 

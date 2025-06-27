@@ -30,6 +30,7 @@ from dingo_command.common.nova_client import NovaClient
 from dingo_command.services.custom_exception import Fail
 from dingo_command.services.system import SystemService
 from dingo_command.services import CONF
+from dingo_command.db.engines.mysql import get_session
 
 
 LOG = log.getLogger(__name__)
@@ -439,8 +440,11 @@ class ClusterService:
             # 空
             # 查询节点信息
             node_query_params = {"cluster_id": cluster_id}
-            count, node_res = InstanceSQL.list_instances(node_query_params, 1, -1, None, None)
             nodeinfos = []
+            if cluster.type == "baremetal":
+                count, node_res = InstanceSQL.list_instances(node_query_params, 1, -1, None, None)
+            else:
+                count, node_res = NodeSQL.list_nodes(node_query_params, 1, -1, None, None)
             if count > 0:
                 for n in node_res:
                     node_info = NodeConfigObject()
@@ -673,12 +677,11 @@ class ClusterService:
             instance_res = InstanceSQL.list_instances(instance_query_params, 1, -1, None, None)
             if instance_res and instance_res[0] > 0:
                 instances = instance_res[1]
-                instance_list_db = []
-                for instance in instances:
-                    instance.status = "deleting"
-                    instance.update_time = datetime.now()
-                    instance_list_db.append(instance)
-                InstanceSQL.update_instance_list(instance_list_db)
+                session = get_session()
+                with session.begin():
+                    for instance in instances:
+                        instance.status = "deleting"
+                        instance.update_time = datetime.now()
             result = celery_app.send_task("dingo_command.celery_api.workers.delete_cluster", args=[cluster_id, token])
             # if result.get():
             #     # 删除成功，更新数据库状态

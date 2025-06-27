@@ -144,16 +144,23 @@ async def delete_node(node_info: NodeRemoveObject):
 
         # 缩容某些节点
         node_list = []
+        node_err_list = []
         for id in node_info.node_list:
             node = node_service.get_node(id)
             if not node.get("data"):
                 continue
             if node.get("data").role == "master":
                 raise HTTPException(status_code=400, detail="can't remove master node, please check")
-            node_list.append(node.get("data"))
-        if not node_list:
+            if node.get("data").status not in ("error", "running"):
+                raise HTTPException(status_code=400, detail="The removed node must be in a running or error state, "
+                                                            "please check")
+            if node.get("data").status == "error":
+                node_err_list.append(node.get("data"))
+            else:
+                node_list.append(node.get("data"))
+        if not node_list and not node_err_list:
             raise HTTPException(status_code=400, detail="there are no nodes, please check")
-        result = node_service.delete_node(node_info.cluster_id, result.name, node_list)
+        result = node_service.delete_node(node_info.cluster_id, result.name, node_list, node_err_list)
         if result is not None:
             return {"data": result}
     except Fail as e:

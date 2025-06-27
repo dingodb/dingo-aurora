@@ -8,7 +8,7 @@ data "openstack_images_image_v2" "vm_image" {
 
 data "openstack_images_image_v2" "image_master" {
   count = var.image_master_uuid == "" ?  1 : 0
-  image_id = var.image_master
+  name = var.image_master
 }
 
 data "cloudinit_config" "master-cloudinit" {
@@ -48,7 +48,8 @@ resource "openstack_compute_keypair_v2" "key_pair" {
 
 # Check if flavor exists
 data "openstack_compute_flavor_v2" "k8s_control" {
-  name = "k8s_control"  # 替换为你的 Flavor 名称
+  #name = "k8s_control"  # 替换为你的 Flavor 名称
+  flavor_id = var.master_flavor_id
 }
 
 resource "openstack_networking_secgroup_v2" "secgroup" {

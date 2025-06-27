@@ -27,6 +27,7 @@ from dingo_command.celery_api import CONF
 from dingo_command.db.engines.mysql import get_engine, get_session
 from dingo_command.db.models.cluster.sql import ClusterSQL, TaskSQL
 from dingo_command.common import CONF as CommonConf
+from dingo_command.services import CONF as ServiceConf
 from dingo_command.common.nova_client import NovaClient
 from dingo_command.common import neutron
 from dingo_command.common.cinder_client import CinderClient
@@ -56,8 +57,10 @@ INSTANCE_SUBNET_NAME = "instance_subnet"
 TASK_TIMEOUT = CONF.DEFAULT.task_timeout
 SOFT_TASK_TIMEOUT = CONF.DEFAULT.soft_task_timeout
 PUSHGATEWAY_URL = CONF.DEFAULT.pushgateway_url
-CUSTOM_HOSTS = CONF.DEFAULT.custom_hosts
+CUSTOM_HOSTS = CONF.DEFAULT.customize_hosts
 NAMESERVERS = CONF.DEFAULT.nameservers
+image_master_id = ServiceConf.DEFAULT.k8s_master_image
+k8s_master_flavor = ServiceConf.DEFAULT.k8s_master_flavor
 
 runtime_task_name = "Check container-engine status"
 etcd_task_name = "Check etcd cluster status"
@@ -134,6 +137,8 @@ class ClusterTFVarsObject(BaseModel):
     bastion_fips: Optional[list[str]] = Field(None, description="堡垒机浮动ip的地址")
     etcd_volume_type: Optional[str] = Field(None, description="堡垒机浮动ip的地址")
     pushgateway_url: Optional[str] = Field("", description="Prometheus Pushgateway的URL")
+    image_master_uuid: Optional[str] = Field(None, description="master节点的镜像uuid")
+    flavor_k8s_master: Optional[str] = Field(None, description="K8s master节点的规格")
 
 def replace_ansi_with_single_newline(text):
     ansi_pattern = re.compile(r'\x1b\[[\d;]*[a-zA-Z]')
@@ -1160,6 +1165,8 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         volume_type = cinder_client.list_volum_type()
         cluster_tfvars.etcd_volume_type = volume_type
         cluster_tfvars.pushgateway_url = PUSHGATEWAY_URL
+        cluster_tfvars.image_master_uuid = image_master_id
+        cluster_tfvars.flavor_k8s_master = k8s_master_flavor
         terraform_result = create_infrastructure(cluster_tfvars, task_info, scale=scale,
                                                  node_list=node_list, node_type=NodeInfo, instance_list=instance_list)
 
@@ -1613,7 +1620,7 @@ def delete_cluster(self, cluster_id, token):
                 
 
 @celery_app.task(bind=True)
-def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extravars):
+def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extravars, node_err_info):
     try:
         task_id = str(self.request.id)
         update_task_info(task_id, cluster_id, cluster_name)
@@ -1628,118 +1635,165 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
         component_task = Taskinfo()
         node_list = json.loads(node_list)
         instance_list = json.loads(instance_list)
-        extravars["skip_confirmation"] = "true"
         cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id))
-        os.environ['CURRENT_CLUSTER_DIR'] = cluster_dir
-        # os.environ['OS_CLOUD'] = node.get("region_name")
-        # 1、在这里先找到cluster的文件夹，找到对应的目录，先通过发来的node_list组合成extravars的变量，再执行remove-node.yaml
-        ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
-        os.chdir(ansible_dir)
-        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id))
-        playbook_file = os.path.join(WORK_DIR, "ansible-deploy", "remove-node.yml")
-        key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), "id_rsa")
-        private_key_content = ""
-        if os.path.exists(key_file_path):
-            with open(key_file_path, 'r') as key_file:
-                private_key_content = key_file.read()
-        thread, runner = run_playbook(playbook_file, host_file, ansible_dir,
-                                      ssh_key=private_key_content, extravars=extravars)
-        # 处理并打印事件日志
-        runtime_bool = False
-        etcd_bool = False
-        controller_bool = False
-        worker_bool = False
-        while runner.status not in ['canceled', 'successful', 'timeout', 'failed']:
-            for event in runner.events:
-                # 检查事件是否包含 task 信息
-                if 'event_data' in event and 'task' in event['event_data']:
-                    task_name = event['event_data'].get('task')
-                    host = event['event_data'].get('host')
-                    task_status = event['event'].split('_')[-1]  # 例如 runner_on_ok -> ok
-                    #print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
-                    if task_name == remove_from_cluster and host is not None:
-                        if not runtime_bool:
-                            runtime_bool = True
-                            runtime_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                            runtime_task.state = "success"
-                            runtime_task.detail = TaskService.TaskDetail.remove_pre_install.value
-                            update_task_state(runtime_task)
-                            # 写入下一个任务
-                            etcd_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
-                                                 start_time=datetime.fromtimestamp(datetime.now().timestamp()),
-                                                 msg=TaskService.TaskRemoveNodeMessage.remove_from_cluster.name)
-                            TaskSQL.insert(etcd_task)
-                            task_info = etcd_task
-                    if task_name == remove_cri_pods and host is not None:
-                        if not etcd_bool:
-                            etcd_bool = True
-                            etcd_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                            etcd_task.state = "success"
-                            etcd_task.detail = TaskService.TaskDetail.remove_from_cluster.value
-                            update_task_state(etcd_task)
-                            # 写入下一个任务
-                            control_plane_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
-                                                          start_time=datetime.fromtimestamp(datetime.now().timestamp()),
-                                                          msg=TaskService.TaskRemoveNodeMessage.remove_cri_pods.name)
-                            TaskSQL.insert(control_plane_task)
-                            task_info = control_plane_task
-                    if task_name == remove_iptables and host is not None:
-                        if not controller_bool:
-                            controller_bool = True
-                            control_plane_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                            control_plane_task.state = "success"
-                            control_plane_task.detail = TaskService.TaskDetail.remove_cri_pods.value
-                            update_task_state(control_plane_task)
-                            # 写入下一个任务
-                            worker_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
-                                                   start_time=datetime.fromtimestamp(datetime.now().timestamp()),
-                                                   msg=TaskService.TaskRemoveNodeMessage.remove_iptables.name)
-                            TaskSQL.insert(worker_task)
-                            task_info = worker_task
-                    if task_name == remove_file_dirs and host is not None and task_status != "failed":
-                        if not worker_bool:
-                            worker_bool = True
-                            worker_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                            worker_task.state = "success"
-                            worker_task.detail = TaskService.TaskDetail.remove_iptables.value
-                            update_task_state(worker_task)
-                            component_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
-                                                      start_time=datetime.fromtimestamp(datetime.now().timestamp()),
-                                                      msg=TaskService.TaskRemoveNodeMessage.remove_file_dirs.name)
-                            TaskSQL.insert(component_task)
-                            task_info = component_task
 
-            time.sleep(0.01)
-            continue
-        log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), "ansible_remove.log")
-        with open(log_file, "a") as log_file:
-            log_file.write(format(runner.stdout.read()))
-        thread.join()
-        if runner.rc != 0:
-            # print("{}".format(runner.stdout.read()))
-            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-            task_info.state = "failed"
-            task_info.detail = "Ansible remove node failed, please check log"
-            update_task_state(task_info)
-            raise Exception(f"Ansible remove node failed, please check log")
+        if node_err_info:
+            remove_list = []
+            remove_node_err_list = node_err_info.get("node_err").split(",")
+            for remove_node in remove_node_err_list:
+                remove_list.append(remove_node.split(cluster_name + "-")[1])
+            terraform_dir = os.path.join(cluster_dir, "terraform")
+            os.chdir(terraform_dir)
+            state_remove(remove_list)
+            with open("output.tfvars.json") as f:
+                content = json.loads(f.read())
+                content_new = copy.deepcopy(content)
+                for node in content["nodes"]:
+                    if node in remove_list:
+                        del content_new["nodes"][node]
+            with open("output.tfvars.json", "w") as f:
+                json.dump(content_new, f, indent=4)
+
+        if node_err_info and not node_list:
+            runtime_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            runtime_task.state = "success"
+            runtime_task.detail = TaskService.TaskDetail.remove_pre_install.value
+            update_task_state(runtime_task)
+            etcd_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="success",
+                                 start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                 msg=TaskService.TaskRemoveNodeMessage.remove_from_cluster.name)
+            etcd_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            etcd_task.detail = TaskService.TaskDetail.remove_from_cluster.value
+            TaskSQL.insert(etcd_task)
+            control_plane_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="success",
+                                          start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                          msg=TaskService.TaskRemoveNodeMessage.remove_cri_pods.name)
+            control_plane_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            control_plane_task.detail = TaskService.TaskDetail.remove_cri_pods.value
+            TaskSQL.insert(control_plane_task)
+            worker_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="success",
+                                   start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                   msg=TaskService.TaskRemoveNodeMessage.remove_iptables.name)
+            worker_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            worker_task.detail = TaskService.TaskDetail.remove_iptables.value
+            TaskSQL.insert(worker_task)
+            component_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
+                                      start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                      msg=TaskService.TaskRemoveNodeMessage.remove_file_dirs.name)
+            TaskSQL.insert(component_task)
+        else:
+            extravars["skip_confirmation"] = "true"
+            os.environ['CURRENT_CLUSTER_DIR'] = cluster_dir
+            # os.environ['OS_CLOUD'] = node.get("region_name")
+            # 1、在这里先找到cluster的文件夹，找到对应的目录，先通过发来的node_list组合成extravars的变量，再执行remove-node.yaml
+            ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
+            os.chdir(ansible_dir)
+            host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id))
+            playbook_file = os.path.join(WORK_DIR, "ansible-deploy", "remove-node.yml")
+            key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), "id_rsa")
+            private_key_content = ""
+            if os.path.exists(key_file_path):
+                with open(key_file_path, 'r') as key_file:
+                    private_key_content = key_file.read()
+            thread, runner = run_playbook(playbook_file, host_file, ansible_dir,
+                                          ssh_key=private_key_content, extravars=extravars)
+            # 处理并打印事件日志
+            runtime_bool = False
+            etcd_bool = False
+            controller_bool = False
+            worker_bool = False
+            while runner.status not in ['canceled', 'successful', 'timeout', 'failed']:
+                for event in runner.events:
+                    # 检查事件是否包含 task 信息
+                    if 'event_data' in event and 'task' in event['event_data']:
+                        task_name = event['event_data'].get('task')
+                        host = event['event_data'].get('host')
+                        task_status = event['event'].split('_')[-1]  # 例如 runner_on_ok -> ok
+                        #print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
+                        if task_name == remove_from_cluster and host is not None:
+                            if not runtime_bool:
+                                runtime_bool = True
+                                runtime_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                                runtime_task.state = "success"
+                                runtime_task.detail = TaskService.TaskDetail.remove_pre_install.value
+                                update_task_state(runtime_task)
+                                # 写入下一个任务
+                                etcd_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
+                                                     start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                                     msg=TaskService.TaskRemoveNodeMessage.remove_from_cluster.name)
+                                TaskSQL.insert(etcd_task)
+                                task_info = etcd_task
+                        if task_name == remove_cri_pods and host is not None:
+                            if not etcd_bool:
+                                etcd_bool = True
+                                etcd_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                                etcd_task.state = "success"
+                                etcd_task.detail = TaskService.TaskDetail.remove_from_cluster.value
+                                update_task_state(etcd_task)
+                                # 写入下一个任务
+                                control_plane_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
+                                                              start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                                              msg=TaskService.TaskRemoveNodeMessage.remove_cri_pods.name)
+                                TaskSQL.insert(control_plane_task)
+                                task_info = control_plane_task
+                        if task_name == remove_iptables and host is not None:
+                            if not controller_bool:
+                                controller_bool = True
+                                control_plane_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                                control_plane_task.state = "success"
+                                control_plane_task.detail = TaskService.TaskDetail.remove_cri_pods.value
+                                update_task_state(control_plane_task)
+                                # 写入下一个任务
+                                worker_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
+                                                       start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                                       msg=TaskService.TaskRemoveNodeMessage.remove_iptables.name)
+                                TaskSQL.insert(worker_task)
+                                task_info = worker_task
+                        if task_name == remove_file_dirs and host is not None and task_status != "failed":
+                            if not worker_bool:
+                                worker_bool = True
+                                worker_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                                worker_task.state = "success"
+                                worker_task.detail = TaskService.TaskDetail.remove_iptables.value
+                                update_task_state(worker_task)
+                                component_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
+                                                          start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+                                                          msg=TaskService.TaskRemoveNodeMessage.remove_file_dirs.name)
+                                TaskSQL.insert(component_task)
+                                task_info = component_task
+
+                time.sleep(0.01)
+                continue
+            log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), "ansible_remove.log")
+            with open(log_file, "a") as log_file:
+                log_file.write(format(runner.stdout.read()))
+            thread.join()
+            if runner.rc != 0:
+                # print("{}".format(runner.stdout.read()))
+                task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                task_info.state = "failed"
+                task_info.detail = "Ansible remove node failed, please check log"
+                update_task_state(task_info)
+                raise Exception(f"Ansible remove node failed, please check log")
 
         # # 2、执行完删除k8s这些节点之后，再执行terraform销毁这些节点（这里是单独修改output.json文件还是需要通过之前生成的output.json文件生成）
         # 在这里添加需要排除重新创建的虚拟机，从output文件里面取得nodes再和数据库里面的nodes做比较，数据里面没有的就在state删除
-        remove_node_list = extravars.get("node").split(",")
-        remove_list = []
-        for remove_node in remove_node_list:
-            remove_list.append(remove_node.split(cluster_name + "-")[1])
-        terraform_dir = os.path.join(cluster_dir, "terraform")
-        os.chdir(terraform_dir)
-        state_remove(remove_list)
-        with open("output.tfvars.json") as f:
-            content = json.loads(f.read())
-            content_new = copy.deepcopy(content)
-            for node in content["nodes"]:
-                if node in remove_list:
-                    del content_new["nodes"][node]
-        with open("output.tfvars.json", "w") as f:
-            json.dump(content_new, f, indent=4)
+        if extravars.get("node"):
+            remove_list = []
+            remove_node_list = extravars.get("node").split(",")
+            for remove_node in remove_node_list:
+                remove_list.append(remove_node.split(cluster_name + "-")[1])
+            terraform_dir = os.path.join(cluster_dir, "terraform")
+            os.chdir(terraform_dir)
+            state_remove(remove_list)
+            with open("output.tfvars.json") as f:
+                content = json.loads(f.read())
+                content_new = copy.deepcopy(content)
+                for node in content["nodes"]:
+                    if node in remove_list:
+                        del content_new["nodes"][node]
+            with open("output.tfvars.json", "w") as f:
+                json.dump(content_new, f, indent=4)
 
         # output_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id),
         #                            "terraform", "output.tfvars.json")
@@ -1771,8 +1825,22 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
         component_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
         component_task.state = "success"
         component_task.detail = TaskService.TaskDetail.remove_file_dirs.value
-        update_task_state(task_info)
+        update_task_state(component_task)
         session = get_session()
+        if node_err_info:
+            node_err_list = json.loads(node_err_info.get("node_err_dict"))
+            instance_err_list = json.loads(node_err_info.get("instance_err_dict"))
+            with session.begin():
+                for node in node_err_list:
+                    node = session.get(NodeInfo, node.get("id"))
+                    if node:
+                        session.delete(node)
+                for instance in instance_err_list:
+                    instance = session.get(Instance, instance.get("id"))
+                    if instance:
+                        instance.cluster_id = ""
+                        instance.cluster_name = ""
+
         with session.begin():
             for node in node_list:
                 # 根据 node.id 删除节点
@@ -1805,6 +1873,7 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
             db_cluster = session.get(Cluster, (cluster_id, cluster_name))
             db_cluster.status = 'remove_error'
             db_cluster.status_msg = f"Ansible remove node error: {str(e)}"
+        raise
 
 @celery_app.task(bind=True)
 def delete_baremetal(self, cluster_id, cluster_name, instance_list, token):

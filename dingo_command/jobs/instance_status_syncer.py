@@ -63,7 +63,7 @@ def check_instance_status():
                         instance.status = server.get("status")
                         instance.status_msg = ""
                     else:
-                        return
+                        continue
                     InstanceSQL.update_instance(instance)
             except Exception as e:
                 LOG.error(f"Error checking status for instance {instance.id}: {str(e)}")
@@ -110,7 +110,7 @@ def check_node_status():
                         node.status = server.get("status")
                         node.status_msg = ""
                     else:
-                        return
+                        continue
                     NodeSQL.update_node(node)
             except Exception as e:
                 LOG.error(f"Error checking status for node {node.id}: {str(e)}")
