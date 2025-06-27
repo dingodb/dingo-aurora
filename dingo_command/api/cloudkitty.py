@@ -23,7 +23,7 @@ cloudkitty_service = CloudKittyService()
 
 @router.get("/cloudkitty/download/ratingSummary/execl", summary="下载计费汇总execl表格", description="下载计费汇总execl表格")
 async def download_rating_summary_execl(begin: str = Query(None, description="开始时间"),
-                                        end: str = Query(None, description="结束时间时间"),
+                                        end: str = Query(None, description="结束时间"),
                                         tenant_id: str = Query(None, description="项目ID"),
                                         resource_type: str = Query(None, description="资源类型")):
     # 把数据库中的资产数据导出资产信息数据
@@ -130,6 +130,46 @@ async def edit_rating_module_modules(module_id: str, modules: RatingModules):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail={e})
+
+@router.get("/cloudkitty/report/summary", summary="查询计费汇总",
+            description="查询计费汇总")
+async def get_rating_report_summary(all_tenants: bool = Query(True, description="是否所有租户"),
+                                        begin: str = Query(None, description="开始时间"),
+                                        end: str = Query(None, description="结束时间时间"),
+                                        groupby: str = Query("tenant_id", description="分组类型")):
+    try:
+        filters = {}
+        if begin:
+            filters['begin'] = system_time_to_utc(unquote(begin))
+        if end:
+            filters['end'] = system_time_to_utc(unquote(end))
+        filters['all_tenants'] = all_tenants
+        filters['groupby'] = groupby
+        return cloudkitty_service.get_rating_report_summary(filters)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail={e})
+
+@router.get("/cloudkitty/report/total", summary="查询计费总数",
+            description="查询计费汇总")
+async def get_rating_report_summary(tenant_id: str = Query(None, description="租户ID"),
+                                        begin: str = Query(None, description="开始时间"),
+                                        end: str = Query(None, description="结束时间时间")):
+    try:
+        filters = {}
+        if begin:
+            filters['begin'] = system_time_to_utc(unquote(begin))
+        if end:
+            filters['end'] = system_time_to_utc(unquote(end))
+        if tenant_id:
+            filters['tenant_id'] = tenant_id
+        return cloudkitty_service.get_rating_report_total(filters)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail={e})
+
 
 
 

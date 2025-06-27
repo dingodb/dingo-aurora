@@ -53,30 +53,26 @@ class CloudKittyService:
             traceback.print_exc()
             raise e
 
-    @functools.lru_cache(maxsize=32)
-    def cached_utc_to_local(self, time_str):
-        """带缓存的时区转换"""
-        return utc_to_system_time(time_str) if time_str else None
-
     def query_data_and_create_rating_summary_excel(self, result_file_path, query_params):
         try:
             # 1. 并行获取数据
             start_time = datetime.now()
-            storage_dataFrames = self._fetch_data_parallel(query_params)
-            print(f"Data fetch time: {(datetime.now() - start_time).total_seconds():.2f}s")
+            print(f"Data fetch time start: {start_time}")
+            storage_dataFrames = CloudKittyClient().get_storage_dataframes(query_params)
+            print(f"Data fetch time: {(datetime.now() - start_time).total_seconds():.2f}s, now time: {datetime.now()}")
 
+            start_time2 = datetime.now()
             # 2. 使用向量化处理数据
             excel_data = []
             for temp in filter(None, storage_dataFrames):  # 过滤None
                 excel_data.append({
-                    'Begin': self.cached_utc_to_local(temp.get("begin")),
-                    'End': self.cached_utc_to_local(temp.get("end")),
+                    'Begin': temp.get("begin"),
+                    'End': temp.get("end"),
                     'Project ID': temp.get("tenant_id"),
                     'Resources': json.dumps(temp["resources"]) if "resources" in temp else None
                 })
-
+            print(f"handle time: {(datetime.now() - start_time2).total_seconds():.2f}s, now time: {datetime.now()}")
             start_time = datetime.now()
-
             # 3. 批量写入Excel
             book = load_workbook(result_file_path)
             sheet = book['ratingSummary']
@@ -86,17 +82,17 @@ class CloudKittyService:
             self._write_to_excel_bulk(sheet, data_df, start_row=2)
 
             book.save(result_file_path)
-            print(f"Excel save time: {(datetime.now() - start_time).total_seconds():.2f}s")
+            print(f"Excel save time: {(datetime.now() - start_time).total_seconds():.2f}s, now time: {datetime.now()}")
 
         except Exception as e:
             import traceback
             traceback.print_exc()
             raise e
 
-    def _fetch_data_parallel(self, query_params):
-        """并行获取数据"""
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            return list(executor.map(lambda x: CloudKittyClient().get_storage_dataframes(x), [query_params]))[0]
+    # def _fetch_data_parallel(self, query_params):
+    #     """并行获取数据"""
+    #     with ThreadPoolExecutor(max_workers=4) as executor:
+    #         return list(executor.map(lambda x: CloudKittyClient().get_storage_dataframes(x), [query_params]))[0]
 
     def _write_to_excel_bulk(self, sheet, data_df, start_row):
         """批量写入优化"""
@@ -323,3 +319,35 @@ class CloudKittyService:
             import traceback
             traceback.print_exc()
             raise RuntimeError(f"modify rating modules fail: {e}")
+
+    def get_rating_report_summary(self, filters):
+        try:
+            openstack_data = CloudKittyClient().get_rating_report_summary(filters)
+            # 处理数据
+            result_data = []
+            for item in filter(None, openstack_data):
+                if not isinstance(item, dict):
+                    continue
+
+                single_data = {}
+                for key, value in item.items():
+                    if key == "begin" or key == "end":
+                        single_data[key] = utc_to_system_time(value)
+                    else:
+                        single_data[key] = value
+
+
+                result_data.append(single_data)
+            return result_data
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise RuntimeError(f"get rating report summary fail: {e}")
+
+    def get_rating_report_total(self, filters):
+        try:
+            return CloudKittyClient().get_rating_report_total(filters)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise RuntimeError(f"get rating report total fail: {e}")

@@ -257,5 +257,5 @@ if __name__ == "__main__":
     print(f"\n=====系统时间转化为UTC时间:{system_to_utc_time}")
 
     utc_time = "2025-06-25 09:58:00"
-    utc_to_system_time = utc_to_system_time(utc_time)
-    print(f"\n=====UTC时间转化为系统时间:{utc_to_system_time}")
+    utc_to_system_time_str = utc_to_system_time(utc_time)
+    print(f"\n=====UTC时间转化为系统时间:{utc_to_system_time_str}")

@@ -119,8 +119,9 @@ class CloudKittyClient:
         endpoint = self.get_service_endpoint('rating')
         response = self._session.get(f"{endpoint}/v1/storage/dataframes", params=filters)
         if response.status_code != 200:
+            print(f"/v1/storage/dataframes query failed, now time: { datetime.now()}")
             raise Exception(f"cloudkitty[{endpoint}/v1/storage/dataframes]请求失败: {response.text}")
-        print(f"{endpoint}/v1/storage/dataframes 返回数据大小: {len(response.json()['dataframes'])}")
+        print(f"{endpoint}/v1/storage/dataframes 返回数据大小: {len(response.json()['dataframes'])}, now time：{datetime.now()}")
         return response.json()['dataframes']
 
     # 添加cloudkitty服务编辑服务映射
@@ -153,4 +154,22 @@ class CloudKittyClient:
         if response.status_code != 200:
             print(f"cloudkitty[{endpoint}/v1/rating/modules/{module_id}] status_code:{response.status_code}, 请求失败: {response.text}")
             raise Exception(f"{response.text}")
+        return response.json()
+
+    @_require_valid_token
+    def get_rating_report_summary(self, filters):
+        endpoint = self.get_service_endpoint('rating')
+        response = self._session.get(f"{endpoint}/v1/report/summary", params=filters)
+        if response.status_code != 200:
+            raise Exception(f"cloudkitty[{endpoint}/v1/report/summary]请求失败: {response.text}")
+        print(f"{endpoint}/v1/report/summary 返回数据大小: {len(response.json()['summary'])}, now time：{datetime.now()}")
+        return response.json()['summary']
+
+    @_require_valid_token
+    def get_rating_report_total(self, filters):
+        endpoint = self.get_service_endpoint('rating')
+        response = self._session.get(f"{endpoint}/v1/report/total", params=filters)
+        if response.status_code != 200:
+            raise Exception(f"cloudkitty[{endpoint}/v1/report/total]请求失败: {response.text}")
+        print(f"{endpoint}/v1/report/total 返回数据: {response.json()}, now time：{datetime.now()}")
         return response.json()
