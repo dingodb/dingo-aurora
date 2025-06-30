@@ -163,7 +163,7 @@ class CloudKittyClient:
         if response.status_code != 200:
             raise Exception(f"cloudkitty[{endpoint}/v1/report/summary]请求失败: {response.text}")
         print(f"{endpoint}/v1/report/summary 返回数据大小: {len(response.json()['summary'])}, now time：{datetime.now()}")
-        return response.json()['summary']
+        return response.json()
 
     @_require_valid_token
     def get_rating_report_total(self, filters):

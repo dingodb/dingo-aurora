@@ -323,9 +323,10 @@ class CloudKittyService:
     def get_rating_report_summary(self, filters):
         try:
             openstack_data = CloudKittyClient().get_rating_report_summary(filters)
+            result = {}
             # 处理数据
             result_data = []
-            for item in filter(None, openstack_data):
+            for item in filter(None, openstack_data['summary']):
                 if not isinstance(item, dict):
                     continue
 
@@ -338,7 +339,8 @@ class CloudKittyService:
 
 
                 result_data.append(single_data)
-            return result_data
+            result['summary'] = result_data
+            return result
         except Exception as e:
             import traceback
             traceback.print_exc()

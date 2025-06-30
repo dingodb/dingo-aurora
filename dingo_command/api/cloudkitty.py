@@ -136,7 +136,7 @@ async def edit_rating_module_modules(module_id: str, modules: RatingModules):
 async def get_rating_report_summary(all_tenants: bool = Query(True, description="是否所有租户"),
                                         begin: str = Query(None, description="开始时间"),
                                         end: str = Query(None, description="结束时间时间"),
-                                        groupby: str = Query("tenant_id", description="分组类型")):
+                                        groupby: str = Query("None", description="分组类型")):
     try:
         filters = {}
         if begin:
