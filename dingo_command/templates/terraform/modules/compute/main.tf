@@ -49,7 +49,7 @@ resource "openstack_compute_keypair_v2" "key_pair" {
 # Check if flavor exists
 data "openstack_compute_flavor_v2" "k8s_control" {
   #name = "k8s_control"  # 替换为你的 Flavor 名称
-  flavor_id = var.master_flavor_id
+  flavor_id = var.flavor_k8s_master
 }
 
 resource "openstack_networking_secgroup_v2" "secgroup" {
