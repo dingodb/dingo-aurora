@@ -958,7 +958,7 @@ class ClusterService:
 
     def get_master_flavor_info(self, master_flavor_name):
         nova_client = NovaClient()
-        flavor = nova_client.nova_get_flavor_by_name(master_flavor_name)
+        flavor = nova_client.nova_get_flavor(master_flavor_name)
         cpu = 0
         gpu = 0
         mem = 0
