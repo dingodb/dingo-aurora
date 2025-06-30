@@ -130,7 +130,7 @@ write_files:
 
       [Service]
       Type=oneshot
-      ExecStart=/bin/bash -c '/usr/bin/curl -u admin:rGgKjrSHsTSGgNPZohWIRggEcrHIoqcnHrKsEnmE -s http://localhost:9100/metrics | /usr/bin/curl --data-binary @- "${pushgateway_url}/metrics/job/vm/instance/%H"'
+      ExecStart=/bin/bash -c '/usr/bin/curl -s http://localhost:9100/metrics | /usr/bin/curl -u admin:rGgKjrSHsTSGgNPZohWIRggEcrHIoqcnHrKsEnmE --data-binary @- "${pushgateway_url}/metrics/job/vm/instance/%H"'
       Restart=on-failure
       EOF
 

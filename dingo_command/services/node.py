@@ -107,7 +107,7 @@ class NodeService:
         db_cluster.update_time = datetime.now()
         return db_cluster
 
-    def update_nodes_todb(self, node_list):
+    def update_nodes_todb(self, node_list, cluster_info_db):
         node_info_list = []
         for node in node_list:
             node.status = "deleting"
@@ -131,6 +131,9 @@ class NodeService:
                 "user": node.user,
                 "password": node.password,
             }
+            cluster_info_db.cpu -= node.cpu
+            cluster_info_db.mem -= node.mem
+            cluster_info_db.gpu -= node.gpu
             node_info_list.append(node_dict)
         instance_list_json = json.dumps(node_info_list)
         return node_list, instance_list_json
@@ -164,7 +167,8 @@ class NodeService:
         import random
         return random.randint(20000, 40000)
 
-    def generate_k8s_nodes(self, cluster_info, cluster, k8s_nodes, scale_nodes, forward_rules, forward_float_ip_id):
+    def generate_k8s_nodes(self, cluster_info, cluster, k8s_nodes, scale_nodes, forward_rules,
+                           forward_float_ip_id, cluster_info_db):
         node_db_list, instance_db_list = [], []
         extra_dict = json.loads(cluster_info.extra)
         node_index = int(extra_dict.get("node_count", 0)) + 1
@@ -361,6 +365,9 @@ class NodeService:
                 "bus_address": node.bus_address,
                 "create_time": node.create_time.isoformat() if node.create_time else None
             }
+            cluster_info_db.cpu += node.cpu
+            cluster_info_db.mem += node.mem
+            cluster_info_db.gpu += node.gpu
             node_list_dict.append(node_dict)
 
         instance_list_dict = []
@@ -444,7 +451,6 @@ class NodeService:
                 content = json.loads(f.read())
 
             cluster_info_db = self.convert_clusterinfo_todb(cluster_info.id, cluster_info.name)
-            ClusterSQL.update_cluster(cluster_info_db)
             k8s_nodes = content["nodes"]
             scale_nodes = []
             subnet_cidr = content.get("subnet_cidr")
@@ -463,8 +469,9 @@ class NodeService:
                 if v.get("port_forwards"):
                     forward_rules = v.get("port_forwards")
                     break
-            node_list, instance_list = self.generate_k8s_nodes(cluster_info, cluster, k8s_nodes,
-                                                               scale_nodes, forward_rules, forward_float_ip_id)
+            node_list, instance_list = self.generate_k8s_nodes(cluster_info, cluster, k8s_nodes, scale_nodes,
+                                                               forward_rules, forward_float_ip_id, cluster_info_db)
+            ClusterSQL.update_cluster(cluster_info_db)
             # 创建terraform变量
             tfvars = ClusterTFVarsObject(
                 id=cluster.id,
@@ -518,12 +525,12 @@ class NodeService:
 
             # 写入集群的状态为正在缩容的状态，防止其他缩容的动作重复执行
             cluster_info_db = self.update_clusterinfo_todb(cluster_id, cluster_name)
-            ClusterSQL.update_cluster(cluster_info_db)
             # 写入节点的状态为正在deleting的状态
-            node_db_list, node_dict = self.update_nodes_todb(node_list)
+            node_db_list, node_dict = self.update_nodes_todb(node_list, cluster_info_db)
             NodeSQL.update_node_list(node_db_list)
             # 写入instance的状态为正在deleting的状态
             instance_dict = self.update_instances_todb(node_list)
+            ClusterSQL.update_cluster(cluster_info_db)
             # InstanceSQL.update_instance_list(instance_db_list)
             if node_err_list:
                 node_err_name_list = []

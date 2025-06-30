@@ -1,4 +1,9 @@
 ---
+- name: Configure /etc/hosts
+  import_tasks: 0090-etchosts.yml
+  tags:
+    - bootstrap-os
+    - etchosts
 # Disable swap
 - name: Disable swap
   import_tasks: 0010-swapoff.yml

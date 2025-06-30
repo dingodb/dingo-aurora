@@ -414,11 +414,11 @@ def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list, scale=False
         count, db_clusters = ClusterSQL.list_cluster(query_params)
         db_cluster = db_clusters[0]
         db_cluster.status = 'running'
-        if scale:
-            cpu_total, gpu_total, mem_total = get_node_info(instance_list)
-            db_cluster.cpu += cpu_total
-            db_cluster.gpu += gpu_total
-            db_cluster.mem += mem_total
+        # if scale:
+        #     cpu_total, gpu_total, mem_total = get_node_info(instance_list)
+        #     db_cluster.cpu += cpu_total
+        #     db_cluster.gpu += gpu_total
+        #     db_cluster.mem += mem_total
         db_cluster.status_msg = ""
         ClusterSQL.update_cluster(db_cluster)
     except SoftTimeLimitExceeded:
@@ -1347,12 +1347,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         kube_info["kube_lb_address"] = lb_ip
         c.kube_info = json.dumps(kube_info)
         c.status = 'running'
-        if scale:
-            cpu_total, gpu_total, mem_total = get_node_info(node_list)
-            c.cpu += cpu_total
-            c.gpu += gpu_total
-            c.mem += mem_total
-        else:
+        if not scale:
             update_cluster_node_count(len([node for node in node_list if node.get("role") != "master"]), c)
         c.status_msg = ""
         ClusterSQL.update_cluster(c)
@@ -1561,8 +1556,11 @@ def delete_cluster(self, cluster_id, token):
             env=env
         )
         # 实时读取输出流
+        err_line_list = []
         try:
             for line in process.stdout:
+                if "Error:" in line:
+                    err_line_list.append(line)
                 if "type" in line and "SecurityGroupInUse" in line:
                     resource_inuse = True
                     print("type with SecurityGroupInUse")
@@ -1580,7 +1578,7 @@ def delete_cluster(self, cluster_id, token):
                     break
         finally:
             # 确保回收资源
-            process.wait(timeout=60)
+            process.wait(timeout=600)
             if process.returncode is None:
                 process.kill()
             print(f"进程已终止，退出码: {process.returncode}")
@@ -1594,13 +1592,13 @@ def delete_cluster(self, cluster_id, token):
                 update_task_state(task_info)
                 return True
             else:
-                print(f"Terraform error: {process.stderr}")
                 task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
                 task_info.state = "failed"
-                task_info.detail = f"delete cluster, reason: {replace_ansi_with_single_newline(process.stderr)}"
+                task_info.detail = f"delete cluster, reason: {replace_ansi_with_single_newline(','.join(err_line_list))}"
                 update_task_state(task_info)
                 # 在这里判断具体的日志输出信息，如果出现删除安全组超时就判断为删除成功
-                raise Exception("delete cluster Error terraform destroy exception: {}".format(process.stderr))
+                raise Exception("delete cluster Error terraform destroy "
+                                "exception: {}".format(replace_ansi_with_single_newline(','.join(err_line_list))))
         else:
             task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
             task_info.state = "success"
@@ -1616,7 +1614,7 @@ def delete_cluster(self, cluster_id, token):
         c.status = 'delete_error'
         c.status_msg = f"delete cluster error: {replace_ansi_with_single_newline(str(e))}"
         ClusterSQL.update_cluster(c)
-        return False
+        raise
                 
 
 @celery_app.task(bind=True)
@@ -1855,10 +1853,10 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
                 instance.cluster_name = ""
         with session.begin():
             db_cluster = session.get(Cluster, (cluster_id, cluster_name))
-            cpu_total, gpu_total, mem_total = get_node_info(node_list)
-            db_cluster.cpu -= cpu_total
-            db_cluster.gpu -= gpu_total
-            db_cluster.mem -= mem_total
+            # cpu_total, gpu_total, mem_total = get_node_info(node_list)
+            # db_cluster.cpu -= cpu_total
+            # db_cluster.gpu -= gpu_total
+            # db_cluster.mem -= mem_total
             query_params = {"cluster_id": cluster_id}
             count, nodes = NodeSQL.list_nodes(query_params, 1, -1, None, None)
             for node in nodes:
@@ -1938,10 +1936,10 @@ def delete_baremetal(self, cluster_id, cluster_name, instance_list, token):
                     session.delete(node)
         with session.begin():
             db_cluster = session.get(Cluster, (cluster_id, cluster_name))
-            cpu_total, gpu_total, mem_total = get_node_info(instance_list)
-            db_cluster.cpu -= cpu_total
-            db_cluster.gpu -= gpu_total
-            db_cluster.mem -= mem_total
+            # cpu_total, gpu_total, mem_total = get_node_info(instance_list)
+            # db_cluster.cpu -= cpu_total
+            # db_cluster.gpu -= gpu_total
+            # db_cluster.mem -= mem_total
             query_params = {"cluster_id": cluster_id}
             count, instances = InstanceSQL.list_instances(query_params, 1, -1, None, None)
             for ins in instances:

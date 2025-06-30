@@ -47,10 +47,11 @@ resource "openstack_compute_keypair_v2" "key_pair" {
 }
 
 # Check if flavor exists
-data "openstack_compute_flavor_v2" "k8s_control" {
+#data "openstack_compute_flavor_v2" "k8s_control" {
   #name = "k8s_control"  # 替换为你的 Flavor 名称
-  flavor_id = var.flavor_k8s_master
-}
+
+#  flavor_id = var.flavor_k8s_master
+#}
 
 resource "openstack_networking_secgroup_v2" "secgroup" {
   name        = var.cluster_name
@@ -120,7 +121,7 @@ locals {
 # Image uuid
   image_to_use_node = var.image_uuid != "" ? var.image_uuid : data.openstack_images_image_v2.vm_image[0].id
   image_to_use_master = var.image_master_uuid != "" ? var.image_master_uuid : data.openstack_images_image_v2.image_master[0].id
-  master_flavor = data.openstack_compute_flavor_v2.k8s_control.id
+  master_flavor = var.flavor_k8s_master
   nodes_settings = {
     for name, node in var.nodes :
       name => {

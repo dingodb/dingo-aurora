@@ -129,9 +129,9 @@ write_files:
       [Service]
       Type=oneshot
       %{ if az == "" ~}
-      ExecStart=/bin/bash -c "/usr/bin/curl -u admin:rGgKjrSHsTSGgNPZohWIRggEcrHIoqcnHrKsEnmE -s http://localhost:9100/metrics | /usr/bin/curl --data-binary @- '${pushgateway_url}/metrics/job/baremetal/instance/%H'"
+    ExecStart=/bin/bash -c "/usr/bin/curl -s http://localhost:9100/metrics | /usr/bin/curl -u admin:rGgKjrSHsTSGgNPZohWIRggEcrHIoqcnHrKsEnmE --data-binary @- '${pushgateway_url}/metrics/job/baremetal/instance/%H'"
       %{ else ~}
-      ExecStart=/bin/bash -c "/usr/bin/curl -u admin:rGgKjrSHsTSGgNPZohWIRggEcrHIoqcnHrKsEnmE -s http://localhost:9100/metrics | /usr/bin/curl --data-binary @- '${pushgateway_url}/metrics/job/vm/instance/%H'"
+    ExecStart=/bin/bash -c "/usr/bin/curl -s http://localhost:9100/metrics | /usr/bin/curl -u admin:rGgKjrSHsTSGgNPZohWIRggEcrHIoqcnHrKsEnmE --data-binary @- '${pushgateway_url}/metrics/job/vm/instance/%H'"
       %{ endif ~}
       Restart=on-failure
       EOF
@@ -164,3 +164,5 @@ write_files:
 runcmd:
   - /bin/bash /opt/install_node_exporter.sh > /opt/install.log
   - sed -i 's/^.*GSSAPIAuthentication.*$/GSSAPIAuthentication no/' /etc/ssh/ssh_config || echo "GSSAPIAuthentication no" >> /etc/ssh/ssh_config
+  - sed -i 's/^.*UseDNS.*$/UseDNS no/' /etc/ssh/sshd_config || echo "UseDNS no" >> /etc/ssh/sshd_config
+  - systemctl restart sshd

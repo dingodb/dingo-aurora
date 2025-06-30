@@ -172,7 +172,7 @@ class InstanceService:
         import random
         return random.randint(20000, 40000)
 
-    def generate_k8s_nodes(self, cluster_info, cluster, k8s_nodes, forward_rules, forward_float_ip_id):
+    def generate_k8s_nodes(self, cluster_info, cluster, k8s_nodes, forward_rules, forward_float_ip_id, cluster_info_db):
         node_db_list, instance_db_list = [], []
         if k8s_nodes:
             max_key = max(k8s_nodes, key=lambda k: int(k.split('-')[-1]))
@@ -303,6 +303,9 @@ class InstanceService:
                 "name": instance.name,
                 "create_time": instance.create_time.isoformat() if instance.create_time else None
             }
+            cluster_info_db.cpu += instance.cpu
+            cluster_info_db.mem += instance.mem
+            cluster_info_db.gpu += instance.gpu
             instance_list_dict.append(instance_dict)
 
         instance_list_json = json.dumps(instance_list_dict)
@@ -366,7 +369,7 @@ class InstanceService:
                 content = json.loads(f.read())
 
             cluster_info_db = self.convert_clusterinfo_todb(cluster_info.id, cluster_info.name)
-            ClusterSQL.update_cluster(cluster_info_db)
+
             k8s_nodes = content["nodes"]
             subnet_cidr = content.get("subnet_cidr")
             image_uuid = content.get("image_uuid")
@@ -383,8 +386,8 @@ class InstanceService:
                     forward_rules = v.get("port_forwards")
                     break
             instance_list = self.generate_k8s_nodes(cluster_info, cluster, k8s_nodes,
-                                                    forward_rules, forward_float_ip_id)
-
+                                                    forward_rules, forward_float_ip_id, cluster_info_db)
+            ClusterSQL.update_cluster(cluster_info_db)
             # 创建terraform变量
             tfvars = ClusterTFVarsObject(
                 id=cluster.id,
@@ -427,10 +430,10 @@ class InstanceService:
         try:
             # 写入集群的状态为正在缩容的状态，防止其他缩容的动作重复执行
             cluster_info_db = self.update_clusterinfo_todb(cluster_id, cluster_name)
-            ClusterSQL.update_cluster(cluster_info_db)
             # 写入节点的状态为正在deleting的状态
             # 写入instance的状态为正在deleting的状态
-            instance_dict = self.update_instances_todb(node_list)
+            instance_dict = self.update_instances_todb(node_list, cluster_info_db)
+            ClusterSQL.update_cluster(cluster_info_db)
             # InstanceSQL.update_instance_list(instance_db_list)
 
             # 调用celery_app项目下的work.py中的delete_cluster方法
@@ -588,9 +591,12 @@ class InstanceService:
         db_cluster.update_time = datetime.now()
         return db_cluster
 
-    def update_instances_todb(self, node_list):
+    def update_instances_todb(self, node_list, cluster_info_db):
         session = get_session()
         instance_info_list = []
+        cpu_total = 0
+        mem_total = 0
+        gpu_total = 0
         with session.begin():
             for node in node_list:
                 db_instance = session.get(InstanceDB, node.id)
@@ -612,6 +618,12 @@ class InstanceService:
                     "user": db_instance.user,
                     "password": db_instance.password,
                 }
+                cpu_total += db_instance.cpu
+                mem_total += db_instance.mem
+                gpu_total += db_instance.gpu
                 instance_info_list.append(instance_dict)
+        cluster_info_db.cpu -= cpu_total
+        cluster_info_db.mem -= mem_total
+        cluster_info_db.gpu -= gpu_total
         instance_list_json = json.dumps(instance_info_list)
         return instance_list_json
