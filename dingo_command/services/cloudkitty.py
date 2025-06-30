@@ -65,11 +65,17 @@ class CloudKittyService:
             # 2. 使用向量化处理数据
             excel_data = []
             for temp in filter(None, storage_dataFrames):  # 过滤None
+                project_id = temp.get("tenant_id")
+                resources = temp.get("resources", [])
+                filtered_resources = [
+                    item for item in resources
+                    if item.get('desc', {}).get('project_id') == project_id
+                ]
                 excel_data.append({
                     'Begin': temp.get("begin"),
                     'End': temp.get("end"),
-                    'Project ID': temp.get("tenant_id"),
-                    'Resources': json.dumps(temp["resources"]) if "resources" in temp else None
+                    'Project ID': project_id,
+                    'Resources': json.dumps(filtered_resources) if filtered_resources else None
                 })
             print(f"handle time: {(datetime.now() - start_time2).total_seconds():.2f}s, now time: {datetime.now()}")
             start_time = datetime.now()
