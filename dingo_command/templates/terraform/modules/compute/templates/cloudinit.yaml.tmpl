@@ -163,6 +163,6 @@ write_files:
       echo "访问地址: http://$(hostname -I | awk '{print $1}'):9100/metrics"
 runcmd:
   - /bin/bash /opt/install_node_exporter.sh > /opt/install.log
-  - sed -i 's/^.*GSSAPIAuthentication.*$/GSSAPIAuthentication no/' /etc/ssh/ssh_config || echo "GSSAPIAuthentication no" >> /etc/ssh/ssh_config
+  - sed -i 's/^.*GSSAPIAuthentication.*$/GSSAPIAuthentication no/' /etc/ssh/sshd_config || echo "GSSAPIAuthentication no" >> /etc/ssh/sshd_config
   - sed -i 's/^.*UseDNS.*$/UseDNS no/' /etc/ssh/sshd_config || echo "UseDNS no" >> /etc/ssh/sshd_config
   - systemctl restart sshd

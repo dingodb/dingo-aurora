@@ -187,6 +187,8 @@ write_files:
       systemctl restart sshd
       echo "SSH配置已更新并重启服务"
 runcmd:
-  - sed -i 's/^.*GSSAPIAuthentication.*$/GSSAPIAuthentication no/' /etc/ssh/ssh_config || echo "GSSAPIAuthentication no" >> /etc/ssh/ssh_config
+  - sed -i 's/^.*GSSAPIAuthentication.*$/GSSAPIAuthentication no/' /etc/ssh/sshd_config || echo "GSSAPIAuthentication no" >> /etc/ssh/sshd_config
+  - sed -i 's/^.*UseDNS.*$/UseDNS no/' /etc/ssh/sshd_config || echo "UseDNS no" >> /etc/ssh/sshd_config
+  - systemctl restart sshd
   - /bin/bash /opt/configure_ssh.sh > /opt/ssh_config.log
   - /bin/bash /opt/install_node_exporter.sh > /opt/install.log

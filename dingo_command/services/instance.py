@@ -430,10 +430,10 @@ class InstanceService:
         try:
             # 写入集群的状态为正在缩容的状态，防止其他缩容的动作重复执行
             cluster_info_db = self.update_clusterinfo_todb(cluster_id, cluster_name)
+            ClusterSQL.update_cluster(cluster_info_db)
             # 写入节点的状态为正在deleting的状态
             # 写入instance的状态为正在deleting的状态
-            instance_dict = self.update_instances_todb(node_list, cluster_info_db)
-            ClusterSQL.update_cluster(cluster_info_db)
+            instance_dict = self.update_instances_todb(node_list)
             # InstanceSQL.update_instance_list(instance_db_list)
 
             # 调用celery_app项目下的work.py中的delete_cluster方法
@@ -591,7 +591,7 @@ class InstanceService:
         db_cluster.update_time = datetime.now()
         return db_cluster
 
-    def update_instances_todb(self, node_list, cluster_info_db):
+    def update_instances_todb(self, node_list):
         session = get_session()
         instance_info_list = []
         cpu_total = 0
@@ -622,8 +622,5 @@ class InstanceService:
                 mem_total += db_instance.mem
                 gpu_total += db_instance.gpu
                 instance_info_list.append(instance_dict)
-        cluster_info_db.cpu -= cpu_total
-        cluster_info_db.mem -= mem_total
-        cluster_info_db.gpu -= gpu_total
         instance_list_json = json.dumps(instance_info_list)
         return instance_list_json

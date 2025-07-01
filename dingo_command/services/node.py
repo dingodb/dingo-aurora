@@ -107,7 +107,7 @@ class NodeService:
         db_cluster.update_time = datetime.now()
         return db_cluster
 
-    def update_nodes_todb(self, node_list, cluster_info_db):
+    def update_nodes_todb(self, node_list):
         node_info_list = []
         for node in node_list:
             node.status = "deleting"
@@ -131,9 +131,6 @@ class NodeService:
                 "user": node.user,
                 "password": node.password,
             }
-            cluster_info_db.cpu -= node.cpu
-            cluster_info_db.mem -= node.mem
-            cluster_info_db.gpu -= node.gpu
             node_info_list.append(node_dict)
         instance_list_json = json.dumps(node_info_list)
         return node_list, instance_list_json
@@ -525,12 +522,12 @@ class NodeService:
 
             # 写入集群的状态为正在缩容的状态，防止其他缩容的动作重复执行
             cluster_info_db = self.update_clusterinfo_todb(cluster_id, cluster_name)
+            ClusterSQL.update_cluster(cluster_info_db)
             # 写入节点的状态为正在deleting的状态
-            node_db_list, node_dict = self.update_nodes_todb(node_list, cluster_info_db)
+            node_db_list, node_dict = self.update_nodes_todb(node_list)
             NodeSQL.update_node_list(node_db_list)
             # 写入instance的状态为正在deleting的状态
             instance_dict = self.update_instances_todb(node_list)
-            ClusterSQL.update_cluster(cluster_info_db)
             # InstanceSQL.update_instance_list(instance_db_list)
             if node_err_list:
                 node_err_name_list = []
@@ -784,6 +781,9 @@ class NodeService:
                 "id": node.id,
                 "name": node.name,
                 "cluster_id": node.cluster_id,
+                "cpu": node.cpu,
+                "mem": node.mem,
+                "gpu": node.gpu,
                 "cluster_name": node.cluster_name,
                 "instance_id": node.instance_id,
                 "server_id": node.server_id,

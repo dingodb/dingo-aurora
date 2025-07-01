@@ -1853,10 +1853,16 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
                 instance.cluster_name = ""
         with session.begin():
             db_cluster = session.get(Cluster, (cluster_id, cluster_name))
-            # cpu_total, gpu_total, mem_total = get_node_info(node_list)
-            # db_cluster.cpu -= cpu_total
-            # db_cluster.gpu -= gpu_total
-            # db_cluster.mem -= mem_total
+            cpu_total, gpu_total, mem_total = get_node_info(node_list)
+            db_cluster.cpu -= cpu_total
+            db_cluster.gpu -= gpu_total
+            db_cluster.mem -= mem_total
+            if node_err_info:
+                node_err_list = json.loads(node_err_info.get("node_err_dict"))
+                cpu_total, gpu_total, mem_total = get_node_info(node_err_list)
+                db_cluster.cpu -= cpu_total
+                db_cluster.gpu -= gpu_total
+                db_cluster.mem -= mem_total
             query_params = {"cluster_id": cluster_id}
             count, nodes = NodeSQL.list_nodes(query_params, 1, -1, None, None)
             for node in nodes:
@@ -1936,10 +1942,10 @@ def delete_baremetal(self, cluster_id, cluster_name, instance_list, token):
                     session.delete(node)
         with session.begin():
             db_cluster = session.get(Cluster, (cluster_id, cluster_name))
-            # cpu_total, gpu_total, mem_total = get_node_info(instance_list)
-            # db_cluster.cpu -= cpu_total
-            # db_cluster.gpu -= gpu_total
-            # db_cluster.mem -= mem_total
+            cpu_total, gpu_total, mem_total = get_node_info(instance_list)
+            db_cluster.cpu -= cpu_total
+            db_cluster.gpu -= gpu_total
+            db_cluster.mem -= mem_total
             query_params = {"cluster_id": cluster_id}
             count, instances = InstanceSQL.list_instances(query_params, 1, -1, None, None)
             for ins in instances:
