@@ -133,17 +133,23 @@ async def edit_rating_module_modules(module_id: str, modules: RatingModules):
 
 @router.get("/cloudkitty/report/summary", summary="查询计费汇总",
             description="查询计费汇总")
-async def get_rating_report_summary(all_tenants: bool = Query(True, description="是否所有租户"),
+async def get_rating_report_summary(all_tenants: bool = Query(None, description="是否所有租户"),
                                         begin: str = Query(None, description="开始时间"),
                                         end: str = Query(None, description="结束时间时间"),
-                                        groupby: str = Query("None", description="分组类型")):
+                                        groupby: str = Query("None", description="分组类型"),
+                                        tenant_id: str = Query("None", description="租户ID"),
+                                    ):
     try:
         filters = {}
+        if all_tenants:
+            filters['all_tenants'] = all_tenants
         if begin:
             filters['begin'] = system_time_to_utc(unquote(begin))
         if end:
             filters['end'] = system_time_to_utc(unquote(end))
-        filters['all_tenants'] = all_tenants
+        if tenant_id:
+            filters['tenant_id'] = tenant_id
+
         filters['groupby'] = groupby
         return cloudkitty_service.get_rating_report_summary(filters)
     except Exception as e:
