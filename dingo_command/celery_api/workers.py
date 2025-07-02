@@ -1196,7 +1196,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         # Give execute permissions to the host file
         host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tf_dict["id"], "hosts")
         os.chmod(host_file, 0o755)  # rwxr-xr-x permission
-        master_ip, lb_ip, hosts_data = get_ips(cluster_tfvars, task_info, host_file, cluster_dir, scale)
+        master_ip, lb_ip, hosts_data = get_ips(cluster_tfvars, task_info, host_file, cluster_dir)
         # ensure /root/.ssh/known_hosts exists
         if os.path.exists("/root/.ssh/known_hosts"):
             for i in range(1, cluster_tfvars.number_of_k8s_masters + 1):
@@ -1381,7 +1381,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         raise
 
 
-def get_ips(cluster_tfvars, task_info, host_file, cluster_dir, scale):
+def get_ips(cluster_tfvars, task_info, host_file, cluster_dir):
     res = subprocess.run(["python3", host_file, "--root", cluster_dir, "--list"], capture_output=True, text=True)
     if res.returncode != 0:
         # 更新数据库的状态为failed
@@ -1680,6 +1680,57 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
                                       msg=TaskService.TaskRemoveNodeMessage.remove_file_dirs.name)
             TaskSQL.insert(component_task)
         else:
+            host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_id, "hosts")
+            os.chmod(host_file, 0o755)
+            output_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory",
+                                       cluster_id, "terraform", "output.tfvars.json")
+            with open(output_file) as f:
+                content = json.loads(f.read())
+            cluster_tfvars = ClusterTFVarsObject()
+            cluster_tfvars.cluster_name = cluster_name
+            cluster_tfvars.number_of_k8s_masters = content.get("number_of_k8s_masters", 1)
+            cluster_tfvars.ssh_user = content.get("ssh_user")
+            cluster_tfvars.password = content.get("password")
+            print("cluster_tfvars is:", cluster_tfvars)
+            master_ip, lb_ip, hosts_data = get_ips(cluster_tfvars, task_info, host_file, cluster_dir)
+            # ensure /root/.ssh/known_hosts exists
+            if os.path.exists("/root/.ssh/known_hosts"):
+                for i in range(1, cluster_tfvars.number_of_k8s_masters + 1):
+                    print(f"delete host from know_hosts  {task_id}")
+                    master_node_name = f"{cluster_name}-k8s-master-{i}"
+                    tmp_ip = hosts_data["_meta"]["hostvars"][master_node_name]["ansible_host"]
+                    cmd = f'ssh-keygen -f "/root/.ssh/known_hosts" -R "{tmp_ip}"'
+                    result = subprocess.run(cmd, shell=True, capture_output=True)
+                    if result.returncode != 0:
+                        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                        task_info.state = "failed"
+                        task_info.detail = "Ansible kubernetes deployment failed, configure ssh-keygen error"
+                        update_task_state(task_info)
+                        raise Exception("Ansible kubernetes deployment failed, configure ssh-keygen error")
+            if cluster_tfvars.password != "":
+                master_node_name = f"{cluster_tfvars.cluster_name}-k8s-master-1"
+                ssh_port = hosts_data["_meta"]["hostvars"][master_node_name].get("ansible_port", 22)
+                cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p {ssh_port} '
+                       f'{cluster_tfvars.ssh_user}@{master_ip}')
+                retry_count = 0
+                max_retries = 30
+                while retry_count < max_retries:
+                    result = subprocess.run(cmd, shell=True, capture_output=True)
+                    if result.returncode == 0:
+                        break
+                    else:
+                        retry_count += 1
+                        if retry_count < max_retries:
+                            print(f"sshpass failed, retry {retry_count}/{max_retries} after 5s...")
+                            time.sleep(5)
+                if result.returncode != 0:
+                    task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+                    task_info.state = "failed"
+                    task_info.detail = "Ansible kubernetes deployment failed, configure sshpass error"
+                    update_task_state(task_info)
+                    print(f"sshpass failed after {max_retries} retries: {result.stderr}")
+                    raise Exception("Ansible kubernetes deployment failed, configure sshpass error")
+
             extravars["skip_confirmation"] = "true"
             os.environ['CURRENT_CLUSTER_DIR'] = cluster_dir
             # os.environ['OS_CLOUD'] = node.get("region_name")

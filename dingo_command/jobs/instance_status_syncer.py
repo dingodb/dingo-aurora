@@ -53,7 +53,7 @@ def check_instance_status():
                     #         server.get("status") == "ACTIVE" and instance.status != "running"):
                     LOG.info(f"Updating instance {instance.id} status from {instance.status} to "
                              f"{server.get('status')}")
-                    if server.get("status") == "ERROR" and instance.status != "error" :
+                    if server.get("status") == "ERROR" and instance.status not in ("error", "deleting"):
                         instance.status = "error"
                         instance.status_msg = server.get("fault").get("details")
                     elif server.get("status") == "ACTIVE" and instance.status not in  ("deleting", "running"):
@@ -100,7 +100,7 @@ def check_node_status():
                     #         server.get("status") != "ACTIVE" and node.status == "running" or
                     #         server.get("status") == "ACTIVE" and node.status != "running"):
                     LOG.info(f"Updating node {node.id} status from {node.status} to {server.get('status')}")
-                    if server.get("status") == "ERROR" and node.status != "error" :
+                    if server.get("status") == "ERROR" and node.status not in ("error", "deleting"):
                         node.status = "error"
                         node.status_msg = server.get("fault").get("details")
                     elif server.get("status") == "ACTIVE" and node.status not in  ("deleting", "running"):

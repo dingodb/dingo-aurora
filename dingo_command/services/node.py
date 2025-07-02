@@ -776,33 +776,39 @@ class NodeService:
         node_info_list = []
         instance_info_list = []
         session = get_session()
-        for node in node_err_list:
-            node_dict = {
-                "id": node.id,
-                "name": node.name,
-                "cluster_id": node.cluster_id,
-                "cpu": node.cpu,
-                "mem": node.mem,
-                "gpu": node.gpu,
-                "cluster_name": node.cluster_name,
-                "instance_id": node.instance_id,
-                "server_id": node.server_id,
-                "admin_address": node.admin_address,
-                "status": node.status
-            }
-            db_instance = session.get(InstanceDB, node.instance_id)
-            instance_dict = {
-                "id": db_instance.id,
-                "name": db_instance.name,
-                "cluster_id": db_instance.cluster_id,
-                "cluster_name": db_instance.cluster_name,
-                "server_id": db_instance.server_id,
-                "ip_address": db_instance.ip_address,
-                "status": db_instance.status,
-                "node_type": db_instance.node_type,
-            }
-            instance_info_list.append(instance_dict)
-            node_info_list.append(node_dict)
+        with session.begin():
+            for node in node_err_list:
+                node.status = "deleting"
+                node.update_time = datetime.now()
+                node_dict = {
+                    "id": node.id,
+                    "name": node.name,
+                    "cluster_id": node.cluster_id,
+                    "cpu": node.cpu,
+                    "mem": node.mem,
+                    "gpu": node.gpu,
+                    "cluster_name": node.cluster_name,
+                    "instance_id": node.instance_id,
+                    "server_id": node.server_id,
+                    "admin_address": node.admin_address,
+                    "status": node.status
+                }
+                db_instance = session.get(InstanceDB, node.instance_id)
+                db_instance.status = "deleting"
+                db_instance.update_time = datetime.now()
+                instance_dict = {
+                    "id": db_instance.id,
+                    "name": db_instance.name,
+                    "cluster_id": db_instance.cluster_id,
+                    "cluster_name": db_instance.cluster_name,
+                    "server_id": db_instance.server_id,
+                    "ip_address": db_instance.ip_address,
+                    "status": db_instance.status,
+                    "node_type": db_instance.node_type,
+                }
+                instance_info_list.append(instance_dict)
+                node_info_list.append(node_dict)
+        NodeSQL.update_node_list(node_err_list)
         node_err_list_json = json.dumps(node_info_list)
         instance_err_list_json = json.dumps(instance_info_list)
         return node_err_list_json, instance_err_list_json
