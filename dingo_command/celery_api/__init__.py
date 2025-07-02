@@ -26,6 +26,8 @@ default_opts = [
     cfg.IntOpt('task_timeout', default=3600, help='cluster-router'),
     cfg.IntOpt('soft_task_timeout', default=3600, help='cluster-router'),
     cfg.StrOpt('pushgateway_url', default="", help='the cluster router id'),
+    cfg.StrOpt('pushgateway_user', default="", help='the cluster router id'),
+    cfg.StrOpt('pushgateway_pass', default="", help='the cluster router id'),
     cfg.ListOpt('customize_hosts', default=[], help='the cluster router id'),
     cfg.ListOpt('nameservers', default=[], help='the cluster router id'),
 ]

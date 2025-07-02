@@ -19,7 +19,10 @@ data "cloudinit_config" "master-cloudinit" {
       netplan_critical_dhcp_interface = "",
       ssh_user = var.ssh_user,
       password = var.password,
-      pushgateway_url = var.pushgateway_url
+      pushgateway_url = var.pushgateway_url,
+      pushgateway_user = var.pushgateway_user,
+      pushgateway_pass = var.pushgateway_pass,
+      etcd_volume_type = var.etcd_volume_type
     })
   }
 }
@@ -38,11 +41,17 @@ resource "random_integer" "master_port" {
   min   = 0
   max   = 40000
 }
-
+resource "random_string" "secgroup_suffix" {
+  length  = 4
+  special = false
+  upper   = true
+  lower   = true
+  numeric = true
+}
 # create key pair
 resource "openstack_compute_keypair_v2" "key_pair" {
   count      = (var.public_key_path != null && var.public_key_path != "") ? 1 : 0
-  name       = var.cluster_name
+  name       = "${var.cluster_name}-${random_string.secgroup_suffix.result}"
   public_key = var.public_key_path != "" ? chomp(file(var.public_key_path)) : ""
 }
 
@@ -54,7 +63,7 @@ resource "openstack_compute_keypair_v2" "key_pair" {
 #}
 
 resource "openstack_networking_secgroup_v2" "secgroup" {
-  name        = var.cluster_name
+  name        = var.cluster_name-random_string.secgroup_suffix.result
   description = "cluster default security group"
   tenant_id = var.tenant_id
 }
@@ -434,6 +443,8 @@ data "cloudinit_config" "nodes_cloudinit" {
       ssh_user = var.ssh_user,
       password = var.password,
       pushgateway_url = var.pushgateway_url,
+      pushgateway_user = var.pushgateway_user,
+      pushgateway_pass = var.pushgateway_pass,
       az = each.value.az
     })
   }

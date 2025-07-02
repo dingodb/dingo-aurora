@@ -53,12 +53,14 @@ disable_root: false
 #  trusted: |
 #      -----BEGIN CERTIFICATE-----
 %{~ endif }
+%{~ if etcd_volume_type == "lvm-cluster" }
 mounts:
   - [ /dev/vdb, /var/lib/etcd, xfs, defaults, 0, 2 ]
 bootcmd:
   - mkdir -p /var/lib/etcd
   - mkfs.xfs /dev/vdb
   - mount /dev/vdb /var/lib/etcd
+%{~ endif }
 
 write_files:
   - path: /opt/install_node_exporter.sh
@@ -130,7 +132,7 @@ write_files:
 
       [Service]
       Type=oneshot
-      ExecStart=/bin/bash -c '/usr/bin/curl -s http://localhost:9100/metrics | /usr/bin/curl -u admin:rGgKjrSHsTSGgNPZohWIRggEcrHIoqcnHrKsEnmE --data-binary @- "${pushgateway_url}/metrics/job/vm/instance/%H"'
+      ExecStart=/bin/bash -c '/usr/bin/curl -s http://localhost:9100/metrics | /usr/bin/curl -u ${pushgateway_user}:${pushgateway_pass}  --data-binary @- "${pushgateway_url}/metrics/job/vm/instance/%H"'
       Restart=on-failure
       EOF
 

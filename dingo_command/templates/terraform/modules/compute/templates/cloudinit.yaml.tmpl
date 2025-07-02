@@ -64,7 +64,7 @@ write_files:
     owner: root:root
     content: |
       #!/bin/bash
-
+      
       # Node Exporter 安装脚本
       set -e
 
@@ -76,26 +76,26 @@ write_files:
       JOB_FILE="/etc/systemd/system/pushgateway-job.service"
       TIMER_FILE="/etc/systemd/system/pushgateway-job.timer"
 
-
-      mkdir -p /opt/node_exporter
-
-      # 下载并解压node_exporter
-      echo "下载 node_exporter v1.9.1..."
-      wget -q --show-progress http://nexus.dev01.zetyun.cn:8081/repository/raw/dingostack/dingo-command/node_exporter-1.9.1.linux-amd64.tar.gz -O /tmp/node_exporter.tar.gz
-      tar xzf /tmp/node_exporter.tar.gz -C /tmp/
-
-      # 复制文件到安装目录
-      cp "/tmp/node_exporter-1.9.1.linux-amd64/node_exporter" "/opt/node_exporter"
-      chown -R root:root /opt/node_exporter
-      chmod +x /opt/node_exporter/node_exporter
-
-      # 清理临时文件
-      echo "清理临时文件..."
-      rm -rf /tmp/node_exporter.tar.gz /tmp/node_exporter-1.9.1.linux-amd64
-
       # 创建系统服务
-      echo "创建系统服务..."
-      cat > /etc/systemd/system/node_exporter.service <<EOF
+      if [ ! -f /etc/systemd/system/node_exporter.service ]; then
+        mkdir -p /opt/node_exporter
+
+        # 下载并解压node_exporter
+        echo "下载 node_exporter v1.9.1..."
+        wget -q --show-progress http://nexus.dev01.zetyun.cn:8081/repository/raw/dingostack/dingo-command/node_exporter-1.9.1.linux-amd64.tar.gz -O /tmp/node_exporter.tar.gz
+        tar xzf /tmp/node_exporter.tar.gz -C /tmp/
+
+        # 复制文件到安装目录
+        cp "/tmp/node_exporter-1.9.1.linux-amd64/node_exporter" "/opt/node_exporter"
+        chown -R root:root /opt/node_exporter
+        chmod +x /opt/node_exporter/node_exporter
+
+        # 清理临时文件
+        echo "清理临时文件..."
+        rm -rf /tmp/node_exporter.tar.gz /tmp/node_exporter-1.9.1.linux-amd64
+
+        echo "创建系统服务..."
+        cat > /etc/systemd/system/node_exporter.service <<EOF
       [Unit]
       Description=Node Exporter
       After=network.target
@@ -108,6 +108,7 @@ write_files:
       [Install]
       WantedBy=multi-user.target
       EOF
+      fi
 
       # 重新加载systemd并启动服务
       echo "重新加载systemd配置..."
@@ -121,22 +122,20 @@ write_files:
       systemctl status node_exporter --no-pager
 
       # 安装定时服务
-      cat > /etc/systemd/system/pushgateway-job.service <<EOF
+      if [ -f /etc/systemd/system/pushgateway-job.service ]; then
+        sed -i 's#pushgateway:9092#${pushgateway_url}#g' /etc/systemd/system/pushgateway-job.service
+      else
+        cat > /etc/systemd/system/pushgateway-job.service <<EOF
       [Unit]
       Description=Push metrics to Pushgateway
       After=network.target
 
       [Service]
       Type=oneshot
-      %{ if az == "" ~}
-    ExecStart=/bin/bash -c "/usr/bin/curl -s http://localhost:9100/metrics | /usr/bin/curl -u admin:rGgKjrSHsTSGgNPZohWIRggEcrHIoqcnHrKsEnmE --data-binary @- '${pushgateway_url}/metrics/job/baremetal/instance/%H'"
-      %{ else ~}
-    ExecStart=/bin/bash -c "/usr/bin/curl -s http://localhost:9100/metrics | /usr/bin/curl -u admin:rGgKjrSHsTSGgNPZohWIRggEcrHIoqcnHrKsEnmE --data-binary @- '${pushgateway_url}/metrics/job/vm/instance/%H'"
-      %{ endif ~}
+      ExecStart=/bin/bash -c '/usr/bin/curl -s http://localhost:9100/metrics | /usr/bin/curl -u ${pushgateway_user}:${pushgateway_pass} --data-binary @- "\${pushgateway_url}/metrics/job/vm/instance/%H"'
       Restart=on-failure
       EOF
-
-
+      fi
 
       cat > /etc/systemd/system/pushgateway-job.timer <<EOF
       [Unit]
@@ -151,13 +150,10 @@ write_files:
       WantedBy=timers.target
       EOF
 
-
       systemctl daemon-reload
       systemctl start pushgateway-job.service 
       systemctl start pushgateway-job.timer
       systemctl enable pushgateway-job.timer
-
-
 
       echo -e "\n安装完成！node_exporter 已成功安装并运行。"
       echo "访问地址: http://$(hostname -I | awk '{print $1}'):9100/metrics"

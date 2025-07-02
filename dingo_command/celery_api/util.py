@@ -3,7 +3,8 @@ from dingo_command.db.models.cluster.sql import TaskSQL
 
 def update_task_state(task:Taskinfo):
     # 判空
-    count,data = TaskSQL.list(task.task_id, task.msg)
+    query_params = {"task_id": task.task_id}
+    count, data = TaskSQL.list(query_params)
     if count == 0 or data == []:
         # 如果没有找到对应的任务，则插入
         TaskSQL.insert(task)

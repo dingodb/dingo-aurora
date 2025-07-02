@@ -59,8 +59,21 @@ def check_instance_status():
                     elif server.get("status") == "ACTIVE" and instance.status not in  ("deleting", "running"):
                         instance.status = "running"
                         instance.status_msg = ""
-                    elif server.get("status") != "ACTIVE" and instance.status == "running":
-                        instance.status = server.get("status")
+                    elif server.get("status") == "BUILD" and instance.status not in ("creating", "deleting"):
+                        instance.status = "creating"
+                        instance.status_msg = ""
+                    elif server.get("status") == "PAUSED" and instance.status not in ("paused", "deleting"):
+                        instance.status = "paused"
+                        instance.status_msg = ""
+                    elif server.get("status") == "SUSPENDED" and instance.status not in ("suspended", "deleting"):
+                        instance.status = "suspended"
+                        instance.status_msg = ""
+                    elif server.get("status") == "SHUTOFF" and instance.status not in ("shutoff", "deleting"):
+                        instance.status = "shutoff"
+                        instance.status_msg = ""
+                    elif (server.get("status") == "SHELVED_OFFLOADED" and instance.status 
+                          not in ("shelved_offloaded", "deleting")):
+                        instance.status = "shelved_offloaded"
                         instance.status_msg = ""
                     else:
                         continue
@@ -103,11 +116,24 @@ def check_node_status():
                     if server.get("status") == "ERROR" and node.status not in ("error", "deleting"):
                         node.status = "error"
                         node.status_msg = server.get("fault").get("details")
-                    elif server.get("status") == "ACTIVE" and node.status not in  ("deleting", "running"):
+                    elif server.get("status") == "ACTIVE" and node.status not in ("deleting", "running"):
                         node.status = "running"
                         node.status_msg = ""
-                    elif server.get("status") != "ACTIVE" and node.status == "running":
-                        node.status = server.get("status")
+                    elif server.get("status") == "BUILD" and node.status not in ("creating", "deleting"):
+                        node.status = "creating"
+                        node.status_msg = ""
+                    elif server.get("status") == "PAUSED" and node.status not in ("paused", "deleting"):
+                        node.status = "paused"
+                        node.status_msg = ""
+                    elif server.get("status") == "SUSPENDED" and node.status not in ("suspended", "deleting"):
+                        node.status = "suspended"
+                        node.status_msg = ""
+                    elif server.get("status") == "SHUTOFF" and node.status not in ("shutoff", "deleting"):
+                        node.status = "shutoff"
+                        node.status_msg = ""
+                    elif (server.get("status") == "SHELVED_OFFLOADED" and node.status
+                          not in ("shelved_offloaded", "deleting")):
+                        node.status = "shelved_offloaded"
                         node.status_msg = ""
                     else:
                         continue

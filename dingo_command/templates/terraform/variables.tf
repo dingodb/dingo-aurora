@@ -514,3 +514,15 @@ variable "pushgateway_url" {
   type        = string
   default     = ""
 }
+
+variable "pushgateway_user" {
+  description = "URL of the Pushgateway for monitoring"
+  type        = string
+  default     = ""
+}
+
+variable "pushgateway_pass" {
+  description = "URL of the Pushgateway for monitoring"
+  type        = string
+  default     = ""
+}
