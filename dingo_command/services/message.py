@@ -1,4 +1,5 @@
 # 消息的service层
+import re
 import uuid
 import json
 from enum import Enum
@@ -9,7 +10,7 @@ from datetime import datetime
 
 from dingo_command.db.models.message.models import ExternalMessage
 from dingo_command.db.models.message.sql import MessageSQL
-from dingo_command.services.aliyundingodb import aliyun_dingodb_utils
+from dingo_command.services.aliyundingodb import aliyun_dingodb_utils, aliyun_dingodb_read_utils
 from dingo_command.services.custom_exception import Fail
 from dingo_command.services.rabbitmqconfig import RabbitMqConfigService
 from dingo_command.services.redis_connection import redis_connection, RedisLock
@@ -370,3 +371,30 @@ class MessageService:
             import traceback
             traceback.print_exc()
             raise e
+
+    def list_messages_from_dingodb_by_sql(self, sql):
+        try:
+            # 判空
+            if not sql:
+                raise Fail("sql is empty", error_message="数据库查询语句不能为空")
+            # sql注入检测
+            self.validate_sql(sql)
+            # 获取数据
+            return aliyun_dingodb_read_utils.list_messages_by_sql(sql)
+        except Fail as e:
+            raise e
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+
+    # 进行sql检测
+    def validate_sql(self, sql: str):
+        # 只允许SELECT查询
+        if not re.match(r'^SELECT\s.+', sql, re.IGNORECASE):
+            raise Fail("sql is only select", error_message="数据库查询语句只允许查询操作")
+        # 禁止危险关键词
+        forbidden_keywords = ['DROP ', 'DELETE ', 'UPDATE ', 'INSERT ', 'ALTER ']
+        for keyword in forbidden_keywords:
+            if keyword in sql.upper():
+                raise Fail("sql is only select", error_message="数据库查询语句只允许查询操作")

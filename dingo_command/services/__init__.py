@@ -36,7 +36,9 @@ aliyun_dingodb_opts = [
     cfg.StrOpt('host', default=None, help='the aliyun dingodb host'),
     cfg.IntOpt('port', default=9921, help='the aliyun dingodb port'),
     cfg.StrOpt('user', default=None, help='the aliyun dingodb user'),
+    cfg.StrOpt('read_user', default=None, help='the aliyun dingodb read user'),
     cfg.StrOpt('password', default=None, help='the aliyun dingodb password'),
+    cfg.StrOpt('read_password', default=None, help='the aliyun dingodb read user password'),
     cfg.StrOpt('report_database', default=None, help='the aliyun dingodb report database'),
 ]
 

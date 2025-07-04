@@ -104,3 +104,16 @@ class MySqlUtils:
         except Exception as e:
             print(f"Error listing messages: {e}")
             raise e
+
+    def list_messages_by_sql(self, sql):
+        try:
+            with self.connect() as connection:
+                with connection.cursor() as cursor:
+                    print(f"Executing SQL: {sql} ")
+                    cursor.execute(sql, None)
+                    columns = [col[0] for col in cursor.description]
+                    data = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            return data
+        except Exception as e:
+            print(f"Error listing messages: {e}")
+            raise e
