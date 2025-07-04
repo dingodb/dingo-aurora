@@ -63,7 +63,7 @@ resource "openstack_compute_keypair_v2" "key_pair" {
 #}
 
 resource "openstack_networking_secgroup_v2" "secgroup" {
-  name        = var.cluster_name-random_string.secgroup_suffix.result
+  name        = "${var.cluster_name}-${random_string.secgroup_suffix.result}"
   description = "cluster default security group"
   tenant_id = var.tenant_id
 }

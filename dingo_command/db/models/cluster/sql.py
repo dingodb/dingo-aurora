@@ -14,7 +14,7 @@ from enum import Enum
 #链接数据库，可以使用配置文件进行定义
 # engine = create_engine("mysql+pymysql://root:HworLIIDvmTRsPfQauNskuJF8PcoTuULfu3dEHFg@10.220.56.254:3306/dingoops?charset=utf8mb3", echo=True)
 # 资产排序字段字典
-cluster_dir_dic= {"asset_type":Cluster.type,"create_time":Cluster.create_time,
+cluster_dir_dic= {"type":Cluster.type,"create_time":Cluster.create_time,
               "name":Cluster.name,"status":Cluster.status,"region_name":Cluster.region_name}
 class ClusterSQL:
 

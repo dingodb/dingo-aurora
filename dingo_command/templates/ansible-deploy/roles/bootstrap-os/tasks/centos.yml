@@ -4,17 +4,17 @@
     gather_subset: '!all'
     filter: ansible_distribution_*version
 
-- name: Add proxy to yum.conf or dnf.conf if http_proxy is defined
-  community.general.ini_file:
-    path: "{{ ((ansible_distribution_major_version | int) < 8) | ternary('/etc/yum.conf', '/etc/dnf/dnf.conf') }}"
-    section: main
-    option: proxy
-    value: "{{ http_proxy | default(omit) }}"
-    state: "{{ http_proxy | default(False) | ternary('present', 'absent') }}"
-    no_extra_spaces: true
-    mode: "0644"
-  become: true
-  when: not skip_http_proxy_on_os_packages
+# - name: Add proxy to yum.conf or dnf.conf if http_proxy is defined
+#   community.general.ini_file:
+#     path: "{{ ((ansible_distribution_major_version | int) < 8) | ternary('/etc/yum.conf', '/etc/dnf/dnf.conf') }}"
+#     section: main
+#     option: proxy
+#     value: "{{ http_proxy | default(omit) }}"
+#     state: "{{ http_proxy | default(False) | ternary('present', 'absent') }}"
+#     no_extra_spaces: true
+#     mode: "0644"
+#   become: true
+#   when: not skip_http_proxy_on_os_packages
 
 # For Oracle Linux install public repo
 - name: Download Oracle Linux public yum repo
@@ -44,14 +44,14 @@
     - '''ID="ol"'' in os_release.stdout_lines'
     - (ansible_distribution_version | float) < 7.6
 
-- name: Install EPEL for Oracle Linux repo package
-  package:
-    name: "oracle-epel-release-el{{ ansible_distribution_major_version }}"
-    state: present
-  when:
-    - use_oracle_public_repo | default(true)
-    - '''ID="ol"'' in os_release.stdout_lines'
-    - (ansible_distribution_version | float) >= 7.6
+# - name: Install EPEL for Oracle Linux repo package
+#   package:
+#     name: "oracle-epel-release-el{{ ansible_distribution_major_version }}"
+#     state: present
+#   when:
+#     - use_oracle_public_repo | default(true)
+#     - '''ID="ol"'' in os_release.stdout_lines'
+#     - (ansible_distribution_version | float) >= 7.6
 
 - name: Enable Oracle Linux repo
   community.general.ini_file:
@@ -111,19 +111,15 @@
 
 # libselinux-python is required on SELinux enabled hosts
 # See https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html#managed-node-requirements
-- name: Install libselinux python package
-  package:
-    name: "{{ ((ansible_distribution_major_version | int) < 8) | ternary('libselinux-python', 'python3-libselinux') }}"
-    state: present
-  become: true
+
 
 # iproute is required for networking related facts gathering
 # See https://docs.ansible.com/ansible/latest/playbook_guide/playbooks_vars_facts.html#package-requirements-for-fact-gathering
 # Note: It is not recommended way, but since the tasks execution order, put it here is the simplest way so far. We can move it to a proper place later.
 # TODO: move this to roles/kubernetes/preinstall/vars/main.yml -> pkgs variables
 # Currently not possible because the collect the network facts before that step, needs reordering of the exec flow.
-- name: Ensure iproute is installed
-  package:
-    name: iproute
-    state: present
-  become: true
+# - name: Ensure iproute is installed
+#   package:
+#     name: iproute
+#     state: present
+#   become: true

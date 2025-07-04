@@ -191,6 +191,6 @@ write_files:
 runcmd:
   - sed -i 's/^.*GSSAPIAuthentication.*$/GSSAPIAuthentication no/' /etc/ssh/sshd_config || echo "GSSAPIAuthentication no" >> /etc/ssh/sshd_config
   - sed -i 's/^.*UseDNS.*$/UseDNS no/' /etc/ssh/sshd_config || echo "UseDNS no" >> /etc/ssh/sshd_config
-  - systemctl restart sshd
+  - sed -i 's/^.*GSSAPIAuthentication.*$/GSSAPIAuthentication no/' /etc/ssh/sshd_config || echo "GSSAPIAuthentication no" >> /etc/ssh/sshd_config.d/50-redhat.conf
   - /bin/bash /opt/configure_ssh.sh > /opt/ssh_config.log
   - /bin/bash /opt/install_node_exporter.sh > /opt/install.log
