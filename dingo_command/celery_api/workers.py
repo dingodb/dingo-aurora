@@ -322,12 +322,6 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
             db_cluster.admin_network_name = network_name
             db_cluster.admin_network_cidr = cluster.subnet_cidr
             db_cluster.bus_network_name = bus_network_name
-            instance_names = get_cluster_node_names(task_info, host_file, cluster_dir)
-            instances_gpu_count_info = AssetResourceRelationSQL.query_instances_gpu_count_info(instance_names)
-            if instances_gpu_count_info is not None:
-                for gpu_count_info in instances_gpu_count_info:
-                    if gpu_count_info.resource_gpu_count is not None:
-                        db_cluster.gpu += gpu_count_info.resource_gpu_count
 
             if bussubnet_id != "":
                 neutron_api = neutron.API()
@@ -1365,6 +1359,12 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         if not scale:
             update_cluster_node_count(len([node for node in node_list if node.get("role") != "master"]), c)
         c.status_msg = ""
+        instance_names = get_cluster_node_names(task_info, host_file, cluster_dir)
+        instances_gpu_count_info = AssetResourceRelationSQL.query_instances_gpu_count_info(instance_names)
+        if instances_gpu_count_info is not None:
+            for gpu_count_info in instances_gpu_count_info:
+                if gpu_count_info.resource_gpu_count is not None:
+                    c.gpu = gpu_count_info.resource_gpu_count + c.gpu
         ClusterSQL.update_cluster(c)
 
     except SoftTimeLimitExceeded:

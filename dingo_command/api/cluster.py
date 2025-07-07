@@ -46,6 +46,7 @@ async def create_cluster(cluster_object:ClusterObject, token: str = Depends(get_
 @router.get("/cluster/list", summary="k8s集群列表", description="k8s集群列表")
 async def list_cluster(id:str = Query(None, description="集群id"),
         name:str = Query(None, description="集群名称"),
+        status:str = Query(None, description="集群状态"),
         project_id: str = Query(None, description="项目id"),
         type:str = Query(None, description="集群类型"),
         page: int = Query(1, description="页码"),
@@ -64,6 +65,8 @@ async def list_cluster(id:str = Query(None, description="集群id"),
             query_params['type'] = type
         if id:
             query_params['id'] = id
+        if status:
+            query_params['status'] = status
 
         result = cluster_service.list_clusters(query_params, page,page_size, sort_keys,sort_dirs)
         return result

@@ -1,0 +1,51 @@
+FROM harbor.zetyun.cn/k8s/ubuntu:22.04
+
+ENV LANG C.UTF-8
+ENV LC_ALL C.UTF-8
+
+RUN echo 'Acquire::http::Proxy "http://10.220.70.88:1088";' > /etc/apt/apt.conf.d/proxy.conf \
+    && echo 'Acquire::https::Proxy "http://10.220.70.88:1088";' >> /etc/apt/apt.conf.d/proxy.conf
+
+RUN apt-get update -y && apt-get install -y --no-install-recommends apt-utils \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    gcc traceroute lsof iputils-ping vim wget curl locales-all\
+    python3-pip cmake build-essential python3-dev libxml2-dev supervisor gnupg software-properties-common sshpass
+RUN wget -O - https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list \
+    && apt-get update -y \
+    && apt-get install -y terraform
+
+COPY . /opt/dingo-aurora
+
+
+#ENV https_proxy=172.20.3.88:1088
+#ENV http_proxy=172.20.3.88:1088
+
+RUN pip install -r /opt/dingo-aurora/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+
+RUN apt-get clean \
+    && rm -rf ~/.cache/pip \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /etc/dingo-command /var/log/dingo-command /var/lib/dingo-command /root/.terraform.d/plugin-cache /etc/ansible \
+    && ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N ""
+
+COPY ./etc/.terraformrc /root/.terraformrc
+COPY ./etc/ansible.cfg /etc/ansible/ansible.cfg
+COPY ./etc/gunicorn.py /etc/dingo-command/gunicorn.py
+COPY ./etc/dingo-command.conf /etc/dingo-command/dingo-command.conf
+COPY ./etc/supervisord.conf /etc/dingo-command/supervisord.conf
+
+# 检查并创建中文字体目录
+RUN mkdir -p /usr/share/fonts/chinese && chmod 755 /usr/share/fonts/chinese
+COPY ./share/fonts/simsun.ttc /usr/share/fonts/chinese/simsun.ttc
+RUN chmod 644 /usr/share/fonts/chinese/simsun.ttc
+
+COPY ./docker/start_service.sh /usr/local/bin/start_service.sh
+RUN chmod +x /usr/local/bin/start_service.sh
+
+WORKDIR /opt/dingo-aurora
+
+
+EXPOSE 8887
+CMD ["/bin/bash", "/usr/local/bin/start_service.sh"]

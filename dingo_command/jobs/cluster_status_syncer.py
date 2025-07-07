@@ -5,10 +5,10 @@ from datetime import datetime, timedelta
 import time
 import os
 import tempfile
-from kubernetes import client, config
-from kubernetes.client.rest import ApiException
+
 from dingo_command.db.models.cluster.sql import ClusterSQL
 from dingo_command.db.models.node.sql import NodeSQL
+from dingo_command.db.models.asset_resoure_relation.sql import AssetResourceRelationSQL
 from dingo_command.db.models.instance.sql import InstanceSQL
 from oslo_log import log
 
@@ -24,7 +24,7 @@ run_time_30s = datetime.now() + timedelta(seconds=30)  # 任务将在30秒后执
 def start():
     #scheduler.add_job(fetch_bigscreen_metrics, 'interval', seconds=5, next_run_time=datetime.now())
     # 添加检查集群状态的定时任务，每60秒执行一次
-    scheduler.add_job(check_cluster_status, 'interval', seconds=60, next_run_time=datetime.now())
+    scheduler.add_job(check_cluster_status, 'interval', seconds=120, next_run_time=datetime.now())
     scheduler.start()
 
 def check_cluster_status():
@@ -68,12 +68,28 @@ def check_cluster_status():
                 
                 # 确定集群的新状态
                 new_status = determine_cluster_status(node_statuses, instance_statuses, cluster.status)
-                
-                # 如果状态发生变化，更新集群状态
-                if new_status != cluster.status:
-                    LOG.info(f"Updating cluster {cluster.id} status from {cluster.status} to {new_status}")
-                    cluster.status = new_status
-                    ClusterSQL.update_cluster(cluster)
+                #重新计算gpu数量
+                instance_names = []
+                gpus = 0
+                for instance in instances:
+                    if instance.gpu is not None and instance.gpu_count > 0:
+                        gpus += instance.gpu
+                        continue
+                    if instance.gpu is not None and instance.gpu_count > 0:
+                        gpus += instance.gpu_count
+                        continue
+                    if instance.type == "baremental":
+                        instance_names.append(instance.name)
+                        
+                instances_gpu_count_info = AssetResourceRelationSQL.query_instances_gpu_count_info(instance_names)
+                if instances_gpu_count_info is not None:
+                    for gpu_count_info in instances_gpu_count_info:
+                        if gpu_count_info.resource_gpu_count is not None:
+                            gpus = gpu_count_info.resource_gpu_count + gpus
+                cluster.gpu = gpus
+                LOG.info(f"Updating cluster {cluster.id}")
+                #cluster.status = new_status
+                ClusterSQL.update_cluster(cluster)
                     
                     # 这里可以添加通知或其他后续处理逻辑
                     
@@ -139,14 +155,6 @@ def determine_cluster_status(node_statuses, instance_statuses, current_status):
     # 如果全部都是运行状态
     if all(status == 'running' for status in node_statuses) and all(status == 'running' for status in instance_statuses):
         return 'running'
-        
-    # 如果有创建中的状态
-    if 'creating' in node_statuses or 'creating' in instance_statuses:
-        return 'creating'
-        
-    # 如果有删除中的状态
-    if 'deleting' in node_statuses or 'deleting' in instance_statuses:
-        return 'deleting'
     
     # 默认保持当前状态
     return current_status

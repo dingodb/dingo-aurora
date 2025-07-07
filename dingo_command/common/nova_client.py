@@ -122,7 +122,7 @@ class NovaClient:
         endpoint = self.get_service_endpoint('image')
         response = self.session.get(f"{endpoint}/v2/images/"+ image_id)
         if response.status_code != 200:
-            raise Exception(f"nova规格请求失败: {response.text}")
+            raise Exception(f"nova镜像请求失败: {response.text}")
         return response.json()
 
     # 根据image_name查询规格
