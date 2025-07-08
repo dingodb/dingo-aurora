@@ -338,7 +338,7 @@ class MessageService:
             traceback.print_exc()
             raise e
 
-    def list_messages_from_dingodb(self, message_type, query_params, page, page_size, sort_keys, sort_dirs):
+    def list_messages_from_dingodb(self, message_type, query_conditions, page, page_size, sort_keys, sort_dirs):
         try:
             # 判空
             if not message_type:
@@ -347,7 +347,7 @@ class MessageService:
             if message_type not in MESSAGE_TYPE_TABLE:
                 raise Fail("message type not exists", error_message="消息类型不存在")
             # 获取数据
-            return aliyun_dingodb_utils.list_messages(MESSAGE_TYPE_TABLE[message_type], query_params, page, page_size, sort_keys, sort_dirs)
+            return aliyun_dingodb_utils.list_messages(MESSAGE_TYPE_TABLE[message_type], query_conditions, page, page_size, sort_keys, sort_dirs)
         except Fail as e:
             raise e
         except Exception as e:
@@ -355,7 +355,7 @@ class MessageService:
             traceback.print_exc()
             raise e
 
-    def count_messages_from_dingodb(self, message_type, query_params):
+    def count_messages_from_dingodb(self, message_type, query_conditions):
         try:
             # 判空
             if not message_type:
@@ -364,7 +364,7 @@ class MessageService:
             if message_type not in MESSAGE_TYPE_TABLE:
                 raise Fail("message type not exists", error_message="消息类型不存在")
             # 获取数据
-            return aliyun_dingodb_utils.count_messages(MESSAGE_TYPE_TABLE[message_type], query_params)
+            return aliyun_dingodb_utils.count_messages(MESSAGE_TYPE_TABLE[message_type], query_conditions)
         except Fail as e:
             raise e
         except Exception as e:

@@ -5,7 +5,6 @@ import shutil
 from datetime import datetime
 from urllib.parse import unquote
 
-import pandas as pd
 from openpyxl.reader.excel import load_workbook
 from openpyxl.styles import Border, Side
 from oslo_log import log
@@ -13,15 +12,13 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Table
 
 from dingo_command.common.cloudkitty_client import CloudKittyClient
 from dingo_command.utils.constant import RATING_SUMMARY_TEMPLATE_FILE_DIR
 from dingo_command.utils.datetime import utc_to_system_time, convert_timestamp_to_date
-from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 from openpyxl.utils.dataframe import dataframe_to_rows
-import functools
 
 LOG = log.getLogger(__name__)
 

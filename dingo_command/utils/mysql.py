@@ -59,14 +59,13 @@ class MySqlUtils:
             connection.rollback()
             raise e
 
-    def list_messages(self, table_name, query_params, page, page_size, sort_keys, sort_dirs):
+    def list_messages(self, table_name, query_conditions, page, page_size, sort_keys, sort_dirs):
         try:
             with self.connect() as connection:
                 with connection.cursor() as cursor:
-                    # 构建查询条件
-                    conditions = []
-                    for key, value in query_params.items():
-                        conditions.append(f"{key} = %s")
+                    # 构建WHERE子句和参数
+                    conditions, params = self.handleOperateParam(query_conditions)
+
                     where_clause = " AND ".join(conditions) if conditions else "1=1"
                     # 构建排序条件
                     sort_clause = ""
@@ -78,7 +77,7 @@ class MySqlUtils:
                     # sql语句
                     sql = f"SELECT * FROM {table_name} WHERE {where_clause} {sort_clause} {limit_clause}"
                     print(f"Executing SQL: {sql} ")
-                    cursor.execute(sql, list(query_params.values()))
+                    cursor.execute(sql, params)
                     columns = [col[0] for col in cursor.description]
                     data = [dict(zip(columns, row)) for row in cursor.fetchall()]
             return data
@@ -86,24 +85,60 @@ class MySqlUtils:
             print(f"Error listing messages: {e}")
             raise e
 
-    def count_messages(self, table_name, query_params):
+    def count_messages(self, table_name, query_conditions):
         try:
             with self.connect() as connection:
                 with connection.cursor() as cursor:
-                    # 构建查询条件
-                    conditions = []
-                    for key, value in query_params.items():
-                        conditions.append(f"{key} = %s")
+                    # 构建WHERE子句和参数
+                    conditions, params = self.handleOperateParam(query_conditions)
+
                     where_clause = " AND ".join(conditions) if conditions else "1=1"
                     # sql语句
                     sql = f"SELECT COUNT(*) FROM {table_name} WHERE {where_clause}"
                     print(f"Executing SQL: {sql} ")
-                    cursor.execute(sql, list(query_params.values()))
+                    cursor.execute(sql, params)
                     number = cursor.fetchone()[0] # 提取计数结果
             return number
         except Exception as e:
             print(f"Error listing messages: {e}")
             raise e
+
+    def handleOperateParam(self, query_conditions):
+        conditions = []
+        params = []
+        for field, condition_list in query_conditions.items():
+            for condition in condition_list:
+                op = condition["operator"]
+                value = condition["value"]
+
+                if op == "gt":
+                    conditions.append(f"{field} > %s")
+                    params.append(value)
+                elif op == "ge":
+                    conditions.append(f"{field} >= %s")
+                    params.append(value)
+                elif op == "lt":
+                    conditions.append(f"{field} < %s")
+                    params.append(value)
+                elif op == "le":
+                    conditions.append(f"{field} <= %s")
+                    params.append(value)
+                elif op == "like":
+                    conditions.append(f"{field} LIKE %s")
+                    params.append(f"%{value}%")
+                elif op == "in":
+                    values = value.split(",")
+                    placeholders = ", ".join(["%s"] * len(values))
+                    conditions.append(f"{field} IN ({placeholders})")
+                    params.extend(values)
+                elif op == "ne":
+                    conditions.append(f"{field} != %s")
+                    params.append(value)
+                elif op == "eq":
+                    conditions.append(f"{field} = %s")
+                    params.append(value)
+
+        return conditions, params
 
     def list_messages_by_sql(self, sql):
         try:

@@ -82,4 +82,8 @@ MESSAGE_TYPE_TABLE = {
     "Report_Gpu_Avg_Consume": "bsm_dws_gpu_avg_consume_info",
     "Report_Dwd_Node_Detail": "bsm_dwd_node_detail_info",
     "Report_Dwd_Pod_Detail": "bsm_dwd_pod_detail_info",
+    "Report_Dwd_Node_Detail_Five_Minutes": "bsm_dwd_node_detail_info_five_minutes",
+    "Report_Dwd_Pod_Detail_Five_Minutes": "bsm_dwd_pod_detail_info_five_minutes",
+    "Report_Dwd_Tenant_Bandwidth_Detail": "bsm_dwd_tenant_bandwidth_detail_info",
+    "Report_Dwd_Operator_Bandwidth_Detail": "bsm_dwd_operator_bandwidth_detail_info",
 }
