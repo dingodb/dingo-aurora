@@ -1646,7 +1646,41 @@ def delete_cluster(self, cluster_id, token):
         c.status_msg = f"delete cluster error: {replace_ansi_with_single_newline(str(e))}"
         ClusterSQL.update_cluster(c)
         raise
-                
+
+
+def remove_node_exporter(cluster_tfvars, node_list, hosts_data, master_ip, cluster_dir):
+    master_node_name = f"{cluster_tfvars.cluster_name}-k8s-master-1"
+    ssh_port = hosts_data["_meta"]["hostvars"][master_node_name].get("ansible_port", 22)
+    for node in node_list:
+        if cluster_tfvars.password:
+            cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh -o StrictHostKeyChecking=no -o "ProxyCommand=sshpass '
+                   f'-p {cluster_tfvars.password} '
+                   f'ssh -W %h:%p -p {ssh_port} {cluster_tfvars.ssh_user}@{master_ip}" '
+                   f'{cluster_tfvars.ssh_user}@{node.get("admin_address")} "sudo systemctl stop '
+                   f'pushgateway-job.timer && sudo systemctl stop pushgateway-job.service && sudo systemctl disable '
+                   f'pushgateway-job.timer && sudo systemctl stop node_exporter && sudo '
+                   f'systemctl disable node_exporter"')
+        else:
+            cmd = (f'ssh -o ProxyCommand="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p '
+                   f'-q -p {ssh_port} root@{master_ip} -i {cluster_dir}/id_rsa" -o StrictHostKeyChecking=no '
+                   f'-o UserKnownHostsFile=/dev/null root@{node.get("admin_address")} -i {cluster_dir}/id_rsa '
+                   f'"systemctl stop pushgateway-job.timer && systemctl stop pushgateway-job.service && systemctl '
+                   f'disable pushgateway-job.timer && systemctl stop node_exporter && systemctl disable node_exporter"')
+        retry_count = 0
+        max_retries = 3
+        while retry_count < max_retries:
+            result = subprocess.run(cmd, shell=True, capture_output=True)
+            if result.returncode == 0:
+                print("execute remote command successfully ")
+                break
+            else:
+                retry_count += 1
+                if retry_count < max_retries:
+                    print(f"ssh failed, try again...")
+                    time.sleep(5)
+        if result.returncode != 0:
+            print(f"Failed to execute remote command, run cmd failed after {max_retries} retries: {result.stderr}")
+
 
 @celery_app.task(bind=True)
 def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extravars, node_err_info):
@@ -1682,7 +1716,9 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
                         del content_new["nodes"][node]
             with open("output.tfvars.json", "w") as f:
                 json.dump(content_new, f, indent=4)
-
+        cluster_tfvars = None
+        hosts_data = None
+        master_ip = None
         if node_err_info and not node_list:
             runtime_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
             runtime_task.state = "success"
@@ -1901,6 +1937,8 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
 
         # 3、然后需要更新node节点的数据库的信息和集群的数据库信息
         # 更新集群cluster的状态为running，删除缩容节点的数据库信息
+        if cluster_tfvars and hosts_data and master_ip:
+            remove_node_exporter(cluster_tfvars, node_list, hosts_data, master_ip, cluster_dir)
         component_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
         component_task.state = "success"
         component_task.detail = TaskService.TaskDetail.remove_file_dirs.value
