@@ -54,6 +54,7 @@ module "compute" {
   source = "./modules/compute"
 
   cluster_name                                 = var.cluster_name
+  cluster_id                                   = var.id
   az_list                                      = var.az_list
   az_list_node                                 = var.az_list_node
   number_of_k8s_masters                        = var.number_of_k8s_masters

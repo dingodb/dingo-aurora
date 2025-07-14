@@ -445,6 +445,7 @@ data "cloudinit_config" "nodes_cloudinit" {
       pushgateway_url = var.pushgateway_url,
       pushgateway_user = var.pushgateway_user,
       pushgateway_pass = var.pushgateway_pass,
+      cluster_id = var.cluster_id,
       az = each.value.az
     })
   }

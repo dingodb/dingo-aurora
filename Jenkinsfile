@@ -30,6 +30,28 @@ pipeline {
     }
 
     stages {
+        stage('docker build') {
+            when {
+                anyOf { branch 'develop'; branch 'main' }
+            }
+            
+            agent {
+                node {
+                    label "dingo_stack"
+                }
+            }
+            steps {
+                echo "build image harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}"
+                withCredentials([usernamePassword(credentialsId: 'harbor_credential', usernameVariable: 'HARBOR_USERNAME', passwordVariable: 'HARBOR_PASSWORD')]) {
+                    sh 'podman login harbor.zetyun.cn -u $HARBOR_USERNAME -p $HARBOR_PASSWORD'
+                }
+                sh 'podman build -t harbor.zetyun.cn/openstack/dingo-command::latest'
+                echo "Tagging dingo-command image as harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}"
+                
+                sh 'podman push harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}'
+            }
+            
+        }
         stage('Pull and Tag Images') {
             when {
                 anyOf { branch 'develop'; branch 'main' }

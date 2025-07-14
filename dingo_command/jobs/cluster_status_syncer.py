@@ -37,55 +37,47 @@ def check_cluster_status():
         # 获取所有状态为 creating、running 或 error 的集群
         query_params = {}
         #query_params["status_in"] = ["creating", "running", "error"]
-        clusters = ClusterSQL.list_cluster(query_params)
-        
+        count, clusters = ClusterSQL.list_cluster(query_params, 1,-1, sort_keys="create_time", sort_dirs="descend")
+
         for cluster in clusters:
             try:
+                LOG.info(f"Updating cluster {cluster.id} start ")
                 # 检查实例状态
                 instance_query = {"cluster_id": cluster.id}
-                instances = InstanceSQL.list_instances(instance_query)
-                # 检查集群类型是否为 kubernetes
-                if cluster.type != "kubernetes":
-                    continue
-                else:
-                    # 检查API服务器状态
-                    api_server_status = False
-                    if hasattr(cluster, 'kubeconfig') and cluster.kubeconfig:
-                        api_server_status = check_api_server_status(cluster.kubeconfig)
-                # 检查节点状态
-                node_query = {"cluster_id": cluster.id}
-                nodes = NodeSQL.list_node_direct(node_query)
-                
-                # 检查实例状态
-                instance_query = {"cluster_id": cluster.id}
-                instances = InstanceSQL.list_instance_direct(instance_query)
-                
-                # 计算节点和实例状态
-                node_statuses = [node.status for node in nodes if node]
-                instance_statuses = [instance.status for instance in instances if instance]
-                
+                count, instances = InstanceSQL.list_instances(instance_query)
+                # # 检查集群类型是否为 kubernetes
+                # if cluster.type != "kubernetes":
+                #     continue
+                # else:
+                #     # 检查API服务器状态
+                #     api_server_status = False
+                #     # if hasattr(cluster, 'kubeconfig') and cluster.kubeconfig:
+                #     #     api_server_status = check_api_server_status(cluster.kubeconfig)
                 
                 
                 # 确定集群的新状态
-                new_status = determine_cluster_status(node_statuses, instance_statuses, cluster.status)
+                new_status = cluster.status
                 #重新计算gpu数量
                 instance_names = []
                 gpus = 0
+                LOG.info(f"Updating cluster {cluster.id}")
                 for instance in instances:
-                    if instance.gpu is not None and instance.gpu_count > 0:
+                    if instance.gpu is not None and instance.gpu > 0:
                         gpus += instance.gpu
                         continue
-                    if instance.gpu is not None and instance.gpu_count > 0:
-                        gpus += instance.gpu_count
+                    if instance.gpu is not None and instance.gpu > 0:
+                        gpus += instance.gpu
                         continue
-                    if instance.type == "baremental":
+                    if instance.node_type == "baremetal":
                         instance_names.append(instance.name)
-                        
+                LOG.info(f" clusters {instance_names}")      
                 instances_gpu_count_info = AssetResourceRelationSQL.query_instances_gpu_count_info(instance_names)
                 if instances_gpu_count_info is not None:
+                    LOG.info(f"Updating cluster {cluster.id} gpu count ")
                     for gpu_count_info in instances_gpu_count_info:
                         if gpu_count_info.resource_gpu_count is not None:
-                            gpus = gpu_count_info.resource_gpu_count + gpus
+                            LOG.info(f"Updating cluster cccc {gpu_count_info.resource_gpu_count }")
+                            gpus = int(gpu_count_info.resource_gpu_count) + int(gpus)
                 cluster.gpu = gpus
                 LOG.info(f"Updating cluster {cluster.id}")
                 #cluster.status = new_status

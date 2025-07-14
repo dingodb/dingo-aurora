@@ -128,6 +128,7 @@ write_files:
       # 安装定时服务
       if [ -f /etc/systemd/system/pushgateway-job.service ]; then
         sed -i 's#pushgateway:9092#${pushgateway_url}#g' /etc/systemd/system/pushgateway-job.service
+        sed -i 's#dingo_cluster_id#${cluster_id}#g' /etc/systemd/system/pushgateway-job.service
       else
         cat > /etc/systemd/system/pushgateway-job.service <<EOF
       [Unit]
@@ -136,7 +137,7 @@ write_files:
 
       [Service]
       Type=oneshot
-      ExecStart=/bin/bash -c '/usr/bin/curl -s http://localhost:9100/metrics | /usr/bin/curl -u ${pushgateway_user}:${pushgateway_pass} --data-binary @- "${pushgateway_url}/metrics/job/vm/instance/%H"'
+      ExecStart=/bin/bash -c '/usr/bin/curl -s http://localhost:9100/metrics | /usr/bin/curl -u ${pushgateway_user}:${pushgateway_pass} --data-binary @- "${pushgateway_url}/metrics/job/vm/instance/%H/cluster_id/${cluster_id}"'
       Restart=on-failure
       EOF
       fi
