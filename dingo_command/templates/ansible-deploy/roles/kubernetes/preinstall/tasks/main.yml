@@ -97,7 +97,7 @@
     - etchosts
 - name: Containerd | Generate default base_runtime_spec
   register: ctr_oci_spec
-  command: "{{ containerd_bin_dir }}/ctr oci spec"
+  command: "ctr oci spec"
   check_mode: false
   changed_when: false
 

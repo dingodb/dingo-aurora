@@ -22,7 +22,8 @@ data "cloudinit_config" "master-cloudinit" {
       pushgateway_url = var.pushgateway_url,
       pushgateway_user = var.pushgateway_user,
       pushgateway_pass = var.pushgateway_pass,
-      etcd_volume_type = var.etcd_volume_type
+      etcd_volume_type = var.etcd_volume_type,
+      cluster_id = var.cluster_id
     })
   }
 }
