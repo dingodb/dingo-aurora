@@ -60,3 +60,12 @@ async def get_system_current_time():
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail="get system current time error")
+
+@router.get("/system/support_config", summary="获取系统支持配置")
+async def get_system_support_config():
+    try:
+        return system_service.get_system_support_config()
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail="get system support config error")

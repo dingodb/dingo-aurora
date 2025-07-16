@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from dingo_command.db.engines.mysql import get_session
-from dingo_command.db.models.system.models import OperateLog
+from dingo_command.db.models.system.models import OperateLog, SystemCommonConfig
 
 # 日志排序字段
 operate_log_dir_dic= {"log_date":OperateLog.log_date, "operate_type":OperateLog.operate_type, "user_id":OperateLog.user_id,}
@@ -49,3 +49,9 @@ class SystemSQL:
         session = get_session()
         with session.begin():
             session.add(operate_log_info)
+
+    @classmethod
+    def get_system_support_config(cls):
+        session = get_session()
+        with session.begin():
+            return session.query(SystemCommonConfig).all()

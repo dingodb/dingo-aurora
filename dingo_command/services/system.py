@@ -113,3 +113,14 @@ class SystemService:
             import traceback
             traceback.print_exc()
             raise e
+
+    def get_system_support_config(self):
+        try:
+            system_support_config = SystemSQL.get_system_support_config()
+            if not system_support_config:
+                return {}
+            return SystemSQL.get_system_support_config()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e

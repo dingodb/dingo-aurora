@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Column, String, DateTime, Boolean
+from sqlalchemy import Column, String, DateTime, Boolean, Text
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -23,3 +23,9 @@ class OperateLog(Base):
     resource_name = Column(String(length=128), nullable=True)
     operate_flag = Column(Boolean, nullable=True, default=False)
     description = Column(String(length=255), nullable=True)
+
+class SystemCommonConfig(Base):
+    __tablename__ = "system_common_configs"
+
+    config_key = Column(Text, primary_key= True, nullable=False, unique=True)
+    config_value = Column(Text)
