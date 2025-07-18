@@ -31,7 +31,7 @@ def upgrade() -> None:
     op.bulk_insert(system_common_configs_table, [
         {
             "config_key": "enable_k8s",
-            "config_value": "false",
+            "config_value": "0",
         }
     ])
 
