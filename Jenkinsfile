@@ -50,6 +50,10 @@ pipeline {
                 retry(3) {
                     sh 'podman push harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG}'
                 }
+                sh 'podman tag harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG} harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}'
+                retry(3) {
+                    sh 'podman push harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}'
+                }
             }
             
         }
@@ -87,7 +91,7 @@ pipeline {
                         echo "update kolla_ansible"
                         dir('/home/cicd/kolla-ansible') {
                              sh '''
-                                git stash
+                                git stash || true
                                 git pull origin dingoStack
                                 git stash pop || true
                                 # 检查冲突
