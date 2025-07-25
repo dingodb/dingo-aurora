@@ -47,12 +47,9 @@ pipeline {
                 }
                 sh 'podman build -t harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG} -f docker/Dockerfile-local .'
                 echo "Tagging dingo-command image as harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG}"
-
-                sh 'podman push harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG}'
-
-                echo 'podman push to second registry'
-                sh 'podman tag harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG} 10.220.56.101:5000/dockerproxy.zetyun.cn/quay.nju.edu.cn/openstack.kolla/dingo-command:${IMAGE_TAG}'
-                sh 'podman push 10.220.56.101:5000/dockerproxy.zetyun.cn/quay.nju.edu.cn/openstack.kolla/dingo-command:${IMAGE_TAG} --tls-verify=false'
+                retry(3) {
+                    sh 'podman push harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG}'
+                }
             }
             
         }
@@ -60,24 +57,18 @@ pipeline {
             when {
                 anyOf { branch 'develop'; branch 'main' }
             }
-            
+
             agent {
                 node {
                     label "dingo_stack"
                 }
             }
             steps {
-                echo "Pulling dingo-command image from harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG}"
-                withCredentials([usernamePassword(credentialsId: 'harbor_credential', usernameVariable: 'HARBOR_USERNAME', passwordVariable: 'HARBOR_PASSWORD')]) {
-                    sh 'podman login harbor.zetyun.cn -u $HARBOR_USERNAME -p $HARBOR_PASSWORD'
-                }
-                sh 'podman pull dockerproxy.zetyun.cn/docker.io/dingodatabase/dingo-command:latest'
-                echo "Tagging dingo-command image as harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG}"
-                sh 'podman tag dockerproxy.zetyun.cn/docker.io/dingodatabase/dingo-command:latest harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG}'
-                sh 'podman push harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG}'
-
+                echo 'podman push to second registry'
+                sh 'podman tag harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG} 10.220.56.101:5000/dockerproxy.zetyun.cn/quay.nju.edu.cn/openstack.kolla/dingo-command:${IMAGE_TAG}'
+                sh 'podman push 10.220.56.101:5000/dockerproxy.zetyun.cn/quay.nju.edu.cn/openstack.kolla/dingo-command:${IMAGE_TAG} --tls-verify=false'
             }
-            
+
         }
         stage('Deploy to test'){
             when {
