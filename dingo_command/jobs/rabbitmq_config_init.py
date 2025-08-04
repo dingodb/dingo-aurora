@@ -21,6 +21,7 @@ def start():
     rabbitmq_scheduler.add_job(auto_set_shovel, 'date', run_date=run_time_10s)
     rabbitmq_scheduler.add_job(auto_connect_message_queue, 'date', run_date=run_time_30s)
     rabbitmq_scheduler.add_job(auto_send_message_to_dingodb, 'interval', seconds=60*5, next_run_time=datetime.now())
+    # rabbitmq_scheduler.add_job(check_rabbitmq_shovel_status, 'interval', seconds=60*5, next_run_time=datetime.now())
     rabbitmq_scheduler.start()
 
 def auto_set_shovel():
@@ -36,3 +37,8 @@ def auto_send_message_to_dingodb():
     print(f"Starting send message to aliyun dingodb at {time.strftime('%Y-%m-%d %H:%M:%S')}")
     # 连接数据报送的queue进行消费
     message_service.send_message_to_dingodb()
+
+def check_rabbitmq_shovel_status():
+    print(f"Starting check rabbitmq shovel status at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    # 检查rabbitmq shovel status
+    message_service.check_rabbitmq_shovel_status()
