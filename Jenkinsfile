@@ -88,19 +88,19 @@ pipeline {
                     }
             
                     steps {
-                        echo "update kolla_ansible"
-                        dir('/home/cicd/kolla-ansible') {
-                             sh '''
-                                git stash || true
-                                git pull origin dingoStack
-                                git stash pop || true
-                                # 检查冲突
-                                if git diff --name-only --diff-filter=U | grep .; then
-                                    echo "出现冲突，请手动解决！"
-                                    exit 1
-                                fi
-                            '''
-                        }
+//                         echo "update kolla_ansible"
+//                         dir('/home/cicd/kolla-ansible') {
+//                              sh '''
+//                                 git stash || true
+//                                 git pull origin dingoStack
+//                                 git stash pop || true
+//                                 # 检查冲突
+//                                 if git diff --name-only --diff-filter=U | grep .; then
+//                                     echo "出现冲突，请手动解决！"
+//                                     exit 1
+//                                 fi
+//                             '''
+//                         }
                         echo "pull dingo-command images to test"
                         dir('/home/cicd/kolla-ansible/tools') {
                             sh 'ansible-playbook  -e @/home/cicd/envs/test-regionone/globals.yml -e @/home/cicd/envs/test-regionone/passwords.yml  --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e kolla_action=pull ../ansible/site.yml  --inventory /home/cicd/envs/test-regionone/multinode -e CONFIG_DIR=/home/cicd/envs/test-regionone -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
