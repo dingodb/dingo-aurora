@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch, MagicMock
-from dingo_command.celery_api.workers import create_cluster, delete_cluster,create_k8s_cluster
-
+from dingo_command.celery_api.workers import create_cluster, delete_cluster,create_k8s_cluster,add_existing_nodes 
+from dingo_command.common.nova_client import NovaClient
 
 class TestCreateCluster(unittest.TestCase):
   def setUp(self):
@@ -154,6 +154,20 @@ class TestCreateCluster(unittest.TestCase):
     #调用celery_app项目下的work.py中的create_cluster方法
     # Test execution
     create_k8s_cluster(self.cluster_tf_dict, self.cluster_dict, [])
+
+  def test_add_exist_node(self):
+     # 通过server_ids查询虚拟机信息
+    token = "gAAAAABokvuoZiKGvAMkOIz1UKV1W7a5XzEoqx2Zi_RqBao7m9x3hzaAhPSG35kiL3HbNGG3mjGsxPJkk3Dz49PBMlg2d6jBNJpcb_hm6AguNCcjn6B7BajfjGYD3b2oiroluAIuVxt62_rO-loiynCbmt37LwDe6pfjyfxe_Qru2hr5Dbbn7S1D7VbKph3qii1-sFdHDZWy"
+    nova_client = NovaClient(token)
+    server_details = []
+    for server_id in ["b6ca55e7-812f-481c-8dda-5ad7253a2a8f"]:
+
+      server_detail = nova_client.nova_get_server_detail(server_id)
+      # 检查网络是否匹配
+
+      server_details.append(server_detail)
+
+    add_existing_nodes("9582f04f-0e53-4a46-accc-2a6126279ac8",server_details)
   
   def test_delete_cluster_success(self):
     #调用celery_app项目下的work.py中的create_cluster方法
