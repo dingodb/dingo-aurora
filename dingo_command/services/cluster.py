@@ -697,6 +697,62 @@ class ClusterService:
             traceback.print_exc()
             raise e
     
+    def add_existing_nodes_to_cluster(self, cluster_id: str, server_details: list, token: str):
+        """将已有的服务器节点添加到K8s集群中"""
+        try:
+            # 1. 验证集群状态
+            cluster = self.get_cluster(cluster_id)
+            if not cluster:
+                raise Fail("集群不存在")
+            
+            if cluster.status != "running":
+                raise Fail(f"集群状态为{cluster.status}，无法添加节点")
+            
+            # 2. 更新集群状态为scaling
+            query_params = {"id": cluster_id}
+            res = self.list_clusters(query_params, 1, 10, None, None)
+            if not res or not res.get("data"):
+                raise Fail("集群不存在")
+            
+            cluster_db = res.get("data")[0]
+            cluster_db.status = "scaling"
+            ClusterSQL.update_cluster(cluster_db)
+            #增加已有节点到node表
+            node_db_list = []
+            for server in server_details:
+                node_db = NodeDB()
+                node_db.id = str(uuid.uuid4())
+                node_db.node_type = "vm"
+                node_db.cluster_id = cluster_id
+                node_db.cluster_name = cluster.name
+                node_db.region = cluster.region_name
+                node_db.role = server.get("role", "worker")
+                node_db.user = server.get("user", "")
+                node_db.password = server.get("password", "")
+                node_db.image = server.get("image", "")
+                node_db.instance_id = server.get("instance_id", "")
+                node_db.project_id = cluster.project_id
+                node_db_list.append(node_db)
+            # 保存node信息到数据库
+            NodeSQL.create_node_list(node_db_list)
+            # 3. 调用Celery任务异步处理
+            result = celery_app.send_task(
+                "dingo_command.celery_api.workers.add_existing_nodes", 
+                args=[cluster_id, server_details]
+            )
+            
+            return {
+                "task_id": result.id,
+                "cluster_id": cluster_id,
+                "message": "添加节点任务已提交",
+                "server_count": len(server_details)
+            }
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+    
     def convert_clusterinfo_todb(self, cluster:ClusterObject):
         cluster_info_db = ClusterDB()
 

@@ -19,7 +19,10 @@ default_opts = [
     cfg.StrOpt('cluster_work_dir', default='/var/lib/dingo-command', help='the openstack region name'),
     cfg.StrOpt('auth_url', default=None, help='the openstack region name'),
     cfg.StrOpt('k8s_master_image', default=None, help='the master image id'),
-    cfg.StrOpt('k8s_master_flavor', default=None, help='the master flavor name')
+    cfg.StrOpt('k8s_master_flavor', default=None, help='the master flavor name'),
+    cfg.StrOpt('chart_harbor_url', default=None, help='the url of harbor registry'),
+    cfg.StrOpt('chart_harbor_user', default=None, help='the user of harbor registry'),
+    cfg.StrOpt('chart_harbor_passwd', default=None, help='the passwd of harbor registry')
 ]
 
 # redis数据

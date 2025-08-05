@@ -8,6 +8,7 @@ import re
 import subprocess
 import time
 import copy
+import uuid
 from typing import Dict, Optional, List
 from dingo_command.api.model.cluster import ClusterObject
 from dingo_command.api.model.instance import InstanceCreateObject
@@ -220,6 +221,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
             subprocess.run(["cp", "-LRpf", os.path.join(WORK_DIR, "ansible-deploy", "inventory", "sample-inventory"),
                         str(cluster_dir)], capture_output=True)
             subprocess.run(["cp", "-r", str(TERRAFORM_DIR), str(cluster_dir)], capture_output=True)
+            # 将celery下面的hosts.py文件复制到WORK_DIR/cluster.id目录下
         os.chdir(os.path.join(cluster_dir, "terraform"))
         # 初始化terraform
         #os.environ['https_proxy']="10.220.70.88:1088"
@@ -646,10 +648,10 @@ def update_ansible_status(task_info, event, task_name, host, task_status):
             update_task_state(task_info)
 
 
-def scale_kubernetes(cluster: ClusterObject, scale_nodes, task_id):
+def scale_kubernetes(cluster_id, scale_nodes, task_id):
     """使用Ansible扩容K8s集群"""
     try:
-        runtime_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
+        runtime_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
                                 start_time=datetime.fromtimestamp(datetime.now().timestamp()),
                                 msg=TaskService.TaskScaleNodeMessage.scale_runtime_prepair.name)
         etcd_task = Taskinfo(task_id=task_id)
@@ -659,9 +661,9 @@ def scale_kubernetes(cluster: ClusterObject, scale_nodes, task_id):
         TaskSQL.insert(runtime_task)
         ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
         os.chdir(ansible_dir)
-        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id))
+        host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id))
         playbook_file = os.path.join(WORK_DIR, "ansible-deploy", "scale.yml")
-        key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "id_rsa")
+        key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), "id_rsa")
         if os.path.exists(key_file_path):
             with open(key_file_path, 'r') as key_file:
                 private_key_content = key_file.read()
@@ -692,7 +694,7 @@ def scale_kubernetes(cluster: ClusterObject, scale_nodes, task_id):
                             runtime_task.detail = TaskService.TaskDetail.scale_runtime_prepair.value
                             update_task_state(runtime_task)
                             # 写入下一个任务
-                            etcd_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
+                            etcd_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
                                                  start_time=datetime.fromtimestamp(datetime.now().timestamp()),
                                                  msg=TaskService.TaskScaleNodeMessage.scale_check_file.name)
                             TaskSQL.insert(etcd_task)
@@ -705,7 +707,7 @@ def scale_kubernetes(cluster: ClusterObject, scale_nodes, task_id):
                             etcd_task.detail = TaskService.TaskDetail.scale_install_file.value
                             update_task_state(etcd_task)
                             # 写入下一个任务
-                            control_plane_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
+                            control_plane_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
                                                           start_time=datetime.fromtimestamp(datetime.now().timestamp()),
                                                           msg=TaskService.TaskScaleNodeMessage.scale_check_image.name)
                             TaskSQL.insert(control_plane_task)
@@ -718,7 +720,7 @@ def scale_kubernetes(cluster: ClusterObject, scale_nodes, task_id):
                             control_plane_task.detail = TaskService.TaskDetail.scale_download_images.value
                             update_task_state(control_plane_task)
                             # 写入下一个任务
-                            worker_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
+                            worker_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
                                                    start_time=datetime.fromtimestamp(datetime.now().timestamp()),
                                                    msg=TaskService.TaskScaleNodeMessage.scale_join_cluster.name)
                             TaskSQL.insert(worker_task)
@@ -737,7 +739,7 @@ def scale_kubernetes(cluster: ClusterObject, scale_nodes, task_id):
                     #         task_info = component_task
             time.sleep(0.01)
             continue
-        log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "ansible_scale.log")
+        log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), "ansible_scale.log")
         with open(log_file, "a") as log_file:
             log_file.write(format(runner.stdout.read()))
         thread.join()
@@ -1338,7 +1340,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         # 2. 使用Ansible部署K8s集群
         cluster.id = cluster_tf_dict["id"]
         if scale:
-            ansible_result = scale_kubernetes(cluster, scale_nodes, task_id)
+            ansible_result = scale_kubernetes(cluster.id, scale_nodes, task_id)
         else:
             ansible_result = deploy_kubernetes(cluster, lb_ip, task_id)
         if not ansible_result[0]:
@@ -2267,6 +2269,180 @@ def delete_instance(self, openstack_info, instance):
     except subprocess.CalledProcessError as e:
         print(f"delete instance error: {e}")
         raise ValueError(e)
+
+@celery_app.task(bind=True,time_limit=TASK_TIMEOUT, soft_time_limit=SOFT_TASK_TIMEOUT)
+def add_existing_nodes(self, cluster_id, server_details):
+    """将已有的虚拟机节点添加到K8s集群中"""
+    try:
+        task_id = str(self.request.id)
+        
+        # 1. 创建任务记录
+        task_info = Taskinfo(
+            task_id=task_id, 
+            cluster_id=cluster_id, 
+            state="progress",
+            start_time=datetime.fromtimestamp(datetime.now().timestamp()),
+            msg="开始添加已有节点到集群"
+        )
+        TaskSQL.insert(task_info)
+        
+        # 2. 验证服务器信息
+        if not server_details:
+            raise ValueError("服务器详情列表不能为空")
+            
+        # 3. 获取集群信息
+        query_params = {"id": cluster_id}
+        count, db_clusters = ClusterSQL.list_cluster(query_params)
+        if count == 0:
+            raise ValueError(f"集群 {cluster_id} 不存在")
+        
+        cluster_db = db_clusters[0]
+        cluster_name = cluster_db.name
+        
+        # 4. 将服务器信息添加到数据库
+        session = get_session()
+        node_instances = []
+        
+        with session.begin():
+            for i, server_detail in enumerate(server_details):
+                # 创建Node记录
+                node_db = NodeInfo()
+                node_db.id = str(uuid.uuid4())
+                node_db.cluster_id = cluster_id
+                node_db.server_id = server_detail.get("id")
+                node_db.cluster_name = cluster_name
+                node_db.name = f"{cluster_name}-existing-node-{i+1}"
+                node_db.role = "worker"  # 默认作为worker节点
+                node_db.status = "adding"
+                node_db.cpu = server_detail.get("flavor", {}).get("vcpus", 0)
+                node_db.mem = server_detail.get("flavor", {}).get("ram", 0) // 1024  # MB转GB
+                node_db.disk = server_detail.get("flavor", {}).get("disk", 0)
+                node_db.gpu = 0  # 默认为0，可根据需要扩展
+                node_db.region = cluster_db.region_name
+                node_db.create_time = datetime.now()
+                node_db.update_time = datetime.now()
+                node_db.node_type = "vm"
+                node_db.image = server_detail.get("image", {}).get("id", "")
+                session.add(node_db)
+                
+                # 创建Instance记录
+                instance_db = Instance()
+                instance_db.id = str(uuid.uuid4())
+                instance_db.cluster_id = cluster_id
+                instance_db.server_id = server_detail.get("id")
+                instance_db.cluster_name = cluster_name
+                instance_db.name = server_detail.get("name", f"existing-server-{i+1}")
+                instance_db.server_id = server_detail.get("id")
+                instance_db.node_type = "vm"
+                instance_db.status = "adding"
+                instance_db.region = cluster_db.region_name
+                instance_db.flavor_id = server_detail.get("flavor", {}).get("id", "")
+                instance_db.image_id = server_detail.get("image", {}).get("id", "")
+                instance_db.create_time = datetime.now()
+                instance_db.update_time = datetime.now()
+                session.add(instance_db)
+                
+                node_instances.append({
+                    "node": node_db,
+                    "instance": instance_db,
+                    "server_detail": server_detail
+                })
+        
+        # 6. 准备Ansible inventory
+        cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_id)
+        if not os.path.exists(cluster_dir):
+            raise ValueError(f"集群目录不存在: {cluster_dir}")
+            
+        # 7. 生成节点主机名列表（用于Ansible playbook）
+        node_names = []
+        for ni in node_instances:
+            # 从服务器详情中获取IP地址
+            addresses = ni["server_detail"].get("addresses", {})
+            ip_address = None
+            for network_name, ips in addresses.items():
+                for ip_info in ips:
+                    if ip_info.get("OS-EXT-IPS:type") == "fixed":
+                        ip_address = ip_info.get("addr")
+                        break
+                if ip_address:
+                    break
+                    
+            if ip_address:
+                node_names.append(f"{ni['instance'].name}:{ip_address}")
+        
+        # 8. 执行Ansible扩容
+        if node_names:
+            scale_nodes = ",".join([name.split(":")[0] for name in node_names])
+            ansible_result = scale_kubernetes(cluster_id, scale_nodes, task_id)
+            
+            if not ansible_result[0]:
+                raise Exception(f"Ansible 扩容失败: {ansible_result[1]}")
+        
+        # 9. 更新节点和实例状态为running
+        with session.begin():
+            for ni in node_instances:
+                node = session.get(NodeInfo, ni["node"].id)
+                if node:
+                    node.status = "running"
+                    node.update_time = datetime.now()
+                    
+                instance = session.get(Instance, ni["instance"].id)
+                if instance:
+                    instance.status = "running"
+                    instance.update_time = datetime.now()
+        
+        # 10. 更新集群状态
+        with session.begin():
+            cluster = session.get(Cluster, (cluster_id, cluster_name))
+            if cluster:
+                cluster.status = "running"
+                cluster.status_msg = ""
+                # 更新集群资源统计
+                for ni in node_instances:
+                    cluster.cpu += ni["node"].cpu
+                    cluster.mem += ni["node"].mem
+                    cluster.gpu += ni["node"].gpu
+        
+        # 11. 更新任务状态为成功
+        task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+        task_info.state = "success"
+        task_info.detail = f"成功添加 {len(server_details)} 个节点到集群"
+        update_task_state(task_info)
+        
+        return True
+        
+    except SoftTimeLimitExceeded:
+        # 处理超时
+        query_params = {"id": cluster_id}
+        count, db_clusters = ClusterSQL.list_cluster(query_params)
+        if count > 0:
+            cluster = db_clusters[0]
+            cluster.status = 'scale_error'
+            cluster.status_msg = "添加节点任务超时"
+            ClusterSQL.update_cluster(cluster)
+        raise
+        
+    except Exception as e:
+        # 处理错误
+        print(f"添加已有节点错误: {str(e)}")
+        
+        # 更新任务状态为失败
+        if 'task_info' in locals():
+            task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
+            task_info.state = "failed"
+            task_info.detail = f"添加节点失败: {str(e)}"
+            update_task_state(task_info)
+        
+        # 更新集群状态
+        query_params = {"id": cluster_id}
+        count, db_clusters = ClusterSQL.list_cluster(query_params)
+        if count > 0:
+            cluster = db_clusters[0]
+            cluster.status = 'scale_error'
+            cluster.status_msg = f"添加节点失败: {str(e)}"
+            ClusterSQL.update_cluster(cluster)
+        
+        raise
 
 
 @celery_app.task(bind=True)

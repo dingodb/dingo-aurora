@@ -29,12 +29,12 @@ app.include_router(api_router, prefix="/v1")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    bigscreen_metrics_syncer.start()
+    # bigscreen_metrics_syncer.start()
     #from dingo_command.jobs import asset_resource_relation_syncer
-    asset_resource_relation_syncer.start()
-    rabbitmq_config_init.start()
-    instance_status_syncer.start()
-    cluster_status_syncer.start()
+    # asset_resource_relation_syncer.start()
+    # rabbitmq_config_init.start()
+    # instance_status_syncer.start()
+    # cluster_status_syncer.start()
     yield
     # Add any shutdown logic here if needed
 
