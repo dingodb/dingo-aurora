@@ -1,5 +1,6 @@
 import os
 import tempfile
+from typing import List
 from fastapi import Query
 from fastapi.responses import FileResponse
 from dingo_command.api.model.cluster import ClusterObject, NodeConfigObject
@@ -207,3 +208,51 @@ async def delete_cluster(cluster_id:str, token: str = Depends(get_token)):
         raise HTTPException(status_code=400, detail=f"delete cluster error {str(e)}")
     
     
+@router.post("/cluster/{cluster_id}/node", summary="增加已有节点", description="增加已有节点")
+async def add_node(cluster_id:str, server_ids: List[str], token: str = Depends(get_token)):
+    try:
+            
+        # 集群信息存入数据库
+        result = cluster_service.get_cluster(cluster_id)
+
+        if not result:
+            raise HTTPException(status_code=400, detail="the cluster does not exist, please check")
+        if result.status == "creating":
+            raise HTTPException(status_code=400, detail="the cluster is creating, please wait")
+        if result.status == "deleting":
+            raise HTTPException(status_code=400, detail="the cluster is deleting, please wait")
+        if result.status == "scaling":
+            raise HTTPException(status_code=400, detail="the cluster is scaling, please wait")
+        if result.status == "removing":
+            raise HTTPException(status_code=400, detail="the cluster is removing, please wait")
+        
+        # 通过server_ids查询虚拟机信息
+        server_details = []
+        for server_id in server_ids:
+            try:
+                server_detail = nova_client.nova_get_server_detail(server_id)
+                #根据server_detail对应的网络信息，是否与集群的网络信息匹配
+                if not server_detail:
+                    raise HTTPException(status_code=400, detail=f"Server {server_id} not found")
+                if not server_detail.networks:
+                    raise HTTPException(status_code=400, detail=f"Server {server_id} has no networks")
+                # 检查网络是否匹配
+                if not any(net['network']['id'] == result.network_id for net in server_detail.networks):
+                    raise HTTPException(status_code=400, detail=f"Server {server_id} network does not match the cluster network")
+                server_details.append(server_detail)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Failed to get server {server_id} details: {str(e)}")
+        
+        # 调用添加节点的服务方法
+        result = cluster_service.add_existing_nodes_to_cluster(cluster_id, server_details, token)
+        
+        return result
+        
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
+    except  HTTPException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"add node error {str(e)}")

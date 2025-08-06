@@ -51,7 +51,7 @@ calico_pool_blocksize: 26
 # - Otherwise, if VXLAN or BPF mode is enabled, subtract 50 from your network MTU (i.e. 1500-50=1450)
 # - Otherwise, if IPIP is enabled, subtract 20 from your network MTU (i.e. 1500-20=1480)
 # - Otherwise, if not using any encapsulation, set to your network MTU (i.e. 1500)
-# calico_veth_mtu: 1440
+calico_veth_mtu: 1450
 
 # Advertise Cluster IPs
 # calico_advertise_cluster_ips: true
@@ -87,14 +87,14 @@ calico_pool_blocksize: 26
 
 # Set calico network backend: "bird", "vxlan" or "none"
 # bird enable BGP routing, required for ipip and no encapsulation modes
-# calico_network_backend: vxlan
+calico_network_backend: bird
 
 # IP in IP and VXLAN is mutually exclusive modes.
 # set IP in IP encapsulation mode: "Always", "CrossSubnet", "Never"
-# calico_ipip_mode: 'Never'
+#calico_ipip_mode: 'CrossSubnet'
 
 # set VXLAN encapsulation mode: "Always", "CrossSubnet", "Never"
-# calico_vxlan_mode: 'Always'
+calico_vxlan_mode: 'CrossSubnet'
 
 # set VXLAN port and VNI
 # calico_vxlan_vni: 4096
