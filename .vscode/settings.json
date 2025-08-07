@@ -10,5 +10,6 @@
     "./dingo_command",
     "-p",
     "test_*.py"
-  ]
+  ],
+  "workbench.editor.enablePreview": false
 }
