@@ -8,13 +8,16 @@ from oslo_log import log
 from oslo_config import cfg
 from datetime import datetime
 
+from pip._vendor import requests
+import time
+
 from dingo_command.db.models.message.models import ExternalMessage
 from dingo_command.db.models.message.sql import MessageSQL
 from dingo_command.services.aliyundingodb import aliyun_dingodb_utils, aliyun_dingodb_read_utils
 from dingo_command.services.custom_exception import Fail
 from dingo_command.services.rabbitmqconfig import RabbitMqConfigService
 from dingo_command.services.redis_connection import redis_connection, RedisLock
-from dingo_command.utils.constant import RABBITMQ_EXTERNAL_MESSAGE_QUEUE, MESSAGE_TYPE_TABLE
+from dingo_command.utils.constant import RABBITMQ_EXTERNAL_MESSAGE_QUEUE, MESSAGE_TYPE_TABLE, RABBITMQ_SHOVEL_QUEUE, MQ_MANAGE_PORT
 
 LOG = log.getLogger(__name__)
 
@@ -112,7 +115,7 @@ class MessageService:
         return message_db
 
     def callback(self, ch, method, properties, body):
-        print(f"Received queue: {RABBITMQ_EXTERNAL_MESSAGE_QUEUE}, message: {body}")
+        print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Received queue: {RABBITMQ_EXTERNAL_MESSAGE_QUEUE}, message: {body}")
         # 停止消费 判断是否消费了指定的数量
         # ch.stop_consuming()
         # 转换json对象
@@ -398,3 +401,83 @@ class MessageService:
         for keyword in forbidden_keywords:
             if keyword in sql.upper():
                 raise Fail("sql is only select", error_message="数据库查询语句只允许查询操作")
+
+
+    def check_rabbitmq_shovel_status(self):
+        # 使用字典来记录每个shovel的异常计数
+        shovel_error_count = {}
+        try:
+            # 目前中心region不需要检测rabbitmq shovel status
+            if CENTER_REGION_FLAG:
+                print("current region is center region, no need to check shovel status")
+                return
+            # 没有shovel配置
+            if not RABBITMQ_SHOVEL_QUEUE:
+                print("rabbit shovel queue is empty")
+                return
+            # mq的transport_url是空
+            if not TRANSPORT_URL or not CENTER_TRANSPORT_URL:
+                print("rabbit mq transport_url or center_transport_url is empty ")
+                return
+            # 解析mq的url
+            transport_url_array, center_transport_url_array = rabbitmq_config_service.get_convert_mq_url_array()
+            # 空
+            if transport_url_array is None or len(transport_url_array) <= 0:
+                print("rabbit mq transport url array is empty ")
+                return
+            # 空
+            if center_transport_url_array is None or len(center_transport_url_array) <= 0:
+                print("center region rabbit mq transport url array is empty ")
+                return
+            # 读取当前的mq的用户名、密码、mq的url
+            user_name, password, src_mq_url = rabbitmq_config_service.get_current_mq_config_info()
+            # 判空
+            if not user_name or not password or not src_mq_url:
+                print("rabbit mq user name or password or src_mq_url is empty ")
+                return
+
+            first_node_ip = transport_url_array[0].split('@')[1].split(':')[0]
+            print(f"first node ip: ", first_node_ip)
+            if first_node_ip != MY_IP:
+                print(f"no-first node ip [{MY_IP}], not need to check rabbitmq shovel status")
+                return
+
+            # 当前环境的mq管理地址RabbitMQ 管理 API 的 URL 和认证信息
+            shovel_url = "http://" + MY_IP + ":" + MQ_MANAGE_PORT + "/api/shovels"
+            print("shovel_url: " + shovel_url)
+            # 默认用户名和密码
+            auth = (user_name, password)
+
+            # 查询shovel列表
+            response = requests.get(shovel_url, auth=auth)
+            # 检查HTTP错误
+            response.raise_for_status()
+
+            shovel_data = response.json()
+            if shovel_data:  # 更Pythonic的空值检查方式
+                for shovel in shovel_data:
+                    if shovel['name'].startswith('dingo_command_external_message_shovel_'):
+                        print(
+                            f"Shovel Name: {shovel['name']}, Status: {shovel['state']}, Blocked Status: {shovel['blocked_status']}")
+
+                        # 检查状态是否正常
+                        if shovel['state'] != 'running' or shovel['blocked_status'] != "running":
+                            # 增加错误计数
+                            shovel_error_count[shovel['name']] = shovel_error_count.get(shovel['name'], 0) + 1
+                            print(f"Shovel {shovel['name']} error count: {shovel_error_count[shovel['name']]}")
+
+                            # 检查是否达到6次错误
+                            if shovel_error_count[shovel['name']] >= 6:
+                                # 推送告警
+                                LOG.error(f"Shovel Name:[{shovel['name']}] status: {shovel['state']}, Blocked status: {shovel['blocked_status']}, need to send alarm")
+                                # 重置计数器
+                                shovel_error_count[shovel['name']] = 0
+                        else:
+                            # 状态正常，重置计数器
+                            shovel_error_count[shovel['name']] = 0
+            else:
+                print("No shovel data returned")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return

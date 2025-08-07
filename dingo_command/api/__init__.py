@@ -3,7 +3,7 @@ import os
 
 from fastapi import APIRouter
 from dingo_command.api import assets, bigscreens, system, monitor, cluster, node, instance, websocket, resources, \
-    message, cloudkitty
+    message, cloudkitty, aiinstance
 from dingo_command.api.k8s import resource
 
 # 启动时创建excel的临时存放目录
@@ -24,3 +24,5 @@ api_router.include_router(instance.router, tags=["Instance"])
 api_router.include_router(cloudkitty.router, tags=["CloudKitty"])
 api_router.include_router(message.router, tags=["Message"])
 api_router.include_router(resource.router, tags=["K8s"])
+api_router.include_router(aiinstance.router, tags=["Ai Instance"])
+

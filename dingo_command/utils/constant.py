@@ -1,6 +1,9 @@
 # 常量的类
 import uuid
 
+# 指定存放目录
+KUBECONFIG_DIR = "/etc/dingo-command/"
+
 # excel的目录文件
 EXCEL_TEMP_DIR = "/home/dingo_command/temp_excel/"
 # 资产-服务器模板文件

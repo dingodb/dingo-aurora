@@ -41,14 +41,19 @@ pipeline {
                 }
             }
             steps {
-                echo "build image harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}"
+                echo "build image harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG}"
                 withCredentials([usernamePassword(credentialsId: 'harbor_credential', usernameVariable: 'HARBOR_USERNAME', passwordVariable: 'HARBOR_PASSWORD')]) {
                     sh 'podman login harbor.zetyun.cn -u $HARBOR_USERNAME -p $HARBOR_PASSWORD'
                 }
-                sh 'podman build -t harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG} -f docker/Dockerfile-local .'
-                echo "Tagging dingo-command image as harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}"
-                
-                sh 'podman push harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}'
+                sh 'podman build -t harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG} -f docker/Dockerfile-local .'
+                echo "Tagging dingo-command image as harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG}"
+                retry(3) {
+                    sh 'podman push harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG}'
+                }
+                sh 'podman tag harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG} harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}'
+                retry(3) {
+                    sh 'podman push harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}'
+                }
             }
             
         }
@@ -56,23 +61,18 @@ pipeline {
             when {
                 anyOf { branch 'develop'; branch 'main' }
             }
-            
+
             agent {
                 node {
                     label "dingo_stack"
                 }
             }
             steps {
-                echo "Pulling dingo-command image from harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}"
-                withCredentials([usernamePassword(credentialsId: 'harbor_credential', usernameVariable: 'HARBOR_USERNAME', passwordVariable: 'HARBOR_PASSWORD')]) {
-                    sh 'podman login harbor.zetyun.cn -u $HARBOR_USERNAME -p $HARBOR_PASSWORD'
-                }
-                sh 'podman pull dockerproxy.zetyun.cn/docker.io/dingodatabase/dingo-command:latest'
-                echo "Tagging dingo-command image as harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}"
-                sh 'podman tag dockerproxy.zetyun.cn/docker.io/dingodatabase/dingo-command:latest harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}'
-                sh 'podman push harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}'
+                echo 'podman push to second registry'
+                sh 'podman tag harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG} 10.220.56.101:5000/dockerproxy.zetyun.cn/quay.nju.edu.cn/openstack.kolla/dingo-command:${IMAGE_TAG}'
+                sh 'podman push 10.220.56.101:5000/dockerproxy.zetyun.cn/quay.nju.edu.cn/openstack.kolla/dingo-command:${IMAGE_TAG} --tls-verify=false'
             }
-            
+
         }
         stage('Deploy to test'){
             when {
@@ -88,6 +88,19 @@ pipeline {
                     }
             
                     steps {
+//                         echo "update kolla_ansible"
+//                         dir('/home/cicd/kolla-ansible') {
+//                              sh '''
+//                                 git stash || true
+//                                 git pull origin dingoStack
+//                                 git stash pop || true
+//                                 # 检查冲突
+//                                 if git diff --name-only --diff-filter=U | grep .; then
+//                                     echo "出现冲突，请手动解决！"
+//                                     exit 1
+//                                 fi
+//                             '''
+//                         }
                         echo "pull dingo-command images to test"
                         dir('/home/cicd/kolla-ansible/tools') {
                             sh 'ansible-playbook  -e @/home/cicd/envs/test-regionone/globals.yml -e @/home/cicd/envs/test-regionone/passwords.yml  --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e kolla_action=pull ../ansible/site.yml  --inventory /home/cicd/envs/test-regionone/multinode -e CONFIG_DIR=/home/cicd/envs/test-regionone -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
@@ -104,6 +117,18 @@ pipeline {
                     }
 
                     steps {
+                        dir('/home/cicd/kolla-ansible') {
+                             sh '''
+                                git stash
+                                git pull origin dingoStack
+                                git stash pop || true
+                                # 检查冲突
+                                if git diff --name-only --diff-filter=U | grep .; then
+                                    echo "出现冲突，请手动解决！"
+                                    exit 1
+                                fi
+                            '''
+                        }
                         echo "pull dingo-command images to test on second node"
                         dir('/home/cicd/kolla-ansible/tools') {
                             sh 'ansible-playbook -e @/home/cicd/envs/test-regiontwo/globals.yml -e @/home/cicd/envs/test-regiontwo/passwords.yml --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e CONFIG_DIR=/home/cicd/envs/test-regiontwo -e kolla_action=pull ../ansible/site.yml  --inventory /home/cicd/envs/test-regiontwo/multinode -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
