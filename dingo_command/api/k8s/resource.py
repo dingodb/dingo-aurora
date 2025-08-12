@@ -138,6 +138,33 @@ async def list_resources(
     #将resources转为json返回
     return resources
 
+@router.get("/k8s/{resource}/list", summary="查询资源列表", description="查询资源列表")
+async def list_resources(
+    cluster_id:str = Query(None, description="集群id"),
+    resource: str = Path(..., description="Kubernetes 资源类型"),
+    search_terms: str = Query(None, description="搜索关键词"),
+    page: str = Query(None, description="页码"),
+    page_size: str = Query(None, description="每页大小"),
+    sort_by: str = Query(None, description="排序字段"),
+    sort_order: str = Query(None, description="排序顺序"),
+    token: str = Depends(get_token),
+):
+    k8sclient = get_k8s_client_by_cluster(cluster_id)
+    #将search_terms按照逗号分开
+    search_terms_list = search_terms.split(",") if search_terms else []
+    resources = k8sclient.list_resource(
+        resource_type=resource,
+        search_terms=search_terms_list,
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order
+    )
+    if resources is None:
+        raise HTTPException(status_code=500, detail=f"查询资源 '{resource}' 失败。")
+    #将resources转为json返回
+    return resources
+
 @router.get("/k8s/namespace/{namespace}/{resource}/{name}", summary="查询资源", description="查询资源")
 async def get_resources(
     cluster_id:str = Query(None, description="集群id"),

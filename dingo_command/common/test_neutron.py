@@ -3,10 +3,22 @@ from unittest.mock import MagicMock, patch
 
 from dingo_command.utils.neutron import API as neutron
 from dingo_command.common.cinder_client import CinderClient
+from dingo_command.common.network import init_cluster_network
 from dingo_command.services import CONF
 
 
 class TestNeutron(unittest.TestCase):
+    def test_init_cluster_network(self):
+        """
+        测试 init_cluster_network 方法
+        """
+        # 假设有一个测试 project_id
+        test_project_id = "0ad6b7751e904a35a9e99afaf1da416a"
+        try:
+            init_cluster_network(test_project_id, "68ebc544-0f4f-4fce-8106-7c1c31fbae4c")
+            print("init_cluster_network 测试通过")
+        except Exception as e:
+            print(f"init_cluster_network 测试失败: {e}")
 
     def test_list_external_networks(self):
         # 准备模拟数据

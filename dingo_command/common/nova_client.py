@@ -184,3 +184,16 @@ class NovaClient:
             raise Exception(f"创建失败[HTTP {response.status_code}]: {response.text}")
         return response.json()['server']
 
+    def get_controller_nodes(self):
+        # 获取控制节点列表
+        nova = NovaClient()
+        endpoint = nova.get_service_endpoint('compute')
+        # 获取所有服务
+        response = nova.session.get(f"{endpoint}/os-services")
+        if response.status_code != 200:
+            raise Exception(f"获取nova服务失败: {response.text}")
+        services = response.json().get('services', [])
+        # 过滤出控制节点服务
+        controller_binaries = {"nova-scheduler", "nova-conductor", "nova-api"}
+        controller_hosts = set(s['host'] for s in services if s['binary'] in controller_binaries)
+        return list(controller_hosts)

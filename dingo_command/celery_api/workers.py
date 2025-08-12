@@ -31,6 +31,7 @@ from dingo_command.common import CONF as CommonConf
 from dingo_command.services import CONF as ServiceConf
 from dingo_command.common.nova_client import NovaClient
 from dingo_command.common import neutron
+from dingo_command.common.network import init_cluster_network 
 from dingo_command.common.cinder_client import CinderClient
 from celery.exceptions import SoftTimeLimitExceeded
 
@@ -331,7 +332,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
                 db_cluster.bus_network_cidr = bus_subnet.get("cidr")
             #db_cluster.status = "running"
             ClusterSQL.update_cluster(db_cluster)
-
+        init_cluster_network()
         # 更新任务状态为"成功"
         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
         task_info.state = "success"

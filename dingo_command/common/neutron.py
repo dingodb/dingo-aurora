@@ -7,7 +7,7 @@ from typing import Dict, List, Any
 from neutronclient.v2_0 import client as neutron_client
 from keystoneauth1 import loading
 from keystoneauth1 import session
-from dingo_command.services import CONF
+from dingo_command.common import CONF
 
 class API:
     
@@ -17,7 +17,7 @@ class API:
         
         参数:
             auth_url: Keystone认证URL
-            username: 用户名
+            user_name: 用户名
             password: 密码
             project_name: 项目名称
             project_domain_name: 项目域名称，默认为'Default'
@@ -28,8 +28,6 @@ class API:
             neutron_client.Client: Neutron客户端实例
         """
         # 优先使用传入的参数，否则从环境变量获取
-        sss = conf["neutron"]
-        nb = conf["neutron"].auth_section
         region_name = conf.neutron.region_name
 
         auth_plugin = loading.load_auth_from_conf_options(conf,
