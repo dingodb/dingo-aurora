@@ -24,7 +24,9 @@ def get_network_ports(network_name):
         return None
     return ports[0]
 
-def assign_ports_to_ovs(port):
+def assign_ports_to_ovs(port, node_ip):
+    #ssh到node_ip上执行命令cmd命令
+
     iface = port['name']
     mac = port['mac_address']
     iface_id = port['id']
@@ -112,8 +114,8 @@ def init_cluster_network(project_id:str, subnet_id:str):
             })
 
         # 将端口分配到 OVS
-        assign_ports_to_ovs(port)
-        print(f"控制节点 {node['name']} 的网络端口已分配到 OVS")    
+        assign_ports_to_ovs(port, node)
+        print(f"控制节点 {node['name']} 的网络端口已分配到 OVS")
         cmd = f"ip route add {node['name']} {cidr} via {port_ip} dev dingo-port-{node['name']}"
         subprocess.run(cmd, shell=True, check=True)
     

@@ -66,7 +66,116 @@ class K8sClient:
             print(f"获取 Kubernetes 版本信息失败: {e}")
             # 默认假设为较新版本
             return "1.25"
-
+    def _infer_kind_from_resource_type(self, resource_type: str) -> str:
+        """
+        根据资源类型（复数形式）推断对应的 Kind（单数形式）。
+        
+        Args:
+            resource_type (str): 资源类型的复数形式，如 "pods", "deployments" 等
+            
+        Returns:
+            str: 推断出的 Kind
+        """
+        # 常见的复数到单数的映射
+        resource_kind_mapping = {
+            # Core API resources
+            'pods': 'Pod',
+            'services': 'Service',
+            'configmaps': 'ConfigMap',
+            'secrets': 'Secret',
+            'serviceaccounts': 'ServiceAccount',
+            'events': 'Event',
+            'nodes': 'Node',
+            'persistentvolumes': 'PersistentVolume',
+            'persistentvolumeclaims': 'PersistentVolumeClaim',
+            'namespaces': 'Namespace',
+            'endpoints': 'Endpoints',
+            'limitranges': 'LimitRange',
+            'resourcequotas': 'ResourceQuota',
+            'replicationcontrollers': 'ReplicationController',
+            'bindings': 'Binding',
+            'componentstatuses': 'ComponentStatus',
+            
+            # Apps API resources
+            'deployments': 'Deployment',
+            'replicasets': 'ReplicaSet',
+            'daemonsets': 'DaemonSet',
+            'statefulsets': 'StatefulSet',
+            
+            # Networking API resources
+            'ingresses': 'Ingress',
+            'networkpolicies': 'NetworkPolicy',
+            'ingressclasses': 'IngressClass',
+            
+            # RBAC API resources
+            'roles': 'Role',
+            'rolebindings': 'RoleBinding',
+            'clusterroles': 'ClusterRole',
+            'clusterrolebindings': 'ClusterRoleBinding',
+            
+            # Batch API resources
+            'jobs': 'Job',
+            'cronjobs': 'CronJob',
+            
+            # Autoscaling API resources
+            'horizontalpodautoscalers': 'HorizontalPodAutoscaler',
+            
+            # Policy API resources
+            'poddisruptionbudgets': 'PodDisruptionBudget',
+            'podsecuritypolicies': 'PodSecurityPolicy',
+            
+            # Storage API resources
+            'storageclasses': 'StorageClass',
+            'volumeattachments': 'VolumeAttachment',
+            'csinodes': 'CSINode',
+            'csidrivers': 'CSIDriver',
+            'csistoragecapacities': 'CSIStorageCapacity',
+            
+            # Node API resources
+            'runtimeclasses': 'RuntimeClass',
+            
+            # API extensions resources
+            'customresourcedefinitions': 'CustomResourceDefinition',
+            
+            # Admission registration resources
+            'mutatingwebhookconfigurations': 'MutatingWebhookConfiguration',
+            'validatingwebhookconfigurations': 'ValidatingWebhookConfiguration',
+            
+            # Certificates API resources
+            'certificatesigningrequests': 'CertificateSigningRequest',
+            
+            # Coordination API resources
+            'leases': 'Lease',
+            
+            # Discovery API resources
+            'endpointslices': 'EndpointSlice',
+        }
+        
+        # 先查找直接映射
+        if resource_type.lower() in resource_kind_mapping:
+            return resource_kind_mapping[resource_type.lower()]
+        
+        # 如果没有直接映射，尝试通过 dynamic client 发现
+        try:
+            for api_resource in self._dynamic_client.resources.search(name=resource_type):
+                return api_resource.kind
+        except Exception:
+            pass
+        
+        # 如果还是找不到，使用简单的规则转换
+        # 去掉末尾的 's'，然后首字母大写
+        if resource_type.endswith('s') and len(resource_type) > 1:
+            kind = resource_type[:-1].capitalize()
+            # 处理一些特殊情况
+            if kind.endswith('ie'):
+                kind = kind[:-2] + 'y'  # policies -> policy -> Policy
+            elif kind.endswith('sse'):
+                kind = kind[:-1]  # classes -> classe -> class -> Class
+            return kind
+        else:
+            # 如果没有找到合适的映射，返回原始资源类型的大写形式
+            return resource_type.capitalize()
+        
     def _infer_api_version(self, resource_type: str) -> str:
         """
         根据资源类型和 Kubernetes 版本推断 API 版本。
@@ -183,7 +292,7 @@ class K8sClient:
             # 对于未知的资源类型，尝试使用 dynamic client 的发现功能
             try:
                 # 尝试通过 API 发现找到资源
-                for api_resource in self._dynamic_client.resources.search(kind=resource_type):
+                for api_resource in self._dynamic_client.resources.search(kind=self._infer_kind_from_resource_type(resource_type)):
                     return api_resource.group_version
                 # 如果没有找到，抛出错误
                 raise ValueError(f"无法推断资源 '{resource_type}' 的 API 版本，请明确提供 'api_version' 参数。")
@@ -305,7 +414,7 @@ class K8sClient:
             if not api_version:
                 api_version = self._infer_api_version(resource_type)
 
-            resource_client = self._dynamic_client.resources.get(api_version=api_version, kind=resource_type)
+            resource_client = self._dynamic_client.resources.get(api_version=api_version, kind=self._infer_kind_from_resource_type(resource_type))
 
             # 构建查询参数
             params = {
@@ -360,7 +469,7 @@ class K8sClient:
             if not api_version:
                 api_version = self._infer_api_version(resource_type)
 
-            resource_client = self._dynamic_client.resources.get(api_version=api_version, kind=resource_type)
+            resource_client = self._dynamic_client.resources.get(api_version=api_version, kind=self._infer_kind_from_resource_type(resource_type))
 
             # 检查资源是否为命名空间级别
             if resource_client.namespaced and not namespace:
@@ -549,7 +658,7 @@ class K8sClient:
             if not api_version:
                 api_version = self._infer_api_version(resource_type)
 
-            resource_client = self._dynamic_client.resources.get(api_version=api_version, kind=resource_type)
+            resource_client = self._dynamic_client.resources.get(api_version=api_version, kind=self._infer_kind_from_resource_type(resource_type))
 
             # 构建查询参数
             params = {
@@ -670,7 +779,7 @@ class K8sClient:
         try:
             # 获取 dynamic client resource
             # 获取 resource 对象
-            resource = self._dynamic_client.resources.get(api_version=resolved_api_version, kind=resource_type)
+            resource = self._dynamic_client.resources.get(api_version=resolved_api_version, kind=self._infer_kind_from_resource_type(resource_type))
         
             #resource_client = self._dynamic_client.resources.get(api_version=resolved_api_version, kind=resource_type)
             res = self._dynamic_client.create(resource, body = resource_body, namespace=namespace)
@@ -743,7 +852,7 @@ class K8sClient:
         """
         try:
             # 搜索匹配的资源
-            for api_resource in self._dynamic_client.resources.search(kind=resource_type):
+            for api_resource in self._dynamic_client.resources.search(kind=self._infer_kind_from_resource_type(resource_type)):
                 return api_resource.group_version
             return None
         except Exception as e:
@@ -763,7 +872,7 @@ class K8sClient:
         """
         try:
             # 尝试获取资源客户端
-            self._dynamic_client.resources.get(api_version=api_version, kind=resource_type)
+            self._dynamic_client.resources.get(api_version=api_version, kind=self._infer_kind_from_resource_type(resource_type))
             return True
         except Exception:
             return False
@@ -783,7 +892,7 @@ class K8sClient:
             if not api_version:
                 api_version = self._infer_api_version(resource_type)
             
-            resource_client = self._dynamic_client.resources.get(api_version=api_version, kind=resource_type)
+            resource_client = self._dynamic_client.resources.get(api_version=api_version, kind=self._infer_kind_from_resource_type(resource_type))
             
             return {
                 "name": resource_client.name,
@@ -831,7 +940,7 @@ class K8sClient:
             if not api_version:
                 api_version = self._infer_api_version(resource_type)
 
-            resource_client = self._dynamic_client.resources.get(api_version=api_version, kind=resource_type)
+            resource_client = self._dynamic_client.resources.get(api_version=api_version, kind=self._infer_kind_from_resource_type(resource_type))
 
             # 检查资源是否为命名空间级别
             if resource_client.namespaced and not namespace:
@@ -987,7 +1096,7 @@ class K8sClient:
         try:
             # 获取 dynamic client resource
             # 获取 resource 对象
-            resource = self._dynamic_client.resources.get(api_version=resolved_api_version, kind=resource_type)
+            resource = self._dynamic_client.resources.get(api_version=resolved_api_version, kind=self._infer_kind_from_resource_type(resource_type))
         
             #resource_client = self._dynamic_client.resources.get(api_version=resolved_api_version, kind=resource_type)
             res = self._dynamic_client.replace(resource, body = resource_body, namespace=namespace)

@@ -104,10 +104,32 @@ async def create_resources(
         raise HTTPException(status_code=500, detail=f"查询资源 '{resource_type}' 失败。")
     return JSONResponse(content=jsonable_encoder(resources)) # 确保复杂对象可以被序列化
 
-@router.get("/k8s/namespace/{namespace}/{resource}/list", summary="查询资源列表", description="查询资源列表")
+
+@router.post("/k8s/{resource_type}", summary="创建资源", description="创建资源")
+async def create_resources(
+    resource: CreateResourceRequest,
+    resource_type: str = Path(..., description="Kubernetes 资源类型"),
+    token: str = Depends(get_token),
+) -> List[Dict[str, Any]]:
+    #根据cluster_id获取对应的kubeconfig，然后获取kubeclient
+
+    """
+    根据提供的参数查询 Kubernetes 资源。
+    """
+    k8sclient = get_k8s_client_by_cluster(resource.cluster_id)
+    resources = k8sclient.create_resource(
+        resource_body=resource.template,
+        resource_type=resource_type,
+        
+    )
+    if resources is None:
+        raise HTTPException(status_code=500, detail=f"查询资源 '{resource_type}' 失败。")
+    return JSONResponse(content=jsonable_encoder(resources)) # 确保复杂对象可以被序列化
+
+@router.get("/k8s/{resource}/list", summary="查询资源列表", description="查询资源列表")
 async def list_resources(
     cluster_id:str = Query(None, description="集群id"),
-    namespace: str = Path(..., description="Kubernetes 资源名称"),
+    namespace:str = Query(None, description="集群id"),
     resource: str = Path(..., description="Kubernetes 资源类型"),
     search_terms: str = Query(None, description="搜索关键词"),
     page: str = Query(None, description="页码"),
@@ -127,33 +149,6 @@ async def list_resources(
     resources = k8sclient.list_resource(
         resource_type=resource,
         namespace=namespace,
-        search_terms=search_terms_list,
-        page=page,
-        page_size=page_size,
-        sort_by=sort_by,
-        sort_order=sort_order
-    )
-    if resources is None:
-        raise HTTPException(status_code=500, detail=f"查询资源 '{resource}' 失败。")
-    #将resources转为json返回
-    return resources
-
-@router.get("/k8s/{resource}/list", summary="查询资源列表", description="查询资源列表")
-async def list_resources(
-    cluster_id:str = Query(None, description="集群id"),
-    resource: str = Path(..., description="Kubernetes 资源类型"),
-    search_terms: str = Query(None, description="搜索关键词"),
-    page: str = Query(None, description="页码"),
-    page_size: str = Query(None, description="每页大小"),
-    sort_by: str = Query(None, description="排序字段"),
-    sort_order: str = Query(None, description="排序顺序"),
-    token: str = Depends(get_token),
-):
-    k8sclient = get_k8s_client_by_cluster(cluster_id)
-    #将search_terms按照逗号分开
-    search_terms_list = search_terms.split(",") if search_terms else []
-    resources = k8sclient.list_resource(
-        resource_type=resource,
         search_terms=search_terms_list,
         page=page,
         page_size=page_size,
