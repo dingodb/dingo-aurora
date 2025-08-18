@@ -1,7 +1,7 @@
 # 数据表对应的model对象
 
 from __future__ import annotations
-from sqlalchemy import Column, String, DateTime, Text
+from sqlalchemy import Column, String, DateTime, Text, Boolean, JSON, text
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -10,9 +10,44 @@ class AiK8sKubeConfigConfigs(Base):
     __tablename__ = "ops_ai_k8s_kubeconfig_configs"
 
     id = Column(String(length=128), primary_key= True, nullable=False, index=True, unique=False)
-    k8s_cluster_id = Column(String(length=128), nullable=True)
+    k8s_id = Column(String(length=128), nullable=True, index=True, unique=True)
+    k8s_name = Column(String(length=128), nullable=True)
+    k8s_type = Column(String(length=128), nullable=True)
     kubeconfig_path = Column(String(length=255), nullable=True)
     kubeconfig_context_name = Column(String(length=128), nullable=True)
     kubeconfig = Column(Text, nullable=False)
-    create_time = Column(DateTime, nullable=True)
-    update_time = Column(DateTime, nullable=True)
+    create_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    update_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"))
+
+class AiInstanceInfo(Base):
+    __tablename__ = "ops_ai_instance_info"
+
+    id = Column(String(length=128), nullable=False, primary_key=True, unique=False)
+    instance_id = Column(String(length=128), nullable=True, index=True, unique=True)
+    instance_name = Column(String(length=128), nullable=True)
+    instance_real_name = Column(String(length=128), nullable=True)
+    instance_status = Column(String(length=128), nullable=True)
+    instance_real_status = Column(String(length=128), nullable=True)
+    instance_k8s_type = Column(String(length=128), nullable=True)
+    instance_k8s_id = Column(String(length=128), nullable=True)
+    instance_k8s_name = Column(String(length=128), nullable=True)
+    instance_project_id = Column(String(length=128), nullable=True)
+    instance_project_name = Column(String(length=128), nullable=True)
+    instance_user_id = Column(String(length=128), nullable=True)
+    instance_user_name = Column(String(length=128), nullable=True)
+    instance_root_account_id = Column(String(length=128), nullable=True)
+    instance_root_account_name = Column(String(length=128), nullable=True)
+    dev_tool = Column(String(length=128), nullable=True)
+    instance_image = Column(String(length=128), nullable=True)
+    image_type = Column(String(length=128), nullable=True)
+    stop_time = Column(DateTime, nullable=True)
+    auto_delete_time = Column(DateTime, nullable=True)
+    instance_config = Column(Text, nullable=True)
+    instance_volumes = Column(Text, nullable=True)
+    instance_envs = Column(Text, nullable=True)
+    instance_description = Column(Text, nullable=True)
+    # data_set = Column(Text)
+    instance_create_time = Column(DateTime, nullable=True)
+    create_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    update_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"))
+    error_msg = Column(Text, nullable=True)

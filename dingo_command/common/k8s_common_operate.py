@@ -1,0 +1,238 @@
+import json
+
+from kubernetes.client import V1StatefulSet, ApiException
+from kubernetes import client
+from oslo_log import log
+
+from dingo_command.utils.constant import RESOURCE_TYPE, AI_INSTANCE
+
+LOG = log.getLogger(__name__)
+
+class K8sCommonOperate:
+
+    def create_ai_instance_ns(self, core_v1: client.CoreV1Api, namespace_name: str = "default"):
+        try:
+            # 1. 定义命名空间对象
+            namespace = client.V1Namespace(
+                metadata=client.V1ObjectMeta(
+                    name=namespace_name,
+                )
+            )
+
+            # 2. 创建命名空间
+            core_v1.create_namespace(body=namespace)
+            print(f"namespace {namespace_name} create success")
+        except Exception as e:
+            print(f"namespace {namespace_name} create failed")
+            import traceback
+            traceback.print_exc()
+            raise e
+
+    def check_ai_instance_ns_exists(self, core_v1: client.CoreV1Api, namespace_name: str) -> bool:
+        """
+        检查命名空间是否已存在
+
+        Args:
+            core_v1: CoreV1Api 客户端实例
+            namespace_name: 要检查的命名空间名称
+
+        Returns:
+            bool: 是否存在
+        """
+        try:
+            core_v1.read_namespace(name=namespace_name)
+            return True
+        except client.exceptions.ApiException as e:
+            import traceback
+            traceback.print_exc()
+            if e.status == 404:
+                return False
+            else:
+                raise e
+
+    def create_sts_pod(self, app_v1: client.AppsV1Api, namespace_name: str, stateful_set_pod_data: V1StatefulSet, async_req = True):
+        create_namespaced_stateful_set_pod_thread = None
+        try:
+            print(f"create statefulset pod namespace_name: {namespace_name}, body：{stateful_set_pod_data}")
+            # 创建StatefulSet Pod
+            create_namespaced_stateful_set_pod_thread = app_v1.create_namespaced_stateful_set(
+                namespace=namespace_name,
+                body=stateful_set_pod_data,
+                async_req=async_req
+            )
+        except Exception as e:
+            LOG.info(f"create statefulset pod failed, namespace_name: {namespace_name}, stateful_set_pod_data: {json.dumps(stateful_set_pod_data)}")
+            import traceback
+            traceback.print_exc()
+            raise e
+        if create_namespaced_stateful_set_pod_thread is None:
+            return None
+        return create_namespaced_stateful_set_pod_thread.get()
+
+    def create_ai_instance_sts_service(self, core_v1: client.CoreV1Api, namespace: str, service_name: str):
+        """创建NodePort Service"""
+        service = client.V1Service(
+            metadata=client.V1ObjectMeta(name=service_name),
+            spec=client.V1ServiceSpec(
+                selector={"app": service_name,
+                          RESOURCE_TYPE: AI_INSTANCE},  # 定义标签
+                ports=[client.V1ServicePort(port=8888, target_port=8888)],  # 定义port、target_port端口号
+                # cluster_ip="",  # Headless Service
+                type="NodePort",  # svc类型为NodePort
+            )
+        )
+
+        try:
+            create_namespaced_service_thread = core_v1.create_namespaced_service(
+                namespace=namespace,
+                body=service,
+                async_req=True
+            )
+            create_namespaced_service = create_namespaced_service_thread.get()
+            print(f"success get service {create_namespaced_service.metadata.name}")
+            return create_namespaced_service.metadata.uid
+        except client.exceptions.ApiException as e:
+            if e.status == 409:
+                print(f"Service {service_name} already exists")
+            else:
+                import traceback
+                traceback.print_exc()
+                raise e
+
+    def list_pods_by_label(self, core_v1: client.CoreV1Api, namespace=None,
+                           label_selector="app=ai-instance,resource-type=ai-instance", limit = 2000, timeout_seconds=60):
+        all_pods = []
+        continue_token = None
+
+        while True:
+            # 构造查询参数
+            kwargs = {
+                "label_selector": label_selector,
+                "limit": limit,
+                "_continue": continue_token,
+                "timeout_seconds": timeout_seconds
+            }
+            if namespace:
+                # 分页查询指定命名空间
+                resp = core_v1.list_namespaced_pod(
+                    namespace=namespace,
+                    **kwargs
+                )
+            else:
+                # 分页查询所有命名空间
+                resp = core_v1.list_pod_for_all_namespaces(
+                    **kwargs
+                )
+
+            all_pods.extend(resp.items)
+
+            # 检查是否还有更多数据
+            continue_token = resp.metadata._continue
+            if not continue_token:
+                break
+
+        return all_pods
+
+    def list_sts_by_label(self, app_v1: client.AppsV1Api, namespace=None,
+                          label_selector="app=ai-instance,resource-type=ai-instance", limit=2000, timeout_seconds=60):
+        all_statefulset = []
+        continue_token = None
+
+        while True:
+            # 构造查询参数
+            kwargs = {
+                "label_selector": label_selector,
+                "limit": limit,
+                "_continue": continue_token,
+                "timeout_seconds": timeout_seconds
+            }
+
+            if namespace:
+                # 分页查询指定命名空间
+                resp = app_v1.list_namespaced_stateful_set(
+                    namespace=namespace,
+                    **kwargs
+                )
+            else:
+                # 分页查询所有命名空间
+                resp = app_v1.list_namespaced_stateful_set(
+                    **kwargs
+                )
+
+            all_statefulset.extend(resp.items)
+
+            # 检查是否还有更多数据
+            continue_token = resp.metadata._continue
+            if not continue_token:
+                break
+
+        return all_statefulset
+
+    def delete_sts_by_name(self,
+            apps_v1: client.AppsV1Api,
+            real_sts_name: str,
+            namespace: str = None,
+            grace_period_seconds: int = 0,
+            propagation_policy: str = 'Foreground'  # 可选：'Orphan'/'Background'
+    ):
+        """
+        根据 name 精确删除 StatefulSet
+
+        Args:
+            apps_v1: AppsV1Api 实例
+            real_sts_name: StatefulSet 的 name
+            namespace: 命名空间
+            grace_period_seconds: 优雅删除等待时间（0表示立即删除）
+            propagation_policy: 级联删除策略
+        """
+        try:
+            # 执行删除
+            apps_v1.delete_namespaced_stateful_set(
+                name=real_sts_name,
+                namespace=namespace,
+                grace_period_seconds=grace_period_seconds,
+                propagation_policy=propagation_policy,
+                body=client.V1DeleteOptions()
+            )
+            print(f"已删除 StatefulSet: {real_sts_name}")
+        except ApiException as e:
+            if e.status == 404:
+                print(f"StatefulSet 不存在 (StatefulSet: {real_sts_name})")
+                return
+            else:
+                print(f"删除失败: {e.reason}")
+            return False
+
+    def delete_service_by_name(self,
+            core_v1: client.CoreV1Api,
+            service_name: str,
+            namespace: str = None,
+            grace_period_seconds: int = 0):
+        """
+        根据名称删除 Service
+
+        Args:
+            core_v1: CoreV1Api 实例
+            service_name: Service 名称
+            namespace: 命名空间
+            grace_period_seconds: 优雅删除等待时间
+        """
+        try:
+            core_v1.delete_namespaced_service(
+                name=service_name,
+                namespace=namespace,
+                grace_period_seconds=grace_period_seconds,
+                body=client.V1DeleteOptions()
+            )
+            print(f"已删除 Service: {service_name}")
+            return True
+
+        except ApiException as e:
+            import traceback
+            traceback.print_exc()
+            if e.status == 404:
+                print(f"Service 不存在: {service_name}")
+                return
+            else:
+                print(f"删除失败: {e.reason}")
+            raise e
