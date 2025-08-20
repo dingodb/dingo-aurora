@@ -87,7 +87,7 @@ keystone_opts = [
 CONF.register_group(keystone_group)
 CONF.register_opts(keystone_opts, keystone_group)
 
-default_group = cfg.OptGroup(name='default', title='default conf data')
+default_group = cfg.OptGroup(name='DEFAULT', title='default conf data')
 
 default_opts = [
     cfg.StrOpt('controller_nodes', default=None, help='the openstack controller nodes'),

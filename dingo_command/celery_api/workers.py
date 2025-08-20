@@ -332,7 +332,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
                 db_cluster.bus_network_cidr = bus_subnet.get("cidr")
             #db_cluster.status = "running"
             ClusterSQL.update_cluster(db_cluster)
-        init_cluster_network()
+        init_cluster_network(project_id=cluster.tenant_id, subnet_id=subnet_id)
         # 更新任务状态为"成功"
         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
         task_info.state = "success"
@@ -425,11 +425,6 @@ def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list, scale=False
         count, db_clusters = ClusterSQL.list_cluster(query_params)
         db_cluster = db_clusters[0]
         db_cluster.status = 'running'
-        # if scale:
-        #     cpu_total, gpu_total, mem_total = get_node_info(instance_list)
-        #     db_cluster.cpu += cpu_total
-        #     db_cluster.gpu += gpu_total
-        #     db_cluster.mem += mem_total
         db_cluster.status_msg = ""
         ClusterSQL.update_cluster(db_cluster)
     except SoftTimeLimitExceeded:
@@ -1189,8 +1184,6 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         # 将bastion_ip从terraform state中去除
         # 从 terraform state 中移除 bastion_fip 资源
         cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tf_dict["id"])
-        remove_bastion_fip_from_state(cluster_dir)
-
         # 根据生成inventory
         # 复制script下面的host文件到WORK_DIR/cluster.id目录下
         # 执行python3 host --list，将生成的内容转换为yaml格式写入到inventory/inventory.yaml文件中
@@ -1223,29 +1216,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                     task_info.detail = "Ansible kubernetes deployment failed, configure ssh-keygen error"
                     update_task_state(task_info)
                     raise Exception("Ansible kubernetes deployment failed, configure ssh-keygen error")
-        if cluster_tfvars.password != "":
-            master_node_name = f"{cluster_tfvars.cluster_name}-k8s-master-1"
-            ssh_port = hosts_data["_meta"]["hostvars"][master_node_name].get("ansible_port", 22)
-            cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p {ssh_port} '
-                   f'{cluster_tfvars.ssh_user}@{master_ip}')
-            retry_count = 0
-            max_retries = 30
-            while retry_count < max_retries:
-                result = subprocess.run(cmd, shell=True, capture_output=True)
-                if result.returncode == 0:
-                    break
-                else:
-                    retry_count += 1
-                    if retry_count < max_retries:
-                        print(f"sshpass failed, retry {retry_count}/{max_retries} after 5s...")
-                        time.sleep(5)
-            if result.returncode != 0:
-                task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                task_info.state = "failed"
-                task_info.detail = "Ansible kubernetes deployment failed, configure sshpass error"
-                update_task_state(task_info)
-                print(f"sshpass failed after {max_retries} retries: {result.stderr}")
-                raise Exception("Ansible kubernetes deployment failed, configure sshpass error")
+
 
         # 执行ansible命令验证是否能够连接到所有节点
         print(f"check all node status {task_id}")

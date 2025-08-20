@@ -25,31 +25,6 @@ module "network" {
   tenant_id = var.tenant_id
 }
 
-module "ips" {
-  source = "./modules/ips"
-
-  number_of_k8s_masters         = var.number_of_k8s_masters
-  number_of_k8s_masters_no_etcd = var.number_of_k8s_masters_no_etcd
-  number_of_nodes               = var.number_of_nodes
-  floatingip_pool               = var.floatingip_pool
-  external_subnetids            = var.external_subnetids
-  number_of_bastions            = var.number_of_bastions
-  external_net                  = var.external_net
-  admin_network_name            = var.admin_network_name
-  admin_network_id              = var.admin_network_id
-  router_id                     = module.network.router_id
-  nodes                         = var.nodes
-  k8s_masters                   = var.k8s_masters
-  k8s_master_fips               = var.k8s_master_fips
-  bastion_fips                  = var.bastion_fips
-  router_internal_port_id       = module.network.router_internal_port_id
-  token = var.token
-  auth_url = var.auth_url
-  tenant_id = var.tenant_id
-  bastion_floatip_id =  var.bastion_floatip_id
-
-}
-
 module "compute" {
   source = "./modules/compute"
 
@@ -97,13 +72,7 @@ module "compute" {
   network_router_id                            = module.network.router_id
   admin_network_id                             = module.network.admin_network_id
   flavor_bastion                               = var.flavor_bastion
-  k8s_master_fips                              = module.ips.k8s_master_fips
-  k8s_master_no_etcd_fips                      = module.ips.k8s_master_no_etcd_fips
-  k8s_masters_fips                             = module.ips.k8s_masters_fips
-  node_fips                                    = module.ips.node_fips
-  nodes_fips                                   = module.ips.nodes_fips
-  bastion_fips                                 = module.ips.bastion_fips
-  bastion_fip_ids                              = module.ips.bastion_fip_ids
+
   bastion_allowed_remote_ips                   = var.bastion_allowed_remote_ips
   bastion_allowed_remote_ipv6_ips              = var.bastion_allowed_remote_ipv6_ips
   master_allowed_remote_ips                    = var.master_allowed_remote_ips
@@ -179,16 +148,4 @@ output "floating_network_id" {
 
 output "router_id" {
   value = module.network.router_id
-}
-
-output "k8s_master_fips" {
-  value = var.number_of_k8s_masters + var.number_of_k8s_masters_no_etcd > 0 ? concat(module.ips.k8s_master_fips, module.ips.k8s_master_no_etcd_fips) : [for key, value in module.ips.k8s_masters_fips : value.address]
-}
-
-output "node_fips" {
-  value = var.number_of_nodes > 0 ? module.ips.node_fips : [for key, value in module.ips.nodes_fips : value.address]
-}
-
-output "bastion_fips" {
-  value = module.ips.bastion_fips
 }
