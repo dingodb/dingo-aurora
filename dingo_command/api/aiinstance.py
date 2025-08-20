@@ -64,9 +64,9 @@ async def get_instance_info_by_instance_id(instance_id:str):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail=f"查询容器实例详情失败:{id}")
+        raise HTTPException(status_code=400, detail=f"查询容器实例详情失败:{instance_id}")
 
-@router.delete("/ai-instance/{instance_id}", summary="删除容器实例", description="根据实例id删除容器实例数据")
+@router.delete("/ai-instance/{instance_id}", summary="删除容器实例", description="根据实例id删除容器实例")
 async def delete_instance_by_instance_id(instance_id:str):
     # 删除容器实例
     try:
@@ -77,7 +77,7 @@ async def delete_instance_by_instance_id(instance_id:str):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail=f"删除容器实例失败:{id}")
+        raise HTTPException(status_code=400, detail=f"删除容器实例失败:{instance_id}")
 
 # 所有的websocket的连接的统一入口
 @router.websocket("/ws-ai/pod/{namespace}/{pod_name}")
@@ -139,3 +139,25 @@ async def pod_console(
         traceback.print_exc()
         await websocket.send_text(f"Terminal error: {str(e)}")
         await websocket.close()
+
+@router.post("/ai-instance/{instance_id}/open", summary="开机容器实例", description="根据实例id开机容器实例")
+async def open_instance_by_id(instance_id: str):
+    try:
+        return ai_instance_service.open_ai_instance_by_instance_id(instance_id)
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"开机容器实例失败:{instance_id}")
+
+@router.post("/ai-instance/{instance_id}/close", summary="关机容器实例", description="根据实例id关机容器实例")
+async def close_instance_by_id(instance_id: str):
+    try:
+        return ai_instance_service.close_ai_instance_by_instance_id(instance_id)
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"关机容器实例失败:{instance_id}")

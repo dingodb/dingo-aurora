@@ -30,7 +30,32 @@ k8s_common_operate = K8sCommonOperate()
 class AiInstanceService:
 
     def delete_ai_instance_by_instance_id(self, instance_id):
-        return None
+        ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_instance_id(instance_id)
+        if not ai_instance_info_db:
+            raise Fail(f"ai instance[{instance_id}] is not found", error_message=f" 容器实例[{instance_id}找不到]")
+
+        # 优先尝试删除 K8s 资源（Service、StatefulSet）
+        try:
+            core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
+            app_k8s_client = get_k8s_app_client(ai_instance_info_db.instance_k8s_id)
+            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
+            real_name = ai_instance_info_db.instance_real_name or ai_instance_info_db.instance_name
+
+            try:
+                k8s_common_operate.delete_service_by_name(core_k8s_client, real_name, namespace_name)
+            except Exception as e:
+                LOG.error(f"删除Service失败, name={real_name}, ns={namespace_name}, err={e}")
+
+            try:
+                k8s_common_operate.delete_sts_by_name(app_k8s_client, real_name, namespace_name)
+            except Exception as e:
+                LOG.error(f"删除StatefulSet失败, name={real_name}, ns={namespace_name}, err={e}")
+        except Exception as e:
+            LOG.error(f"获取 K8s 客户端失败或删除资源异常: {e}")
+
+        # 删除数据库记录
+        AiInstanceSQL.delete_ai_instance_info_by_instance_id(instance_id)
+        return {"data": "success", "instance_id": instance_id}
 
     def get_ai_instance_info_by_instance_id(self, instance_id):
         ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_instance_id(instance_id)
@@ -201,6 +226,154 @@ class AiInstanceService:
         # 更新数据
         AiInstanceSQL.update_ai_instance_info(ai_instance_info_db_new)
         return ai_instance_info_db_new
+
+    def open_ai_instance_by_instance_id(self, instance_id):
+        try:
+            ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_instance_id(instance_id)
+            if not ai_instance_info_db:
+                raise Fail(f"ai instance[{instance_id}] is not found", error_message=f" 容器实例[{instance_id}找不到]")
+            
+            # 检查实例状态，只有 stopped 状态的实例才能开机
+            if ai_instance_info_db.instance_status != "stopped":
+                raise Fail(f"ai instance[{instance_id}] status is {ai_instance_info_db.instance_status}, cannot start", 
+                          error_message=f" 容器实例[{instance_id}]状态为{ai_instance_info_db.instance_status}，无法开机")
+
+            # 获取k8s客户端
+            core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
+            app_k8s_client = get_k8s_app_client(ai_instance_info_db.instance_k8s_id)
+
+            # 命名空间名称
+            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
+
+            # 更新状态为 starting
+            ai_instance_info_db.instance_status = "STARTING"
+            ai_instance_info_db.stop_time = None  # 清除关机时间
+            AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+
+            # 重新创建 Service
+            real_name = ai_instance_info_db.instance_real_name or ai_instance_info_db.instance_name
+            try:
+                k8s_common_operate.create_ai_instance_sts_service(core_k8s_client, namespace_name, real_name)
+            except Exception as e:
+                LOG.error(f"重新创建Service失败, name={real_name}, ns={namespace_name}, err={e}")
+                # 回滚状态
+                ai_instance_info_db.instance_status = "STOPPED"
+                AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+                raise e
+
+            # 重新创建 StatefulSet
+            try:
+                # 从实例配置中解析资源限制
+                instance_config = json.loads(ai_instance_info_db.instance_config) if ai_instance_info_db.instance_config else {}
+                volumes = json.loads(ai_instance_info_db.instance_volumes) if ai_instance_info_db.instance_volumes else {}
+                instance_envs = json.loads(ai_instance_info_db.instance_envs) if ai_instance_info_db.instance_envs else {}
+                
+                # 构建资源限制
+                resource_limits = {}
+                node_selector_gpu = {}
+                tolerations_gpu = []
+                
+                if instance_config.get('compute_cpu'):
+                    resource_limits['cpu'] = str(instance_config['compute_cpu'])
+                if instance_config.get('compute_memory'):
+                    resource_limits['memory'] = str(instance_config['compute_memory']) + "Gi"
+                
+                if instance_config.get('gpu_model') and instance_config.get('gpu_count'):
+                    if "nvidia" in instance_config['gpu_model'].lower():
+                        resource_limits['nvidia.com/gpu'] = str(instance_config['gpu_count'])
+                        node_selector_gpu['nvidia.com/gpu.product'] = instance_config['gpu_model']
+                        node_selector_gpu['nvidia.com/gpu.count'] = str(instance_config['gpu_count'])
+                        tolerations_gpu.append(V1Toleration(
+                            key="nvidia.com/gpu",
+                            operator="Exists",
+                            effect="NoSchedule"
+                        ))
+                    elif "amd" in instance_config['gpu_model'].lower():
+                        resource_limits['amd.com/gpu'] = str(instance_config['gpu_count'])
+
+                # 组装 StatefulSet 数据
+                stateful_set_pod_data = self.assemble_statefulset_pod_info(
+                    sts_name=real_name,
+                    service_name=real_name,
+                    image=ai_instance_info_db.instance_image,
+                    env_vars=instance_envs,
+                    resource_limits=resource_limits,
+                    volumes=volumes,
+                    order_id=ai_instance_info_db.instance_id,  # 使用实例ID作为订单ID
+                    user_id=ai_instance_info_db.instance_user_id,
+                    node_selector_gpu=node_selector_gpu,
+                    tolerations_gpu=tolerations_gpu
+                )
+
+                # 创建 StatefulSet
+                create_namespaced_stateful_set_info = k8s_common_operate.create_sts_pod(
+                    app_k8s_client, namespace_name, stateful_set_pod_data)
+
+                # 更新实例信息
+                ai_instance_info_db.instance_id = create_namespaced_stateful_set_info.metadata.uid
+                ai_instance_info_db.instance_create_time = create_namespaced_stateful_set_info.metadata.creation_timestamp
+                ai_instance_info_db.instance_status = "READY"  # 创建中状态
+                AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+
+            except Exception as e:
+                LOG.error(f"重新创建StatefulSet失败, name={real_name}, ns={namespace_name}, err={e}")
+                # 回滚状态和删除已创建的Service
+                try:
+                    k8s_common_operate.delete_service_by_name(core_k8s_client, real_name, namespace_name)
+                except Exception as del_e:
+                    LOG.error(f"回滚删除Service失败: {del_e}")
+                ai_instance_info_db.instance_status = "STOPPED"
+                AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+                raise e
+
+            return self.assemble_ai_instance_return_result(ai_instance_info_db)
+        except Fail:
+            raise
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+
+    def close_ai_instance_by_instance_id(self, instance_id):
+        try:
+            ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_instance_id(instance_id)
+            if not ai_instance_info_db:
+                raise Fail(f"ai instance[{instance_id}] is not found", error_message=f" 容器实例[{instance_id}找不到]")
+
+            # 获取k8s客户端
+            core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
+            app_k8s_client = get_k8s_app_client(ai_instance_info_db.instance_k8s_id)
+
+            # 命名空间名称
+            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
+
+            # 更新为 stopping
+            ai_instance_info_db.instance_status = "STOPPING"
+            ai_instance_info_db.stop_time = datetime.now()
+            AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+
+            # 删除 Service 与 StatefulSet（按真实名称）
+            real_name = ai_instance_info_db.instance_real_name or ai_instance_info_db.instance_name
+            try:
+                k8s_common_operate.delete_service_by_name(core_k8s_client, real_name, namespace_name)
+            except Exception as e:
+                LOG.error(f"删除Service失败, name={real_name}, ns={namespace_name}, err={e}")
+            try:
+                k8s_common_operate.delete_sts_by_name(app_k8s_client, real_name, namespace_name)
+            except Exception as e:
+                LOG.error(f"删除StatefulSet失败, name={real_name}, ns={namespace_name}, err={e}")
+
+            # 标记为 stopped
+            ai_instance_info_db.instance_status = "STOPPED"
+            AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+
+            return self.assemble_ai_instance_return_result(ai_instance_info_db)
+        except Fail:
+            raise
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
 
     def check_ai_instance_parameter(self, ai_instance):
         if not ai_instance:

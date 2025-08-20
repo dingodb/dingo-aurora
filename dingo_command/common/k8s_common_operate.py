@@ -99,6 +99,23 @@ class K8sCommonOperate:
                 traceback.print_exc()
                 raise e
 
+    def is_node_port_in_use(self, core_v1: client.CoreV1Api, node_port: int) -> bool:
+        """检查某个 NodePort 是否在整个集群范围内已被占用"""
+        try:
+            services = core_v1.list_service_for_all_namespaces()
+            for svc in services.items:
+                if not svc.spec or not svc.spec.ports:
+                    continue
+                for p in svc.spec.ports:
+                    if getattr(p, 'node_port', None) == node_port:
+                        return True
+            return False
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            # 如果检查失败，为安全起见视为已占用，避免冲突
+            return True
+
     def list_pods_by_label(self, core_v1: client.CoreV1Api, namespace=None,
                            label_selector="app=ai-instance,resource-type=ai-instance", limit = 2000, timeout_seconds=60):
         all_pods = []
