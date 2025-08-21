@@ -30,17 +30,6 @@ pipeline {
     }
 
     stages {
-        stage('Check Branch') {
-            steps {
-                script {
-                    def isPR = env.BRANCH_NAME =~ /^PR-\d+$/
-                    if (!isPR) {
-                        currentBuild.result = 'ABORTED'
-                        error("Skipping build for branch ${env.BRANCH_NAME}")
-                    }
-                }
-            }
-        }
         stage('docker build') {
             when {
                 anyOf { branch 'develop'; branch 'main' }
