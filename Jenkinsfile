@@ -101,7 +101,7 @@ pipeline {
 //                                 fi
 //                             '''
 //                         }
-                        echo "pull dingo-command images to test"
+                        echo "pull dingo-command images to dev cluster(56.4)"
                         dir('/home/cicd/kolla-ansible/tools') {
                             sh 'ansible-playbook  -e @/home/cicd/envs/test-regionone/globals.yml -e @/home/cicd/envs/test-regionone/passwords.yml  --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e kolla_action=pull ../ansible/site.yml  --inventory /home/cicd/envs/test-regionone/multinode -e CONFIG_DIR=/home/cicd/envs/test-regionone -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
                             echo 'deploy images to develop '
@@ -109,7 +109,36 @@ pipeline {
                         }
                     }
                 }
-                stage('pull image on second node') {
+                stage('pull image on integration test cluster(56.7)') {
+                    agent {
+                        node {
+                            label "dingo_stack"  // 请替换为实际的第二个节点标签
+                        }
+                    }
+
+                    steps {
+                        dir('/home/cicd/kolla-ansible') {
+                             sh '''
+                                git stash
+                                git pull origin dingoStack
+                                git stash pop || true
+                                # 检查冲突
+                                if git diff --name-only --diff-filter=U | grep .; then
+                                    echo "出现冲突，请手动解决！"
+                                    exit 1
+                                fi
+                            '''
+                        }
+                        echo "pull dingo-command images to integration test（56.7）"
+                        dir('/home/cicd/kolla-ansible/tools') {
+                            sh 'ansible-playbook -e @/home/cicd/envs/integration_test_env/globals.yml -e @/home/cicd/envs/integration_test_env/passwords.yml --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e CONFIG_DIR=/home/cicd/envs/integration_test_env -e kolla_action=pull ../ansible/site.yml  --inventory /home/cicd/envs/integration_test_env/multinode -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
+                            echo 'deploy images to develop on second node'
+                            sh 'ansible-playbook -e @/home/cicd/envs/integration_test_env/globals.yml -e @/home/cicd/envs/integration_test_env/passwords.yml --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e CONFIG_DIR=/home/cicd/envs/integration_test_env -e kolla_action=upgrade ../ansible/site.yml  --inventory /home/cicd/envs/integration_test_env/multinode -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
+                        }
+                    }
+                }
+
+                stage('pull image on functional test cluster(244.176)') {
                     agent {
                         node {
                             label "dingo_stack"  // 请替换为实际的第二个节点标签
@@ -131,9 +160,9 @@ pipeline {
                         }
                         echo "pull dingo-command images to test on second node"
                         dir('/home/cicd/kolla-ansible/tools') {
-                            sh 'ansible-playbook -e @/home/cicd/envs/test-regiontwo/globals.yml -e @/home/cicd/envs/test-regiontwo/passwords.yml --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e CONFIG_DIR=/home/cicd/envs/test-regiontwo -e kolla_action=pull ../ansible/site.yml  --inventory /home/cicd/envs/test-regiontwo/multinode -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
+                            sh 'ansible-playbook -e @/home/cicd/envs/functional_test_env/globals.yml -e @/home/cicd/envs/functional_test_env/passwords.yml --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e CONFIG_DIR=/home/cicd/envs/functional_test_env -e kolla_action=pull ../ansible/site.yml  --inventory /home/cicd/envs/functional_test_env/multinode -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
                             echo 'deploy images to develop on second node'
-                            sh 'ansible-playbook -e @/home/cicd/envs/test-regiontwo/globals.yml -e @/home/cicd/envs/test-regiontwo/passwords.yml --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e CONFIG_DIR=/home/cicd/envs/test-regiontwo -e kolla_action=upgrade ../ansible/site.yml  --inventory /home/cicd/envs/test-regiontwo/multinode -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
+                            sh 'ansible-playbook -e @/home/cicd/envs/functional_test_env/globals.yml -e @/home/cicd/envs/functional_test_env/passwords.yml --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e CONFIG_DIR=/home/cicd/envs/functional_test_env -e kolla_action=upgrade ../ansible/site.yml  --inventory /home/cicd/envs/functional_test_env/multinode -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
                         }
                     }
                 }
