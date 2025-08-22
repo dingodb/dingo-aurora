@@ -1,4 +1,5 @@
 import json
+import time
 
 from kubernetes.client import V1StatefulSet, ApiException
 from kubernetes import client
@@ -53,7 +54,6 @@ class K8sCommonOperate:
     def create_sts_pod(self, app_v1: client.AppsV1Api, namespace_name: str, stateful_set_pod_data: V1StatefulSet, async_req = True):
         create_namespaced_stateful_set_pod_thread = None
         try:
-            print(f"create statefulset pod namespace_name: {namespace_name}, body：{stateful_set_pod_data}")
             # 创建StatefulSet Pod
             create_namespaced_stateful_set_pod_thread = app_v1.create_namespaced_stateful_set(
                 namespace=namespace_name,
@@ -72,7 +72,8 @@ class K8sCommonOperate:
     def create_ai_instance_sts_service(self, core_v1: client.CoreV1Api, namespace: str, service_name: str):
         """创建NodePort Service"""
         service = client.V1Service(
-            metadata=client.V1ObjectMeta(name=service_name),
+            metadata=client.V1ObjectMeta(name=service_name,
+                                         labels={RESOURCE_TYPE: AI_INSTANCE}),
             spec=client.V1ServiceSpec(
                 selector={"app": service_name,
                           RESOURCE_TYPE: AI_INSTANCE},  # 定义标签
@@ -116,74 +117,99 @@ class K8sCommonOperate:
             # 如果检查失败，为安全起见视为已占用，避免冲突
             return True
 
+    def get_pod_info(self, core_v1: client.CoreV1Api, name: str, namespace: str):
+        """
+        查询单个 Pod 的基础信息
+
+        :param core_v1: CoreV1Api 客户端实例
+        :param name: Pod 名称
+        :param namespace: 命名空间，默认为 default
+        :return: V1Pod 对象，查询失败返回 e
+        """
+        try:
+            return core_v1.read_namespaced_pod(name, namespace)
+        except ApiException as e:
+            print(f"查询 Pod {namespace}/{name} 失败: {e.reason} (状态码: {e.status})")
+            raise e.reason
+
     def list_pods_by_label(self, core_v1: client.CoreV1Api, namespace=None,
-                           label_selector="app=ai-instance,resource-type=ai-instance", limit = 2000, timeout_seconds=60):
+                           label_selector="resource-type=ai-instance", limit = 2000, timeout_seconds=60):
         all_pods = []
         continue_token = None
+        try:
+            while True:
+                # 构造查询参数
+                kwargs = {
+                    "label_selector": label_selector,
+                    "limit": limit,
+                    "_continue": continue_token,
+                    "timeout_seconds": timeout_seconds
+                }
+                try:
+                    if namespace:
+                        # 分页查询指定命名空间
+                        resp = core_v1.list_namespaced_pod(
+                            namespace=namespace,
+                            **kwargs
+                        )
+                    else:
+                        # 分页查询所有命名空间
+                        resp = core_v1.list_pod_for_all_namespaces(
+                            **kwargs
+                        )
+                except Exception as ex:
+                    raise RuntimeError(f"Failed to query pod: {str(ex)}") from ex
 
-        while True:
-            # 构造查询参数
-            kwargs = {
-                "label_selector": label_selector,
-                "limit": limit,
-                "_continue": continue_token,
-                "timeout_seconds": timeout_seconds
-            }
-            if namespace:
-                # 分页查询指定命名空间
-                resp = core_v1.list_namespaced_pod(
-                    namespace=namespace,
-                    **kwargs
-                )
-            else:
-                # 分页查询所有命名空间
-                resp = core_v1.list_pod_for_all_namespaces(
-                    **kwargs
-                )
+                all_pods.extend(resp.items)
 
-            all_pods.extend(resp.items)
-
-            # 检查是否还有更多数据
-            continue_token = resp.metadata._continue
-            if not continue_token:
-                break
+                # 检查是否还有更多数据
+                continue_token = resp.metadata._continue
+                if not continue_token:
+                    break
+        except Exception as e:
+            print(f"list_namespaced_stateful_set failed:{e}")
+            raise e
 
         return all_pods
 
-    def list_sts_by_label(self, app_v1: client.AppsV1Api, namespace=None,
-                          label_selector="app=ai-instance,resource-type=ai-instance", limit=2000, timeout_seconds=60):
-        all_statefulset = []
+    def list_sts_by_label(self, app_v1: client.AppsV1Api, namespace="",
+                          label_selector="resource-type=ai-instance", limit=2000, timeout_seconds=60):
+        all_sts = []
         continue_token = None
+        try:
+            while True:
+                # 构造查询参数
+                kwargs = {
+                    "label_selector": label_selector,
+                    "limit": limit,
+                    "_continue": continue_token,
+                    "timeout_seconds": timeout_seconds
+                }
+                try:
+                    if namespace:
+                        # 分页查询指定命名空间
+                        resp = app_v1.list_namespaced_stateful_set(
+                            namespace=namespace,
+                            **kwargs
+                        )
+                    else:
+                        # 分页查询所有命名空间
+                        resp = app_v1.list_stateful_set_for_all_namespaces(
+                            **kwargs
+                        )
+                except Exception as ex:
+                    raise RuntimeError(f"Failed to query StatefulSets: {str(ex)}") from ex
 
-        while True:
-            # 构造查询参数
-            kwargs = {
-                "label_selector": label_selector,
-                "limit": limit,
-                "_continue": continue_token,
-                "timeout_seconds": timeout_seconds
-            }
+                all_sts.extend(resp.items)
 
-            if namespace:
-                # 分页查询指定命名空间
-                resp = app_v1.list_namespaced_stateful_set(
-                    namespace=namespace,
-                    **kwargs
-                )
-            else:
-                # 分页查询所有命名空间
-                resp = app_v1.list_namespaced_stateful_set(
-                    **kwargs
-                )
-
-            all_statefulset.extend(resp.items)
-
-            # 检查是否还有更多数据
-            continue_token = resp.metadata._continue
-            if not continue_token:
-                break
-
-        return all_statefulset
+                # 检查是否还有更多数据
+                continue_token = resp.metadata._continue
+                if not continue_token:
+                    break
+        except Exception as e:
+            print(f"list_namespaced_stateful_set failed:{e}")
+            raise e
+        return all_sts
 
     def delete_sts_by_name(self,
             apps_v1: client.AppsV1Api,
@@ -253,3 +279,16 @@ class K8sCommonOperate:
             else:
                 print(f"删除失败: {e.reason}")
             raise e
+
+    def list_node(self, core_v1: client.CoreV1Api):
+        """
+       查询所有node基础信息
+
+       :param core_v1: CoreV1Api 客户端实例
+       :return: 对象，查询失败返回 e
+       """
+        try:
+            return core_v1.list_node()
+        except ApiException as e:
+            print(f"查询Node失败: {e.reason} (状态码: {e.status})")
+            raise e.reason

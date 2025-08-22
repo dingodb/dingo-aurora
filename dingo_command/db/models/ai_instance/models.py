@@ -1,7 +1,7 @@
 # 数据表对应的model对象
 
 from __future__ import annotations
-from sqlalchemy import Column, String, DateTime, Text, Boolean, JSON, text
+from sqlalchemy import Column, String, DateTime, Text, text
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -9,7 +9,7 @@ Base = declarative_base()
 class AiK8sKubeConfigConfigs(Base):
     __tablename__ = "ops_ai_k8s_kubeconfig_configs"
 
-    id = Column(String(length=128), primary_key= True, nullable=False, index=True, unique=False)
+    id = Column(String(length=128), primary_key= True, nullable=False, index=True, unique=True)
     k8s_id = Column(String(length=128), nullable=True, index=True, unique=True)
     k8s_name = Column(String(length=128), nullable=True)
     k8s_type = Column(String(length=128), nullable=True)
@@ -22,10 +22,10 @@ class AiK8sKubeConfigConfigs(Base):
 class AiInstanceInfo(Base):
     __tablename__ = "ops_ai_instance_info"
 
-    id = Column(String(length=128), nullable=False, primary_key=True, unique=False)
-    instance_id = Column(String(length=128), nullable=True, index=True, unique=True)
+    id = Column(String(length=128), nullable=False, primary_key=True, unique=True)
     instance_name = Column(String(length=128), nullable=True)
     instance_real_name = Column(String(length=128), nullable=True)
+    instance_node_name = Column(String(length=128), nullable=True)
     instance_status = Column(String(length=128), nullable=True)
     instance_real_status = Column(String(length=128), nullable=True)
     instance_k8s_type = Column(String(length=128), nullable=True)
@@ -37,7 +37,6 @@ class AiInstanceInfo(Base):
     instance_user_name = Column(String(length=128), nullable=True)
     instance_root_account_id = Column(String(length=128), nullable=True)
     instance_root_account_name = Column(String(length=128), nullable=True)
-    dev_tool = Column(String(length=128), nullable=True)
     instance_image = Column(String(length=128), nullable=True)
     image_type = Column(String(length=128), nullable=True)
     stop_time = Column(DateTime, nullable=True)
@@ -51,3 +50,20 @@ class AiInstanceInfo(Base):
     create_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
     update_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"))
     error_msg = Column(Text, nullable=True)
+
+class AiK8sNodeResourceInfo(Base):
+    __tablename__ = "ops_ai_k8s_node_resource"
+
+    id = Column(String(length=128), nullable=False, primary_key=True, unique=True)
+    k8s_id = Column(String(length=128), nullable=True, index=True, unique=True)
+    node_name = Column(String(length=128), nullable=True)
+    gpu_model = Column(String, nullable=True)
+    gpu_total = Column(String, nullable=True)
+    gpu_used = Column(String, nullable=True)
+    cpu_total = Column(String, nullable=True)
+    cpu_used = Column(String, nullable=True)
+    memory_total = Column(String, nullable=True)
+    memory_used = Column(String, nullable=True)
+    storage_total = Column(String, nullable=True)
+    storage_used = Column(String, nullable=True)
+    update_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"))

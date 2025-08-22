@@ -20,10 +20,9 @@ def upgrade() -> None:
     op.create_table(
         "ops_ai_instance_info",
         sa.Column("id", sa.String(length=128), nullable=False, server_default=sa.text("UUID()"), comment='主键UUID'),
-        sa.Column("instance_id", sa.String(length=128), nullable=True, comment='业务实例ID'),
         sa.Column("instance_name", sa.String(length=128), nullable=False, comment='容器实例名称(页面输入名称)'),
-        sa.Column("instance_real_name", sa.String(length=128), nullable=False,
-                  comment='容器实例名称(底层statefulset名称)'),
+        sa.Column("instance_real_name", sa.String(length=128), nullable=False, comment='容器实例名称(底层sts名称)'),
+        sa.Column("instance_node_name", sa.String(length=128), nullable=False, comment='POD所在node名称'),
         sa.Column("instance_status", sa.String(length=128), nullable=True, comment='上层容器实例状态'),
         sa.Column("instance_real_status", sa.String(length=128), nullable=True, comment='底层容器实例真实状态'),
         sa.Column("instance_k8s_type", sa.String(length=128), nullable=True, comment='k8s类型'),
@@ -35,7 +34,6 @@ def upgrade() -> None:
         sa.Column("instance_user_name", sa.String(length=128), nullable=True, comment='用户名称'),
         sa.Column("instance_root_account_id", sa.String(length=128), nullable=True, comment='用户所属主账号ID'),
         sa.Column("instance_root_account_name", sa.String(length=128), nullable=True, comment='用户所属主账号名称'),
-        sa.Column("dev_tool", sa.String(length=128), nullable=True, comment='开发工具'),
         sa.Column("instance_image", sa.String(length=255), nullable=True, comment='镜像信息'),
         sa.Column("image_type", sa.String(length=255), nullable=True, comment='实例的镜像库'),
         sa.Column("stop_time", sa.DateTime(), nullable=True, comment='自动关机时间'),
@@ -46,12 +44,9 @@ def upgrade() -> None:
         sa.Column("error_msg", sa.Text(), nullable=True, comment='错误信息'),
         sa.Column("instance_description", sa.Text(), nullable=True, comment='描述信息'),
         sa.Column("instance_create_time", sa.DateTime(), nullable=True, comment='实例创建时间'),
-        sa.Column("create_time", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP"),
-                  comment='创建时间'),
-        sa.Column("update_time", sa.DateTime(), nullable=False,
-                  server_default=sa.text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"), comment='更新时间'),
+        sa.Column("create_time", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP"), comment='创建时间'),
+        sa.Column("update_time", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"), comment='更新时间'),
         sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('instance_id', name='uk_instance_id'),
         comment='AI容器实例信息表'
     )
 

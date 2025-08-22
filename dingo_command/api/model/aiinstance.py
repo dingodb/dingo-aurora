@@ -14,10 +14,6 @@ class InstanceConfigObj(BaseModel):
     gpu_count: Optional[int] = Field(None, description="GPU卡数")
     system_disk_size: Optional[str] = Field(None, description="系统盘大小(默认单位Gib)")
 
-# class InstanceEnvsObj(BaseModel):
-#     name: Optional[str] = Field(None, description="环境变量名称")
-#     value: Optional[str] = Field(None, description="环境变量value")
-
 class StorageObj(BaseModel):
     configmap_name: Optional[str] = Field(None, description="configmap名称")
     configmap_path: Optional[str] = Field(None, description="configmap挂载路径")
@@ -50,6 +46,12 @@ class AiInstanceApiModel(BaseModel):
     volumes: Optional[StorageObj] = Field(None, description="实例的卷配置（卷类型、大小、挂载点）")
     description: Optional[str] = Field(None, description="实例的卷配置（卷类型、大小、挂载点）")
     # data_set: Optional[DataSetObj] = Field(None, description="数据集信息")
+
+class AiInstanceSavaImageApiModel(BaseModel):
+    repo_name: Optional[str] = Field(None, description="仓库名称")
+    image_label: Optional[str] = Field(None, description="镜像标签")
+    harbor_username: Optional[str] = Field(None, description="harbor名称")
+    harbor_password: Optional[str] = Field(None, description="harbor密码")
 
 # k8s kubeconfig配置
 class K8skubeconfigApiModel(BaseModel):

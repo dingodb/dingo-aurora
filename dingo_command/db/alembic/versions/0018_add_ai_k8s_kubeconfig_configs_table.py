@@ -32,7 +32,7 @@ def upgrade() -> None:
         sa.Column("update_time", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"), comment='更新时间'),
 
         sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('k8s__id', name='uq_k8s__id'),  # 显式定义唯一约束
+        sa.UniqueConstraint('k8s_id', name='uq_k8s_id'),  # 显式定义唯一约束
         comment='AI k8s集群kube-config配置表'
     )
 
