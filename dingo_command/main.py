@@ -7,6 +7,7 @@ from dingo_command.jobs import (bigscreen_metrics_syncer, asset_resource_relatio
                                 rabbitmq_config_init, instance_status_syncer, cluster_status_syncer, ai_instance_syncer,
                                 ai_k8s_node_resource_syncer, chart_app_status_syncer)
 
+
 PROJECT_NAME = "dingo-command"
 
 app = FastAPI(
