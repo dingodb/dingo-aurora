@@ -104,6 +104,28 @@ default_opts = [
 CONF.register_group(default_group)
 CONF.register_opts(default_opts, default_group)
 
+# Harbor的配置信息
+harbor_group = cfg.OptGroup(name="harbor", title="harbor conf data")
+harbor_opts = [
+    cfg.StrOpt(
+        "base_url",
+        default="https://harbor.test-03.zetyun.cn:443",
+        help="harbor base url",
+    ),
+    cfg.StrOpt(
+        "robot_username", default="robot$dingo_command", help="harbor robot username"
+    ),
+    cfg.StrOpt(
+        "robot_token",
+        default="S5Uqg5FSxoQlnoMt7JKiBIQsJ9US5wCI",
+        help="harbor robot token",
+    ),
+    cfg.BoolOpt("verify_ssl", default=False, help="whether to verify ssl certificate"),
+]
+# 注册harbor配置
+CONF.register_group(harbor_group)
+CONF.register_opts(harbor_opts, harbor_group)
+
 # 注册neutron配置
 neutron_group = cfg.OptGroup(name='neutron', title='neutron conf data')
 CONF.register_group(neutron_group)
