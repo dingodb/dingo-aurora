@@ -99,6 +99,7 @@ CONF.register_opts(keystone_opts, keystone_group)
 
 default_group = cfg.OptGroup(name="DEFAULT", title="default conf data")
 
+
 default_opts = [
     cfg.StrOpt("controller_nodes", default=None, help="the openstack controller nodes"),
     cfg.StrOpt("my_ip", default=None, help="the openstack host ip"),

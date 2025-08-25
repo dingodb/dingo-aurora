@@ -7,6 +7,13 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends apt-utils \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     gcc traceroute lsof iputils-ping vim wget curl locales-all\
     python3-pip cmake build-essential python3-dev libxml2-dev supervisor gnupg software-properties-common sshpass
+
+RUN wget https://get.helm.sh/helm-v3.18.4-linux-amd64.tar.gz -O /tmp/helm.tar.gz && \
+    tar -zxvf /tmp/helm.tar.gz -C /tmp && \
+    mv /tmp/linux-amd64/helm /usr/local/bin/helm && \
+    chmod +x /usr/local/bin/helm && \
+    rm -rf /tmp/helm.tar.gz /tmp/linux-amd64 && helm version
+
 RUN wget -O - https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list \
     && apt-get update -y \
