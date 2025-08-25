@@ -82,38 +82,6 @@ variable "network_router_id" {
   default = ""
 }
 
-variable "k8s_master_fips" {
-  type = list
-}
-
-variable "k8s_master_no_etcd_fips" {
-  type = list
-}
-
-variable "node_fips" {
-  type = list
-}
-
-variable "k8s_masters_fips" {
-  type = map(object({
-    address = string
-  }))
-}
-
-variable "nodes_fips" {
-  type = map(object({
-    address = string
-  }))
-}
-
-variable "bastion_fips" {
-  type = list
-}
-
-variable "bastion_fip_ids" {
-  type = list
-}
-
 
 variable "bastion_allowed_remote_ips" {
   type = list

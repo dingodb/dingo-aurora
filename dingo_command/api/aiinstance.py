@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconn
 from kubernetes.stream import stream
 from kubernetes import client
 
-from dingo_command.api.model.aiinstance import AiInstanceApiModel
+from dingo_command.api.model.aiinstance import AiInstanceApiModel, AiInstanceSavaImageApiModel
 from dingo_command.services.ai_instance import AiInstanceService
 from dingo_command.services.custom_exception import Fail
 from dingo_command.utils.k8s_client import get_k8s_client
@@ -26,8 +26,23 @@ async def create_ai_instance(ai_instance:AiInstanceApiModel):
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"创建容器实例[{ai_instance.name}]失败:{e}")
 
+
+@router.post("/ai-instances/{id}/save-image", summary="容器实例镜像保存", description="容器实例镜像保存")
+async def sava_ai_instance_to_image(id: str, request: AiInstanceSavaImageApiModel):
+    # 容器实例镜像保存
+    try:
+        # 容器实例镜像保存
+        return ai_instance_service.sava_ai_instance_to_image(id, request)
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"容器实例镜像保存[{id}]失败:{e}")
+
 @router.get("/ai-instance/list", summary="查询容器实例列表", description="查询容器实例列表")
 async def list_ai_instance_infos(
+        uuid:str = Query(None, description="容器实例主键ID"),
         instance_id:str = Query(None, description="容器实例id"),
         instance_name:str = Query(None, description="容器实例名称"),
         instance_status:str = Query(None, description="容器实例状态"),
@@ -40,6 +55,8 @@ async def list_ai_instance_infos(
     # 声明查询条件的dict
         query_params = {}
         # 查询条件组装
+        if uuid:
+            query_params['uuid'] = uuid
         if instance_id:
             query_params['instance_id'] = instance_id
         if instance_name:
@@ -54,30 +71,30 @@ async def list_ai_instance_infos(
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"查询容器实例列表失败:{e}")
 
-@router.get("/ai-instance/{instance_id}", summary="查询容器实例详情", description="查询容器实例详情")
-async def get_instance_info_by_instance_id(instance_id:str):
+@router.get("/ai-instance/{id}", summary="查询容器实例详情", description="查询容器实例详情")
+async def get_instance_info_by_id(id:str):
     # 查询容器实例详情
     try:
-        return ai_instance_service.get_ai_instance_info_by_instance_id(instance_id)
+        return ai_instance_service.get_ai_instance_info_by_id(id)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail=f"查询容器实例详情失败:{instance_id}")
+        raise HTTPException(status_code=400, detail=f"查询容器实例详情失败:{id}")
 
-@router.delete("/ai-instance/{instance_id}", summary="删除容器实例", description="根据实例id删除容器实例")
-async def delete_instance_by_instance_id(instance_id:str):
+@router.delete("/ai-instance/{id}", summary="删除容器实例", description="根据实例id删除容器实例数据")
+async def delete_instance_by_id(id:str):
     # 删除容器实例
     try:
         # 删除成功
-        return ai_instance_service.delete_ai_instance_by_instance_id(instance_id)
+        return ai_instance_service.delete_ai_instance_by_id(id)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail=f"删除容器实例失败:{instance_id}")
+        raise HTTPException(status_code=400, detail=f"删除容器实[{id}]例失败:{e}")
 
 # 所有的websocket的连接的统一入口
 @router.websocket("/ws-ai/pod/{namespace}/{pod_name}")
@@ -140,24 +157,24 @@ async def pod_console(
         await websocket.send_text(f"Terminal error: {str(e)}")
         await websocket.close()
 
-@router.post("/ai-instance/{instance_id}/open", summary="开机容器实例", description="根据实例id开机容器实例")
-async def open_instance_by_id(instance_id: str):
+@router.post("/ai-instance/{id}/open", summary="开机容器实例", description="根据实例id开机容器实例")
+async def open_instance_by_id(id: str):
     try:
-        return ai_instance_service.open_ai_instance_by_instance_id(instance_id)
+        return ai_instance_service.open_ai_instance_by_id(id)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail=f"开机容器实例失败:{instance_id}")
+        raise HTTPException(status_code=400, detail=f"开机容器实例失败:{id}")
 
-@router.post("/ai-instance/{instance_id}/close", summary="关机容器实例", description="根据实例id关机容器实例")
-async def close_instance_by_id(instance_id: str):
+@router.post("/ai-instance/{id}/close", summary="关机容器实例", description="根据实例id关机容器实例")
+async def close_instance_by_id(id: str):
     try:
-        return ai_instance_service.close_ai_instance_by_instance_id(instance_id)
+        return ai_instance_service.close_ai_instance_by_id(id)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail=f"关机容器实例失败:{instance_id}")
+        raise HTTPException(status_code=400, detail=f"关机容器实例失败:{id}")

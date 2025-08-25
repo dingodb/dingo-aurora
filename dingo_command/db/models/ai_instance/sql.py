@@ -1,12 +1,8 @@
 # 数据表对应的model对象
 
 from __future__ import annotations
-
-from sqlalchemy.testing import not_in
-
 from dingo_command.db.engines.mysql import get_session
-from dingo_command.db.models.ai_instance.models import AiK8sKubeConfigConfigs, AiInstanceInfo
-from dingo_command.utils.constant import STOP_STATUS
+from dingo_command.db.models.ai_instance.models import AiK8sKubeConfigConfigs, AiInstanceInfo, AiK8sNodeResourceInfo
 
 # 容器实例排序字段字典
 ai_instance_dir_dic= {"instance_name":AiInstanceInfo.instance_name}
@@ -19,34 +15,19 @@ class AiInstanceSQL:
         session = get_session()
         with session.begin():
             session.add(ai_instance_db)
-            # 立即刷新以获取生成的ID
-            session.flush()
 
-            # 返回实例ID（假设主键字段为id）
-            return ai_instance_db.id
     @classmethod
     def update_ai_instance_info(cls, ai_instance_db):
         session = get_session()
-        with session.begin():
+        with (session.begin()):
             session.merge(ai_instance_db)
 
     @classmethod
-    def delete_ai_instance_info_not_stopped(cls, k8s_id):
-        session = get_session()
-        with session.begin():
-            count = session.query(AiInstanceInfo) \
-                .filter(AiInstanceInfo.instance_k8s_id == k8s_id,AiInstanceInfo.instance_status.notin_(STOP_STATUS)
-            ).delete(synchronize_session=False)
-
-            print(f"Deleted {count} non-stopped AI instances for k8s_id: {k8s_id}")
-            return count
-
-    @classmethod
-    def delete_ai_instance_info_by_instance_id(cls, instance_id):
+    def delete_ai_instance_info_by_id(cls, id):
         session = get_session()
         with session.begin():
             session.query(AiInstanceInfo) \
-                .filter(AiInstanceInfo.instance_id == instance_id).delete(synchronize_session=False)
+                .filter(AiInstanceInfo.id == id).delete()
 
 
     @classmethod
@@ -54,16 +35,8 @@ class AiInstanceSQL:
         session = get_session()
         with session.begin():
             count = session.query(AiInstanceInfo) \
-                .filter(AiInstanceInfo.instance_k8s_id == k8s_id).delete(synchronize_session=False)
-
-            print(f"Deleted {count} non-stopped AI instances for k8s_id: {k8s_id}")
+                .filter(AiInstanceInfo.instance_k8s_id == k8s_id).delete()
             return count
-
-    @classmethod
-    def get_ai_instance_info_by_instance_id(cls, instance_id):
-        session = get_session()
-        with (session.begin()):
-            return session.query(AiInstanceInfo).filter(AiInstanceInfo.instance_id == instance_id).first()
 
     @classmethod
     def get_ai_instance_info_by_instance_name(cls, instance_name):
@@ -89,7 +62,7 @@ class AiInstanceSQL:
         session = get_session()
         with session.begin():
             # 查询语句
-            query = session.query(AiInstanceInfo.instance_id.label("instance_id"),
+            query = session.query(AiInstanceInfo.id.label("id"),
                                   AiInstanceInfo.instance_name.label("instance_name"),
                                   AiInstanceInfo.instance_real_name.label("instance_real_name"),
                                   AiInstanceInfo.instance_status.label("instance_status"),
@@ -102,7 +75,6 @@ class AiInstanceSQL:
                                   AiInstanceInfo.instance_user_name.label("instance_user_name"),
                                   AiInstanceInfo.instance_root_account_id.label("instance_root_account_id"),
                                   AiInstanceInfo.instance_root_account_name.label("instance_root_account_name"),
-                                  AiInstanceInfo.dev_tool.label("dev_tool"),
                                   AiInstanceInfo.instance_image.label("instance_image"),
                                   AiInstanceInfo.image_type.label("image_type"),
                                   AiInstanceInfo.stop_time.label("stop_time"),
@@ -115,8 +87,8 @@ class AiInstanceSQL:
             # 数据库查询参数
             if "instance_name" in query_params and query_params["instance_name"]:
                 query = query.filter(AiInstanceInfo.instance_name.like('%' + str(query_params["instance_name"]) + '%'))
-            if "instance_id" in query_params and query_params["instance_id"]:
-                query = query.filter(AiInstanceInfo.instance_id == query_params["instance_id"])
+            if "uuid" in query_params and query_params["uuid"]:
+                query = query.filter(AiInstanceInfo.id == query_params["uuid"])
             if "instance_status" in query_params and query_params["instance_status"]:
                 # 状态拆分
                 instance_status_arr = query_params["instance_status"].split(",")
@@ -144,6 +116,7 @@ class AiInstanceSQL:
             ai_instance_info_list = query.all()
             # 返回
             return count, ai_instance_info_list
+
     # ================= 以下为 kubeconfig 相关 =======================
     @classmethod
     def get_k8s_kubeconfig_info_by_k8s_id(cls, k8s_id):
@@ -156,3 +129,34 @@ class AiInstanceSQL:
         session = get_session()
         with session.begin():
             return session.query(AiK8sKubeConfigConfigs).all()
+
+    # ================= 以下为 node resource 相关 =======================
+    @classmethod
+    def get_k8s_node_resource_by_k8s_id(cls, k8s_id):
+        session = get_session()
+        with session.begin():
+            return session.query(AiK8sNodeResourceInfo).filter(AiK8sNodeResourceInfo.k8s_id == k8s_id).all()
+
+    @classmethod
+    def get_k8s_node_resource_by_k8s_id_and_node_name(cls, k8s_id, node_name):
+        session = get_session()
+        with session.begin():
+            return session.query(AiK8sNodeResourceInfo).filter(AiK8sNodeResourceInfo.k8s_id == k8s_id, AiK8sNodeResourceInfo.node_name == node_name).first()
+
+    @classmethod
+    def delete_k8s_node_resource_by_k8s_id(cls, k8s_id):
+        session = get_session()
+        with session.begin():
+            return session.query(AiK8sNodeResourceInfo).filter(AiK8sNodeResourceInfo.k8s_id == k8s_id).delete()
+
+    @classmethod
+    def save_k8s_node_resource(cls, k8s_node_resource_db):
+        session = get_session()
+        with session.begin():
+            session.add(k8s_node_resource_db)
+
+    @classmethod
+    def update_k8s_node_resource(cls, k8s_node_resource_db):
+        session = get_session()
+        with (session.begin()):
+            session.merge(k8s_node_resource_db)

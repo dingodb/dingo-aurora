@@ -6,7 +6,7 @@ KUBECONFIG_DIR_DEFAULT = "/home/dingo-command/kubeconfig/"
 #容器实例命名空间前缀
 NAMESPACE_PREFIX = "ns-"
 #容器实例系统盘默认挂载路径
-AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT = "/root/public-system"
+AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT = "/root/public-system/"
 #容器实例PVC默认挂载路径
 AI_INSTANCE_PVC_MOUNT_PATH_DEFAULT="/root/pvc"
 #容器实例configMap默认挂载路径
@@ -17,9 +17,8 @@ SYSTEM_DISK_NAME_DEFAULT = "system-disk"
 SYSTEM_DISK_SIZE_DEFAULT = "30Gi"
 #资源类型
 RESOURCE_TYPE = "resource-type"
+APP_LABEL = "app"
 AI_INSTANCE = "ai-instance"
-#容器实例关机状态
-STOP_STATUS = ("stopping", "stopped")
 
 # excel的目录文件
 EXCEL_TEMP_DIR = "/home/dingo_command/temp_excel/"

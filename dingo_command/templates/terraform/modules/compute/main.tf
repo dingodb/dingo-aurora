@@ -268,9 +268,6 @@ resource "openstack_compute_instance_v2" "k8s-master" {
   depends_on = [
     openstack_networking_secgroup_v2.secgroup
   ]
-  provisioner "local-exec" {
-    command = "%{if var.password == ""}sed -e s#USER#${var.ssh_user}# -e s#SSH_PORT#${local.protforward_external_port}# -e s#PRIVATE_KEY_FILE#${var.private_key_path}# -e s#BASTION_ADDRESS#${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}# ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s/USER/${var.ssh_user}/ -e s#SSH_PORT#${local.protforward_external_port}# -e s/BASTION_ADDRESS/${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}"
-  }
 }
 ##########################################################################################################
 resource "openstack_networking_port_v2" "admin_master_no_float_port" {
@@ -360,16 +357,13 @@ resource "openstack_compute_instance_v2" "k8s-master-no-floatip" {
   metadata = {
     ssh_user         = var.ssh_user
     password         = var.password
-    kubespray_groups = "etcd,kube_control_plane,${var.supplementary_master_groups},cluster,no_floating"
+    kubespray_groups = "etcd,kube_control_plane,${var.supplementary_master_groups},cluster"
     depends_on       = var.network_router_id
     use_access_ip    = var.use_access_ip
   }
   depends_on = [
     openstack_networking_secgroup_v2.secgroup
   ]
-  provisioner "local-exec" {
-    command = "%{if var.password == ""}sed -e s#USER#${var.ssh_user}# -e s#SSH_PORT#${local.protforward_external_port}# -e s#PRIVATE_KEY_FILE#${var.private_key_path}# -e s#BASTION_ADDRESS#${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}# ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s#SSH_PORT#${local.protforward_external_port}# -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element(concat(var.bastion_fips, var.k8s_master_fips), 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}"
-  }
 }
 ###############################################worker node################################################
 ###############################################worker node################################################
@@ -481,16 +475,13 @@ resource "openstack_compute_instance_v2" "nodes" {
   metadata = {
     ssh_user         = var.ssh_user
     password         = var.password
-    kubespray_groups = "kube_node,cluster,%{if !each.value.floating_ip}no_floating,%{endif}${var.supplementary_node_groups}${each.value.extra_groups != null ? ",${each.value.extra_groups}" : ""}"
+    kubespray_groups = "kube_node,cluster"
     depends_on       = var.network_router_id
     use_access_ip    = var.use_access_ip
   }
   depends_on = [
     openstack_networking_secgroup_v2.secgroup
   ]
-  provisioner "local-exec" {
-    command = "%{if each.value.floating_ip} %{if var.password == ""}sed -e s#USER#${var.ssh_user}# -e s#SSH_PORT#${local.protforward_external_port}# -e s#PRIVATE_KEY_FILE#${var.private_key_path}# -e s#BASTION_ADDRESS#${element([for key, value in var.k8s_master_fips : value.address], 0)}# ${path.module}/ansible_bastion_template.txt > ${var.group_vars_path}/no_floating.yml  %{else} sed -e s/PASSWORD/${var.password}/ -e s#SSH_PORT#${local.protforward_external_port}# -e s/USER/${var.ssh_user}/ -e s/BASTION_ADDRESS/${element([for key, value in var.k8s_master_fips : value.address], 0)}/ ${path.module}/ansible_bastion_template_pass.txt > ${var.group_vars_path}/no_floating.yml%{endif}%{else}true%{endif}"
-  }
 }
 
 #resource "openstack_networking_portforwarding_v2" "pf_1" {
@@ -547,29 +538,4 @@ resource "openstack_networking_portforwarding_v2" "pf_multi" {
   depends_on = [
     openstack_compute_instance_v2.nodes
   ]
-}
-
-resource "openstack_networking_portforwarding_v2" "master_portforward" {
-  count            = var.number_of_k8s_masters
-  floatingip_id    = var.bastion_fip_ids[count.index]
-  external_port    = local.protforward_external_port
-  internal_port    = 22
-  internal_port_id = openstack_networking_port_v2.admin_master_port[count.index].id
-  protocol         = "tcp"
-  internal_ip_address = openstack_compute_instance_v2.k8s-master[count.index].network[0].fixed_ip_v4
-  depends_on = [
-    openstack_compute_instance_v2.k8s-master
-  ]
-}
-# resource "openstack_networking_floatingip_associate_v2" "masters" {
-#   for_each              = var.number_of_k8s_masters == 0 && var.number_of_k8s_masters_no_etcd == 0 && var.number_of_k8s_masters_no_floating_ip == 0 && var.number_of_k8s_masters_no_floating_ip_no_etcd == 0 ? { for key, value in var.masters : key => value if value.floating_ip } : {}
-#   floating_ip           = var.masters_fips[each.key].address
-#   port_id               = openstack_networking_port_v2.masters_admin_port[each.key].id
-# }
-
-
-resource "openstack_networking_floatingip_associate_v2" "nodes" {
-  for_each              = var.number_of_nodes == 0 && var.number_of_nodes_no_floating_ip == 0 ? { for key, value in var.nodes : key => value if value.floating_ip } : {}
-  floating_ip           = var.nodes_fips[each.key].address
-  port_id               = openstack_networking_port_v2.nodes_port[each.key].id
 }
