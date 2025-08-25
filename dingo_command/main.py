@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from dingo_command.api import api_router
 from dingo_command.jobs import (bigscreen_metrics_syncer, asset_resource_relation_syncer,
                                 rabbitmq_config_init, instance_status_syncer, cluster_status_syncer, ai_instance_syncer,
-                                ai_k8s_node_resource_syncer)
+                                ai_k8s_node_resource_syncer, chart_app_status_syncer)
 
 PROJECT_NAME = "dingo-command"
 
@@ -37,6 +37,7 @@ async def lifespan(app: FastAPI):
     cluster_status_syncer.start()
     ai_instance_syncer.start()
     ai_k8s_node_resource_syncer.start()
+    # chart_app_status_syncer.start()
     yield
     # Add any shutdown logic here if needed
 
