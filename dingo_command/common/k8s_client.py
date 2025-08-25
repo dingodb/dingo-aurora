@@ -1064,7 +1064,8 @@ class K8sClient:
         resource_body: Dict[str, Any],
         resource_type: str, # 这是资源的 plural 名称
         api_version: Optional[str] = None, # 优先使用 body 中的 apiVersion，其次用此参数
-        namespace: Optional[str] = None # 优先使用 body 中的 metadata.namespace，其次用此参数
+        namespace: Optional[str] = None, # 优先使用 body 中的 metadata.namespace，其次用此参数
+        name: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """
         通用方法，用于创建 Kubernetes 资源。
@@ -1082,6 +1083,12 @@ class K8sClient:
         Returns:
             Optional[Dict[str, Any]]: 成功创建的资源对象 (字典形式)，如果创建失败则为 None。
         """
+        if not resource_body:
+            raise ValueError("更新资源时必须提供有效的 resource_body 字典。")
+        if resource_body.get('metadata', {}).get('name') is None:
+            raise ValueError("更新资源时必须提供 'metadata.name' 字段。")
+        if resource_body.get('metadata', {}).get('name') != name:
+            raise ValueError("更新资源时提供的 'metadata.name' 必须与参数 name 相同。")
         # 确定 apiVersion 和 kind (resource_type)
         resolved_api_version = resource_body.get('apiVersion') or api_version
         

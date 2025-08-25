@@ -30,6 +30,11 @@ pipeline {
     }
 
     stages {
+        stage('Milestone: kill older builds') {
+            steps {
+                milestone(1)
+            }
+        }
         stage('docker build') {
             when {
                 anyOf { branch 'develop'; branch 'main' }

@@ -60,7 +60,7 @@ def fetch_relation_info():
             if temp_node.get('instance_uuid'):
                 try:
                     server_detail = NovaClient().nova_get_server_detail(temp_node.get('instance_uuid'))
-                    print(f"虚拟机详情数据: {server_detail}")
+                    #print(f"虚拟机详情数据: {server_detail}")
                 except Exception as e:
                     print(f"虚拟机[{temp_node.get('instance_uuid')}]详情数据失败: {e}")
             # 裸金属的ipmi的ip地址
