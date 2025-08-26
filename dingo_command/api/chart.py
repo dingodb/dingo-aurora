@@ -68,26 +68,28 @@ async def list_repos(background_tasks: BackgroundTasks, cluster_id: str = Query(
         if cluster_id:
             query_params['cluster_id'] = cluster_id
         # 显示repo列表的逻辑
-        # data = chart_service.list_repos(query_params, page, page_size, sort_keys, sort_dirs, display=True)
-        # repo_list = []
-        # for repo in data.get("data"):
-        #     print(repo.create_time, type(repo.create_time))
-        #     if repo.id == 1 or repo.id == "1" or repo.status != "creating":
-        #         continue
-        #     repo_data_info = CreateRepoObject(
-        #         id=str(repo.id),
-        #         name=repo.name,
-        #         type=repo.type,
-        #         url=repo.url,
-        #         username=repo.username,
-        #         password=repo.password,
-        #         description=repo.description,
-        #         cluster_id=repo.cluster_id,
-        #         is_global=repo.is_global
-        #     )
-        #     repo_list.append(repo_data_info)
-        # if len(repo_list) > 0:
-        #     background_tasks.add_task(chart_service.create_repo_list, repo_list, update=True, status="updating")
+        data = chart_service.list_repos(query_params, page, page_size, sort_keys, sort_dirs, display=True)
+        current_time = datetime.now()
+        repo_list = []
+        for repo in data.get("data"):
+            if repo.id == 1 or repo.id == "1" or repo.status != "creating":
+                continue
+            if (current_time - repo.create_time).total_seconds() < util.repo_update_time_out:
+                continue
+            repo_data_info = CreateRepoObject(
+                id=str(repo.id),
+                name=repo.name,
+                type=repo.type,
+                url=repo.url,
+                username=repo.username,
+                password=repo.password,
+                description=repo.description,
+                cluster_id=repo.cluster_id,
+                is_global=repo.is_global
+            )
+            repo_list.append(repo_data_info)
+        if len(repo_list) > 0:
+            background_tasks.add_task(chart_service.create_repo_list, repo_list, update=True, status="updating")
         data1 = chart_service.list_repos(query_params, page, page_size, sort_keys, sort_dirs)
         return data1
     except Exception as e:
@@ -109,6 +111,8 @@ async def update_repo(repo_id: Union[str, int], repo_data: CreateRepoObject, bac
             raise ValueError("repo not found")
 
         repo = data.get("data")[0]
+        if repo.id == 1 or repo.id == "1":
+            raise ValueError("can not update global repo")
         if repo.url == repo_data.url and repo.name == repo_data.name and repo.type == repo_data.type  and \
                 repo.username == repo_data.username and repo.password == repo_data.password and \
                 repo.description == repo_data.description:

@@ -20,7 +20,7 @@ run_time_30s = datetime.now() + timedelta(seconds=30)  # 任务将在30秒后执
 
 def start():
     # 添加检查集群状态的定时任务，每180秒执行一次
-    scheduler.add_job(check_app_status, 'interval', seconds=180, next_run_time=datetime.now())
+    scheduler.add_job(check_app_status, 'interval', seconds=300, next_run_time=datetime.now())
     scheduler.start()
 
 

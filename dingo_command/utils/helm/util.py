@@ -9,6 +9,7 @@ log_path = "/var/log/dingo-command/"
 chart_nubmer = 5
 time_out = 5
 repo_time_out = 30
+repo_update_time_out = 900
 repo_global_name = "zetyun_harbor"
 repo_global_cluster_id = "all"
 repo_status_create = "creating"

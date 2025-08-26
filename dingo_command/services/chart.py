@@ -172,8 +172,9 @@ class ChartService:
                 data = repo_tmp_list
             if count > 0 and not display:
                 for repo in data:
-                    repo.username = "xxxxxxxxxxxxxx"
-                    repo.password = "xxxxxxxxxxxxxx"
+                    if repo.id == 1 or repo.id == "1":
+                        repo.username = "xxxxxxxxxxxxxx"
+                        repo.password = "xxxxxxxxxxxxxx"
             res = {}
             # 页数相关信息
             if page and page_size:
