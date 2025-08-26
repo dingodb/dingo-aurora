@@ -65,7 +65,7 @@ class ChartMetadataObject(BaseModel):
 class ChartObject(BaseModel):
     metadata: Optional[ChartMetadataObject] = Field(None, description="chart的名称")
     readme: Optional[str] = Field(None, description="chart的图标")
-    values: Optional[Dict[str, ValueType]] = Field(None, description="values.yaml里面的值")
+    values: Optional[str] = Field(None, description="values.yaml里面的值")
 
 
 class ResponseChartObject(BaseModel):
@@ -89,7 +89,7 @@ class AppChartObject(BaseModel):
 
 class ResponseAppObject(BaseModel):
     resources: Optional[List[ResourcesObject]] = Field(None, description="resources数据")
-    values: Optional[Dict[str, ValueType]] = Field(None, description="values.yaml里面的值")
+    values: Optional[str] = Field(None, description="values.yaml里面的值")
     chart_info: Optional[AppChartObject] = Field(None, description="chart的详情")
 
 # CreateAppObject.model_rebuild()

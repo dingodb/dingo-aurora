@@ -69,21 +69,21 @@ async def create_harbor_repo(repo_name=util.repo_global_name, url=harbor_url, us
         data = ChartService().list_repos(query_params, 1, -1, None, None)
         if data.get("total") > 0:
             # 是否要添加当repo的url修改了，重新创建harbor的仓库的charts包
-            if data.get("data")[0].url != url or data.get("data")[0].status == "creating":
-                repo_info_db = data.get("data")[0]
-                repo_info_db.url = url
-                repo_info_db.username = username
-                repo_info_db.password = password
-                repo_info_db.create_time = datetime.now()
-                repo_info_db.status = "creating"
-                RepoSQL.update_repo(repo_info_db)
-                service = ChartService()
-                # 删除原来的repo的所有chart
-                data = service.get_repo_from_name(repo_info_db.id)
-                if data.get("data"):
-                    service.delete_charts_repo_id(data.get("data"))
-                # 添加新的repo的所有chart
-                await service.handle_oci_repo(repo_info_db)
+            # if data.get("data")[0].url != url or data.get("data")[0].status == "creating":
+            #     repo_info_db = data.get("data")[0]
+            #     repo_info_db.url = url
+            #     repo_info_db.username = username
+            #     repo_info_db.password = password
+            #     repo_info_db.create_time = datetime.now()
+            #     repo_info_db.status = "creating"
+            #     RepoSQL.update_repo(repo_info_db)
+            #     service = ChartService()
+            #     # 删除原来的repo的所有chart
+            #     data = service.get_repo_from_name(repo_info_db.id)
+            #     if data.get("data"):
+            #         service.delete_charts_repo_id(data.get("data"))
+            #     # 添加新的repo的所有chart
+            #     await service.handle_oci_repo(repo_info_db)
             return
         repo_info_db = RepoDB()
         repo_info_db.id = 1
@@ -158,6 +158,18 @@ class ChartService:
         try:
             # 按照条件从数据库中查询数据
             count, data = RepoSQL.list_repos(query_params, page, page_size, sort_keys, sort_dirs)
+            repo_tmp_list = []
+            if "cluster_id" in query_params and query_params["cluster_id"]:
+                for repo in data:
+                    if repo.cluster_id == "all":
+                        repo.cluster_id = query_params["cluster_id"]
+                        if repo.except_cluster:
+                            tmp_list = json.loads(repo.except_cluster)
+                            if query_params["cluster_id"] in tmp_list:
+                                repo.status = "unavailable"
+                    repo_tmp_list.append(repo)
+            if repo_tmp_list:
+                data = repo_tmp_list
             if count > 0 and not display:
                 for repo in data:
                     repo.username = "xxxxxxxxxxxxxx"
@@ -180,7 +192,14 @@ class ChartService:
         try:
             # 按照条件从数据库中查询数据
             count, data = ChartSQL.list_charts(query_params, page, page_size, sort_keys, sort_dirs)
-
+            chart_tmp_list = []
+            if "cluster_id" in query_params and query_params["cluster_id"]:
+                for chart in data:
+                    if chart.cluster_id == "all":
+                        chart.cluster_id = query_params["cluster_id"]
+                    chart_tmp_list.append(chart)
+            if chart_tmp_list:
+                data = chart_tmp_list
             res = {}
             # 页数相关信息
             if page and page_size:
@@ -308,10 +327,10 @@ class ChartService:
             for r in res.get("data"):
                 if r.name == repo.name and r.cluster_id == repo.cluster_id:
                     # 如果查询结果不为空，说明仓库名称已存在+
-                    raise Fail(error_code=405, error_message="Repo name already exists")
+                    raise ValueError("Repo name already exists")
                 if r.url == repo.url and r.cluster_id == repo.cluster_id:
                     # 如果查询结果不为空，说明仓库地址已存在
-                    raise Fail(error_code=405, error_message=f"The same repo url already exists, repo name is {r.name}")
+                    raise ValueError(f"The same repo url already exists, repo name is {r.name}")
 
     def convert_repo_db(self, repo: CreateRepoObject, status="creating"):
         repo_info_db = RepoDB()
@@ -848,7 +867,7 @@ class ChartService:
                         chart_readme = chart_file.read()
                     if values_yaml == name:
                         chart_file = tar.extractfile(name)
-                        chart_data = yaml.safe_load(chart_file)
+                        chart_data = json.dumps(yaml.safe_load(chart_file))
             return chart_readme, chart_data
         except Exception as e:
             raise e
@@ -901,7 +920,7 @@ class ChartService:
             # 提取并处理结果
             chart_readme = results[chart_readme_url]
             values_content = results[chart_values_url]
-            index_data = yaml.safe_load(values_content)
+            index_data = json.dumps(yaml.safe_load(values_content))
 
             return chart_readme, index_data
 
@@ -1398,13 +1417,13 @@ class ChartService:
                     # 3、把上述的资源信息和chart信息组装成一个对象返回
                     response_obj = ResponseAppObject(
                         resources=resourc_obj_list,
-                        values=json.loads(app_data.values),
+                        values=app_data.values,
                         chart_info=app_obj
                     )
                 else:
                     response_obj = ResponseAppObject(
                         resources=None,
-                        values=json.loads(app_data.values),
+                        values=app_data.values,
                         chart_info=app_obj
                     )
                 return response_obj

@@ -87,7 +87,8 @@ async def list_repos(background_tasks: BackgroundTasks, cluster_id: str = Query(
             repo_list.append(repo_data_info)
         if len(repo_list) > 0:
             background_tasks.add_task(chart_service.create_repo_list, repo_list, update=True, status="updating")
-        return data
+        data1 = chart_service.list_repos(query_params, page, page_size, sort_keys, sort_dirs)
+        return data1
     except Exception as e:
         import traceback
         traceback.print_exc()

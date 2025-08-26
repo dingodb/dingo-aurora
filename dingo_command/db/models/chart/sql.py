@@ -56,19 +56,7 @@ class RepoSQL:
             start = (page_num - 1) * page_size
             query = query.limit(page_size).offset(start)
             repo_list = query.all()
-            repo_tmp_list = []
-            if "cluster_id" in query_params and query_params["cluster_id"]:
-                for repo in repo_list:
-                    if repo.cluster_id == "all":
-                        if repo.except_cluster:
-                            tmp_list = json.loads(repo.except_cluster)
-                            if query_params["cluster_id"] in tmp_list:
-                                repo.status = "unavailable"
-                    repo_tmp_list.append(repo)
-            if repo_tmp_list:
-                return count, repo_tmp_list
-            else:
-                return count, repo_list
+            return count, repo_list
 
     @classmethod
     def create_repo(cls, repo):
@@ -142,7 +130,8 @@ class ChartSQL:
             if "id" in query_params and query_params["id"]:
                 query = query.filter(ChartInfo.id == query_params["id"])
             if "cluster_id" in query_params and query_params["cluster_id"]:
-                query = query.filter(ChartInfo.cluster_id == query_params["cluster_id"])
+                cluster_ids = [query_params["cluster_id"], "all"]
+                query = query.filter(ChartInfo.cluster_id.in_(cluster_ids))
             if "name" in query_params and query_params["name"]:
                 query = query.filter(ChartInfo.name == query_params["name"])
             if "status" in query_params and query_params["status"]:
