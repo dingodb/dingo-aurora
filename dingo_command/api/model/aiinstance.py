@@ -61,3 +61,27 @@ class K8skubeconfigApiModel(BaseModel):
     kubeconfig_path: Optional[str] = Field(None, description="k8s kubeconfig配置文件存放路径")
     kubeconfig_context_name: Optional[str] = Field(None, description="k8s kubeconfig 使用用户")
     kubeconfig: Optional[Any] = Field(None, description="k8s kubeconfig配置文件内容")
+
+# 定时关机请求模型
+class AutoCloseRequest(BaseModel):
+    auto_close_time: str = Field(..., description="定时关机时间，格式：YYYY-MM-DD HH:MM:SS")
+    auto_close: bool = Field(..., description="是否启用定时关机")
+
+# 定时删除请求模型
+class AutoDeleteRequest(BaseModel):
+    auto_delete_time: str = Field(..., description="定时删除时间，格式：YYYY-MM-DD HH:MM:SS")
+    auto_delete: bool = Field(..., description="是否启用定时删除")
+
+# 账户创建请求
+class AccountCreateRequest(BaseModel):
+    account: str = Field(..., description="账户账号")
+    is_vip: bool = Field(False, description="是否为VIP账户")
+
+class AccountUpdateRequest(BaseModel):
+    account: Optional[str] = Field(None, description="账户账号")
+    is_vip: Optional[bool] = Field(None, description="是否为VIP账户")
+
+# 开机请求参数
+class StartInstanceModel(BaseModel):
+    image_type: Optional[str] = Field(None, description="镜像仓库")
+    image: Optional[str] = Field(None, description="镜像名称")

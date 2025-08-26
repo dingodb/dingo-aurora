@@ -12,12 +12,13 @@ from math import ceil
 from kubernetes.client import V1PersistentVolumeClaim, V1ObjectMeta, V1PersistentVolumeClaimSpec, \
     V1ResourceRequirements, V1PodTemplateSpec, V1StatefulSet, V1LabelSelector, V1Container, V1VolumeMount, V1Volume, \
     V1ConfigMapVolumeSource, V1EnvVar, V1PodSpec, V1StatefulSetSpec, V1LifecycleHandler, V1ExecAction, V1Lifecycle, \
-    V1ContainerPort, V1Toleration, V1EmptyDirVolumeSource, V1Pod, V1DeleteOptions
+    V1ContainerPort, V1Toleration, V1EmptyDirVolumeSource, V1Pod, V1DeleteOptions, V1ServicePort
+from kubernetes import client
 from oslo_log import log
 
 from dingo_command.api.model.aiinstance import StorageObj
 from dingo_command.common.k8s_common_operate import K8sCommonOperate
-from dingo_command.db.models.ai_instance.models import AiInstanceInfo
+from dingo_command.db.models.ai_instance.models import AiInstanceInfo, AccountInfo
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
 from dingo_command.utils.constant import NAMESPACE_PREFIX, AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT, \
     SYSTEM_DISK_NAME_DEFAULT, RESOURCE_TYPE, AI_INSTANCE, AI_INSTANCE_PVC_MOUNT_PATH_DEFAULT, AI_INSTANCE_CM_MOUNT_PATH_DEFAULT, \
@@ -63,6 +64,80 @@ class AiInstanceService:
         # 删除数据库记录
         AiInstanceSQL.delete_ai_instance_info_by_id(id)
         return {"data": "success", "uuid": id}
+
+    # ================= 账户相关 =================
+    def create_ai_account(self, account: str, is_vip: bool = False):
+        try:
+            if not account or not str(account).strip():
+                raise Fail("account is empty", error_message="账户账号不能为空")
+
+            # 校验是否已存在
+            existed = AiInstanceSQL.get_account_info_by_account(account)
+            if existed:
+                raise Fail("account already exist", error_message="账户已存在")
+
+            new_id = uuid.uuid4().hex
+            account_db = AccountInfo(
+                id=new_id,
+                account=str(account).strip(),
+                is_vip=bool(is_vip)
+            )
+            AiInstanceSQL.save_account_info(account_db)
+            return {"data": "success", "uuid": new_id}
+        except Fail:
+            raise
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+
+    def delete_ai_account_by_id(self, id: str):
+        try:
+            if not id:
+                raise Fail("id is empty", error_message="账户ID不能为空")
+
+            existed = AiInstanceSQL.get_account_info_by_id(id)
+            if not existed:
+                raise Fail(f"account[{id}] is not found", error_message=f"账户[{id}]不存在")
+
+            AiInstanceSQL.delete_account_info_by_id(id)
+            return {"data": "success", "uuid": id}
+        except Fail:
+            raise
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+
+    def update_ai_account_by_id(self, id: str, account: str = None, is_vip: bool = None):
+        try:
+            if not id:
+                raise Fail("id is empty", error_message="账户ID不能为空")
+
+            existed = AiInstanceSQL.get_account_info_by_id(id)
+            if not existed:
+                raise Fail(f"account[{id}] is not found", error_message=f"账户[{id}]不存在")
+
+            if account is not None:
+                account = str(account).strip()
+                if not account:
+                    raise Fail("account is empty", error_message="账户账号不能为空")
+                # 检查同名唯一
+                conflict = AiInstanceSQL.get_account_info_by_account_excluding_id(account, id)
+                if conflict:
+                    raise Fail("account already exist", error_message="账户已存在")
+                existed.account = account
+            if is_vip is not None:
+                existed.is_vip = bool(is_vip)
+
+            AiInstanceSQL.update_account_info(existed)
+            return {"data": "success", "uuid": id}
+        except Fail:
+            raise
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
 
     def sava_ai_instance_to_image(self, id, request):
         try:
@@ -280,103 +355,130 @@ class AiInstanceService:
         AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
         return ai_instance_info_db
 
-    def open_ai_instance_by_id(self, id):
+    def start_ai_instance_by_id(self, id):
         try:
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if not ai_instance_info_db:
                 raise Fail(f"ai instance[{id}] is not found", error_message=f"容器实例[{id}找不到]")
             
             # 检查实例状态，只有 stopped 状态的实例才能开机
-            if ai_instance_info_db.instance_status != "STOPPED":
+            if ai_instance_info_db.instance_status != AiInstanceStatus.STOPPED:
                 raise Fail(f"ai instance[{id}] status is {ai_instance_info_db.instance_status}, cannot start",
                           error_message=f" 容器实例[{id}]状态为{ai_instance_info_db.instance_status}，无法开机")
 
             # 获取k8s客户端
-            core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
             app_k8s_client = get_k8s_app_client(ai_instance_info_db.instance_k8s_id)
 
-            # 命名空间名称
+            # 命名空间名称与实例名
             namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
+            real_name = ai_instance_info_db.instance_real_name
 
-            # 更新状态为 starting
-            ai_instance_info_db.instance_status = "STARTING"
-            ai_instance_info_db.stop_time = None  # 清除关机时间
+            # 直接 Patch StatefulSet 副本为 1（开机）
+            body = {"spec": {"replicas": 1}}
+            try:
+                app_k8s_client.patch_namespaced_stateful_set(
+                    name=real_name,
+                    namespace=namespace_name,
+                    body=body,
+                    _preload_content=False
+                )
+            except Exception as e:
+                LOG.error(f"开机失败, 实例ID: {id}, 错误: {e}")
+                raise e
+
+            # 标记为 RUNNING
+            ai_instance_info_db.instance_status = AiInstanceStatus.RUNNING
+            ai_instance_info_db.instance_real_status = K8sStatus.RUNNING
+            AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+            return {"id": id, "status": ai_instance_info_db.instance_status}
+        except Fail:
+            raise
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+
+    def stop_ai_instance_by_id(self, id):
+        try:
+            ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
+            if not ai_instance_info_db:
+                raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
+
+            # 命名空间名称与实例名
+            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
+            real_name = ai_instance_info_db.instance_real_name 
+
+            # 获取k8s客户端
+            app_k8s_client = get_k8s_app_client(ai_instance_info_db.instance_k8s_id)
+
+            # 在关机前尝试保存镜像
+            # try:
+            #     LOG.info(f"开始保存实例 {id} 的镜像")
+            #
+            #     # 构建默认的保存镜像请求
+            #     from dingo_command.api.model.aiinstance import AiInstanceSavaImageApiModel
+            #
+            #     # 使用默认配置保存镜像（可以根据需要调整）
+            #     default_save_request = AiInstanceSavaImageApiModel(
+            #         repo_name="dingo-aurora",  # 默认仓库名
+            #         image_label=f"instance-{id}",  # 使用实例ID作为标签
+            #         harbor_username="admin",  # 默认用户名
+            #         harbor_password="Harbor12345"  # 默认密码，实际应该从配置读取
+            #     )
+            #
+            #     # 调用现有的保存镜像方法
+            #     save_result = self.sava_ai_instance_to_image(id, default_save_request)
+            #     LOG.info(f"实例 {id} 镜像保存完成: {save_result}")
+            #
+            # except Exception as e:
+            #     LOG.error(f"保存镜像失败，实例ID: {id}, 错误: {e}")
+            # 镜像保存失败不影响关机流程
+
+            # 直接 Patch StatefulSet 副本为 0（关机）
+            body = {"spec": {"replicas": 0}}
+            try:
+                app_k8s_client.patch_namespaced_stateful_set(
+                    name=real_name,
+                    namespace=namespace_name,
+                    body=body,
+                    _preload_content=False
+                )
+            except Exception as e:
+                LOG.error(f"关机失败，实例ID: {id}, 错误: {e}")
+                raise e
+            # 标记为 STOPPED
+            ai_instance_info_db.instance_status = AiInstanceStatus.STOPPED
+            ai_instance_info_db.instance_real_status = ""
+            ai_instance_info_db.stop_time = datetime.now()
             AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
 
-            # 重新创建 Service
-            real_name = ai_instance_info_db.instance_real_name or ai_instance_info_db.instance_name
-            try:
-                k8s_common_operate.create_ai_instance_sts_service(core_k8s_client, namespace_name, real_name)
-            except Exception as e:
-                LOG.error(f"重新创建Service失败, name={real_name}, ns={namespace_name}, err={e}")
-                # 回滚状态
-                ai_instance_info_db.instance_status = "STOPPED"
-                AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
-                raise e
+            return {"id": id, "status": ai_instance_info_db.instance_status}
+        except Fail:
+            raise
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
 
-            # 重新创建 StatefulSet
-            try:
-                # 从实例配置中解析资源限制
-                instance_config = json.loads(ai_instance_info_db.instance_config) if ai_instance_info_db.instance_config else {}
-                volumes = json.loads(ai_instance_info_db.instance_volumes) if ai_instance_info_db.instance_volumes else {}
-                instance_envs = json.loads(ai_instance_info_db.instance_envs) if ai_instance_info_db.instance_envs else {}
-                
-                # 构建资源限制
-                resource_limits = {}
-                node_selector_gpu = {}
-                tolerations_gpu = []
-                
-                if instance_config.get('compute_cpu'):
-                    resource_limits['cpu'] = str(instance_config['compute_cpu'])
-                if instance_config.get('compute_memory'):
-                    resource_limits['memory'] = str(instance_config['compute_memory']) + "Gi"
-                
-                if instance_config.get('gpu_model') and instance_config.get('gpu_count'):
-                    if "nvidia" in instance_config['gpu_model'].lower():
-                        resource_limits['nvidia.com/gpu'] = str(instance_config['gpu_count'])
-                        node_selector_gpu['nvidia.com/gpu.product'] = instance_config['gpu_model']
-                        node_selector_gpu['nvidia.com/gpu.count'] = str(instance_config['gpu_count'])
-                        tolerations_gpu.append(V1Toleration(
-                            key="nvidia.com/gpu",
-                            operator="Exists",
-                            effect="NoSchedule"
-                        ))
-                    elif "amd" in instance_config['gpu_model'].lower():
-                        resource_limits['amd.com/gpu'] = str(instance_config['gpu_count'])
+    def set_auto_close_instance_by_id(self, id: str, auto_close_time: str, auto_close: bool):
+        try:
+            ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
+            if not ai_instance_info_db:
+                raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
 
-                # 组装 StatefulSet 数据
-                stateful_set_pod_data = self.assemble_sts_pod_info(
-                    sts_name=real_name,
-                    service_name=real_name,
-                    image=ai_instance_info_db.instance_image,
-                    env_vars=instance_envs,
-                    resource_limits=resource_limits,
-                    volumes=volumes,
-                    user_id=ai_instance_info_db.instance_user_id,
-                    node_selector_gpu=node_selector_gpu,
-                    tolerations_gpu=tolerations_gpu
-                )
-
-                # 创建 StatefulSet
-                create_namespaced_stateful_set_info = k8s_common_operate.create_sts_pod(
-                    app_k8s_client, namespace_name, stateful_set_pod_data)
-
-                # 更新实例信息
-                ai_instance_info_db.instance_create_time = create_namespaced_stateful_set_info.metadata.creation_timestamp
-                ai_instance_info_db.instance_status = "READY"  # 创建中状态
-                AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
-
-            except Exception as e:
-                LOG.error(f"重新创建StatefulSet失败, name={real_name}, ns={namespace_name}, err={e}")
-                # 回滚状态和删除已创建的Service
+            if auto_close:
+                if not auto_close_time:
+                    raise Fail("auto close time is empty", error_message="定时关机时间为空")
                 try:
-                    k8s_common_operate.delete_service_by_name(core_k8s_client, real_name, namespace_name)
-                except Exception as del_e:
-                    LOG.error(f"回滚删除Service失败: {del_e}")
-                ai_instance_info_db.instance_status = "STOPPED"
-                AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
-                raise e
+                    # 手动解析时间字符串
+                    parsed_time = datetime.fromisoformat(auto_close_time)
+                    ai_instance_info_db.stop_time = parsed_time
+                except ValueError:
+                    raise Fail("invalid time format", error_message="时间格式无效，请使用 YYYY-MM-DDTHH:MM:SS 格式")
+            else:
+                ai_instance_info_db.stop_time = None
 
+            AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
             return self.assemble_ai_instance_return_result(ai_instance_info_db)
         except Fail:
             raise
@@ -385,39 +487,25 @@ class AiInstanceService:
             traceback.print_exc()
             raise e
 
-    def close_ai_instance_by_id(self, id):
+    def set_auto_delete_instance_by_id(self, id: str, auto_delete_time: str, auto_delete: bool):
         try:
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if not ai_instance_info_db:
                 raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
 
-            # 获取k8s客户端
-            core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
-            app_k8s_client = get_k8s_app_client(ai_instance_info_db.instance_k8s_id)
+            if auto_delete:
+                if not auto_delete_time:
+                    raise Fail("auto delete time is empty", error_message="定时删除时间为空")
+                try:
+                    # 手动解析时间字符串
+                    parsed_time = datetime.strptime(auto_delete_time, "%Y-%m-%d %H:%M:%S")
+                    ai_instance_info_db.auto_delete_time = parsed_time
+                except ValueError:
+                    raise Fail("invalid time format", error_message="时间格式无效，请使用 YYYY-MM-DD HH:MM:SS 格式")
+            else:
+                ai_instance_info_db.auto_delete_time = None
 
-            # 命名空间名称
-            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
-
-            # 更新为 stopping
-            ai_instance_info_db.instance_status = "STOPPING"
-            ai_instance_info_db.stop_time = datetime.now()
             AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
-
-            # 删除 Service 与 StatefulSet（按真实名称）
-            real_name = ai_instance_info_db.instance_real_name or ai_instance_info_db.instance_name
-            try:
-                k8s_common_operate.delete_service_by_name(core_k8s_client, real_name, namespace_name)
-            except Exception as e:
-                LOG.error(f"删除Service失败, name={real_name}, ns={namespace_name}, err={e}")
-            try:
-                k8s_common_operate.delete_sts_by_name(app_k8s_client, real_name, namespace_name)
-            except Exception as e:
-                LOG.error(f"删除StatefulSet失败, name={real_name}, ns={namespace_name}, err={e}")
-
-            # 标记为 stopped
-            ai_instance_info_db.instance_status = "STOPPED"
-            AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
-
             return self.assemble_ai_instance_return_result(ai_instance_info_db)
         except Fail:
             raise
@@ -721,6 +809,189 @@ class AiInstanceService:
         result_status = rules.get(k8s_enum, AiInstanceStatus.ERROR)
 
         return result_status.value
+
+    def create_port_by_id(self, id: str, port: int):
+        try:
+            ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
+            if not ai_instance_info_db:
+                raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
+
+            core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
+            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
+            service_name = ai_instance_info_db.instance_real_name or ai_instance_info_db.instance_name
+
+            # NodePort 占用校验（以 node_port=port 的策略暴露）
+            if k8s_common_operate.is_node_port_in_use(core_k8s_client, int(port)):
+                raise Fail(f"nodePort {port} already in use", error_message=f"节点端口 {port} 已被占用")
+
+            # 读取 Service 并追加端口
+            svc = core_k8s_client.read_namespaced_service(name=service_name, namespace=namespace_name)
+            if not svc or not svc.spec:
+                raise Fail("service invalid", error_message="Service 无效")
+
+            existing_ports = svc.spec.ports or []
+            for p in existing_ports:
+                if int(p.port) == int(port) or getattr(p, 'node_port', None) == int(port):
+                    return {"data": "success", "port": port}  # 幂等
+
+            new_port = client.V1ServicePort(port=int(port), target_port=int(port))
+            # 设为固定 nodePort
+            if not svc.spec.type:
+                svc.spec.type = "NodePort"
+            if svc.spec.type != "NodePort":
+                svc.spec.type = "NodePort"
+            new_port.node_port = int(port)
+
+            existing_ports.append(new_port)
+            svc.spec.ports = existing_ports
+
+            core_k8s_client.patch_namespaced_service(name=service_name, namespace=namespace_name, body=svc)
+            return {"data": "success", "port": port}
+        except Fail:
+            raise
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+
+    def delete_port_by_id(self, id: str, port: int):
+        try:
+            ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
+            if not ai_instance_info_db:
+                raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
+
+            core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
+            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
+            service_name = ai_instance_info_db.instance_real_name or ai_instance_info_db.instance_name
+
+            svc = core_k8s_client.read_namespaced_service(name=service_name, namespace=namespace_name)
+            if not svc or not svc.spec:
+                raise Fail("service invalid", error_message="Service 无效")
+
+            old_len = len(svc.spec.ports or [])
+            svc.spec.ports = [p for p in (svc.spec.ports or []) if int(p.port) != int(port) and getattr(p, 'node_port', None) != int(port)]
+            if len(svc.spec.ports or []) == old_len:
+                return {"data": "success", "port": port}  # 幂等
+
+            core_k8s_client.patch_namespaced_service(name=service_name, namespace=namespace_name, body=svc)
+            return {"data": "success", "port": port}
+        except Fail:
+            raise
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+
+    def list_port_by_id(self, id: str):
+        try:
+            ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
+            if not ai_instance_info_db:
+                raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
+
+            core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
+            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
+            service_name = ai_instance_info_db.instance_real_name or ai_instance_info_db.instance_name
+
+            svc = core_k8s_client.read_namespaced_service(name=service_name, namespace=namespace_name)
+            if not svc or not svc.spec:
+                return {"data": []}
+
+            ports = []
+            for p in (svc.spec.ports or []):
+                ports.append({
+                    "port": int(p.port) if p.port is not None else None,
+                    "targetPort": int(p.target_port) if isinstance(p.target_port, int) else p.target_port,
+                    "nodePort": int(p.node_port) if getattr(p, 'node_port', None) is not None else None,
+                    "protocol": p.protocol
+                })
+            return {"data": ports}
+        except Fail:
+            raise
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+
+    def get_jupyter_urls_by_id(self, id: str, service_port: int = 8888, target_port: int = 8888):
+        try:
+            ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
+            if not ai_instance_info_db:
+                raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
+
+            core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
+            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
+            service_name = ai_instance_info_db.instance_real_name or ai_instance_info_db.instance_name
+
+            # 确保 Service 暴露了 jupyter 端口，如没有则自动新增，并让 k8s 自动分配 nodePort
+            svc = core_k8s_client.read_namespaced_service(name=service_name, namespace=namespace_name)
+            if not svc or not svc.spec:
+                raise Fail("service invalid", error_message="Service 无效")
+
+            node_port_assigned = None
+            if svc.spec.ports:
+                for p in svc.spec.ports:
+                    # 匹配到 8888 的 service_port 或 target_port
+                    if (int(p.port or 0) == int(service_port)) or (isinstance(p.target_port, int) and int(p.target_port) == int(target_port)):
+                        node_port_assigned = getattr(p, 'node_port', None)
+                        if node_port_assigned:
+                            node_port_assigned = int(node_port_assigned)
+                        break
+
+            # 若未找到，新增一个端口项（不设置 nodePort，交给 k8s 自动分配）
+            if node_port_assigned is None:
+                new_port = client.V1ServicePort(port=int(service_port), target_port=int(target_port))
+                if not svc.spec.type:
+                    svc.spec.type = "NodePort"
+                if svc.spec.type != "NodePort":
+                    svc.spec.type = "NodePort"
+                ports = svc.spec.ports or []
+                # 避免重复
+                for p in ports:
+                    if int(p.port or 0) == int(service_port):
+                        new_port = None
+                        break
+                if new_port is not None:
+                    ports.append(new_port)
+                    svc.spec.ports = ports
+                    core_k8s_client.patch_namespaced_service(name=service_name, namespace=namespace_name, body=svc)
+                    # 重新获取以拿到自动分配的 nodePort
+                    svc = core_k8s_client.read_namespaced_service(name=service_name, namespace=namespace_name)
+                    for p in (svc.spec.ports or []):
+                        if int(p.port or 0) == int(service_port):
+                            node_port_assigned = getattr(p, 'node_port', None)
+                            if node_port_assigned:
+                                node_port_assigned = int(node_port_assigned)
+                            break
+
+            if not node_port_assigned:
+                raise Fail("nodePort not assigned", error_message="节点端口尚未分配，请稍后重试")
+
+            # 获取节点 IP 列表
+            urls = []
+            nodes = k8s_common_operate.list_node(core_k8s_client)
+            for n in getattr(nodes, 'items', []) or []:
+                addresses = getattr(n.status, 'addresses', []) or []
+                node_ip = None
+                # 优先 ExternalIP，其次 InternalIP
+                for addr in addresses:
+                    if addr.type == 'ExternalIP' and addr.address:
+                        node_ip = addr.address
+                        break
+                if not node_ip:
+                    for addr in addresses:
+                        if addr.type == 'InternalIP' and addr.address:
+                            node_ip = addr.address
+                            break
+                if node_ip:
+                    urls.append(f"http://{node_ip}:{node_port_assigned}")
+
+            return {"data": {"nodePort": node_port_assigned, "urls": urls}}
+        except Fail:
+            raise
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
 
 class AiInstanceStatus(Enum):
     """数据库状态枚举"""

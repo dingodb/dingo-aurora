@@ -17,8 +17,30 @@ k8s_common_operate = K8sCommonOperate()
 
 LOG = log.getLogger(__name__)
 
+def auto_actions_tick():
+    now = datetime.now()
+    try:
+        # 自动关机
+        to_stop = AiInstanceSQL.list_instances_to_auto_stop(now)
+        for inst in to_stop:
+            try:
+                ai_instance_service.close_ai_instance_by_id(inst.id)
+            except Exception as e:
+                LOG.error(f"auto stop failed for {inst.id}: {e}")
+        # 自动删除
+        to_delete = AiInstanceSQL.list_instances_to_auto_delete(now)
+        for inst in to_delete:
+            try:
+                ai_instance_service.delete_ai_instance_by_id(inst.id)
+            except Exception as e:
+                LOG.error(f"auto delete failed for {inst.id}: {e}")
+    except Exception as e:
+        LOG.error(f"auto_actions_tick error: {e}")
+
+# 将任务注册到 scheduler（与 fetch_ai_instance_info 同步周期一样或独立间隔）
 def start():
     relation_scheduler.add_job(fetch_ai_instance_info, 'interval', seconds=60*10, next_run_time=datetime.now())
+    # relation_scheduler.add_job(auto_actions_tick, 'interval', seconds=60*30, next_run_time=datetime.now())
     relation_scheduler.start()
 
 

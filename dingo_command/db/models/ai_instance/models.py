@@ -1,7 +1,7 @@
 # 数据表对应的model对象
 
 from __future__ import annotations
-from sqlalchemy import Column, String, DateTime, Text, text
+from sqlalchemy import Column, String, DateTime, Text, Boolean, text
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -67,3 +67,12 @@ class AiK8sNodeResourceInfo(Base):
     storage_total = Column(String, nullable=True)
     storage_used = Column(String, nullable=True)
     update_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"))
+
+class AccountInfo(Base):
+    __tablename__ = "ops_account_info"
+
+    id = Column(String(length=128), primary_key=True, nullable=False, index=True, unique=True)
+    account = Column(String(length=128), nullable=False, index=True, unique=True, comment="账户账号")
+    is_vip = Column(Boolean, nullable=False, default=False, comment="是否是VIP账户")
+    create_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"), comment="创建时间")
+    update_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"), comment="更新时间")

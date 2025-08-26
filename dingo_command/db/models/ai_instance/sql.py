@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from dingo_command.db.engines.mysql import get_session
-from dingo_command.db.models.ai_instance.models import AiK8sKubeConfigConfigs, AiInstanceInfo, AiK8sNodeResourceInfo
+from dingo_command.db.models.ai_instance.models import AiK8sKubeConfigConfigs, AiInstanceInfo, AiK8sNodeResourceInfo, AccountInfo
 
 # 容器实例排序字段字典
 ai_instance_dir_dic= {"instance_name":AiInstanceInfo.instance_name}
@@ -160,3 +160,58 @@ class AiInstanceSQL:
         session = get_session()
         with (session.begin()):
             session.merge(k8s_node_resource_db)
+
+    @classmethod
+    def list_instances_to_auto_stop(cls, now_time):
+        session = get_session()
+        with session.begin():
+            return session.query(AiInstanceInfo) \
+                .filter(AiInstanceInfo.stop_time.isnot(None)) \
+                .filter(AiInstanceInfo.stop_time <= now_time) \
+                .all()
+
+    @classmethod
+    def list_instances_to_auto_delete(cls, now_time):
+        session = get_session()
+        with session.begin():
+            return session.query(AiInstanceInfo) \
+                .filter(AiInstanceInfo.auto_delete_time.isnot(None)) \
+                .filter(AiInstanceInfo.auto_delete_time <= now_time) \
+                .all()
+
+    # ================= 以下为 account 相关 =======================
+    @classmethod
+    def save_account_info(cls, account_db):
+        session = get_session()
+        with session.begin():
+            session.add(account_db)
+
+    @classmethod
+    def update_account_info(cls, account_db):
+        session = get_session()
+        with session.begin():
+            session.merge(account_db)
+
+    @classmethod
+    def delete_account_info_by_id(cls, id):
+        session = get_session()
+        with session.begin():
+            session.query(AccountInfo).filter(AccountInfo.id == id).delete()
+
+    @classmethod
+    def get_account_info_by_account(cls, account):
+        session = get_session()
+        with session.begin():
+            return session.query(AccountInfo).filter(AccountInfo.account == account).first()
+
+    @classmethod
+    def get_account_info_by_id(cls, id):
+        session = get_session()
+        with session.begin():
+            return session.query(AccountInfo).filter(AccountInfo.id == id).first()
+
+    @classmethod
+    def get_account_info_by_account_excluding_id(cls, account, exclude_id):
+        session = get_session()
+        with session.begin():
+            return session.query(AccountInfo).filter(AccountInfo.account == account, AccountInfo.id != exclude_id).first()
