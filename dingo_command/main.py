@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
     cluster_status_syncer.start()
     ai_instance_syncer.start()
     ai_k8s_node_resource_syncer.start()
-    # chart_app_status_syncer.start()
+    chart_app_status_syncer.start()
     yield
     # Add any shutdown logic here if needed
 

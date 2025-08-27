@@ -2,15 +2,10 @@ from typing import Union
 import asyncio
 from datetime import datetime
 import json
-from fastapi import Query, Header, Depends
+from fastapi import Query
 from fastapi import APIRouter, HTTPException, BackgroundTasks
-from dingo_command.api.model.cluster import ScaleNodeObject, NodeRemoveObject
-from dingo_command.api.model.chart import (CreateRepoObject, CreateAppObject, ChartObject, ChartVersionObject,
-                                           ChartMetadataObject, ResponseChartObject)
-from dingo_command.services.cluster import ClusterService, TaskService
-from dingo_command.services.chart import ChartService, create_harbor_repo, create_tag_info, run_sync_repo
-from dingo_command.services.custom_exception import Fail
-from dingo_command.common.nova_client import NovaClient
+from dingo_command.api.model.chart import CreateRepoObject, CreateAppObject
+from dingo_command.services.chart import ChartService, create_harbor_repo, create_tag_info
 from dingo_command.utils.helm.util import ChartLOG as Log
 from dingo_command.utils.helm import util
 
@@ -504,7 +499,7 @@ async def get_apps(create_data: CreateAppObject, background_tasks: BackgroundTas
         data = chart_service.list_apps(query_params, 1, -1, None, None)
         if data.get("total") != 0:
             for app_data in data.get("data"):
-                if app_data.name == create_data.name:
+                if app_data.name == create_data.name and app_data.namespace == create_data.namespace:
                     raise ValueError("app name already exists")
 
         background_tasks.add_task(chart_service.install_app, create_data, update=False)
@@ -514,3 +509,13 @@ async def get_apps(create_data: CreateAppObject, background_tasks: BackgroundTas
         traceback.print_exc()
         Log.error(f"install app {create_data.name} failed, reason: {str(e)}")
         raise HTTPException(status_code=400, detail=f"install app error: {str(e)}")
+
+
+@router.get("/helm/list", summary="安装某个应用（异步）", description="安装某个应用（异步）")
+async def get_test(kube_config_path: str = Query(None, description="kube_config路径")):
+    try:
+        content = chart_service.get_helm_list(kube_config_path)
+        content_list = json.loads(content)
+        return {"data": content_list}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"helm list error: {str(e)}")

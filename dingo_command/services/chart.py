@@ -1,16 +1,12 @@
 import time
 
 import json
-import logging
 import os
-import shutil
 import uuid
 import subprocess
-from io import BytesIO
 import requests
 import shutil
 from requests.auth import HTTPBasicAuth
-from typing import Union
 from datetime import datetime
 from math import ceil
 from openpyxl.styles import Border, Side
@@ -34,7 +30,6 @@ from dingo_command.services.cluster import ClusterService
 from dingo_command.services.system import SystemService
 from dingo_command.services import CONF
 from dingo_command.utils.helm import util
-from dingo_command.services.custom_exception import Fail
 from dingo_command.utils.helm.util import ChartLOG as Log
 
 WORK_DIR = CONF.DEFAULT.cluster_work_dir
@@ -192,12 +187,22 @@ class ChartService:
     def list_charts(self, query_params, page, page_size, sort_keys, sort_dirs):
         try:
             # 按照条件从数据库中查询数据
+            query_tmp_params = {}
+            query_tmp_params['cluster_id'] = "all"
+            count, data = RepoSQL.list_repos(query_tmp_params, 1, -1, None, None)
+            tmp_list = []
+            if count > 0:
+                repo = data[0]
+                if repo.except_cluster:
+                    tmp_list = json.loads(repo.except_cluster)
             count, data = ChartSQL.list_charts(query_params, page, page_size, sort_keys, sort_dirs)
             chart_tmp_list = []
             if "cluster_id" in query_params and query_params["cluster_id"]:
                 for chart in data:
                     if chart.cluster_id == "all":
                         chart.cluster_id = query_params["cluster_id"]
+                        if query_params["cluster_id"] in tmp_list:
+                            chart.status = "unavailable"
                     chart_tmp_list.append(chart)
             if chart_tmp_list:
                 data = chart_tmp_list
@@ -1433,3 +1438,22 @@ class ChartService:
 
         except Exception as e:
             raise ValueError(f"get app detail error: {str(e)}")
+
+    def get_helm_list(self, kube_config):
+        helm_command = [
+            "helm",
+            "list",
+            "--kubeconfig", kube_config,
+            "-A",
+            "-o", "json"
+        ]
+        # 执行命令并捕获输出
+        result = subprocess.run(
+            helm_command,
+            capture_output=True,
+            text=True
+        )
+        if result.returncode!= 0:
+            raise ValueError(result.stderr)
+
+        return result.stdout

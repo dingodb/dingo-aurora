@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from dingo_command.db.engines.mysql import get_session
 from dingo_command.db.models.chart.models import RepoInfo, ChartInfo, AppInfo, TagInfo
 from dingo_command.utils.helm.util import ChartLOG as Log
@@ -310,8 +309,22 @@ class AppSQL:
     def delete_app_list(cls, app_list):
         # Session = sessionmaker(bind=engine, expire_on_commit=False)
         # session = Session()
-        for app in app_list:
-            cls.delete_app(app)
+        session = get_session()
+        try:
+            app_ids = [app.id for app in app_list]
+            if not app_ids:
+                return
+
+            # 直接执行原生批量删除
+            stmt = delete(AppInfo).where(AppInfo.id.in_(app_ids))
+            with session.begin():
+                session.execute(stmt)
+        except Exception as e:
+            session.rollback()
+            Log.error(f"原生SQL删除失败: {str(e)}")
+            raise
+        finally:
+            session.close()
 
     @classmethod
     def delete_app(cls, app):
