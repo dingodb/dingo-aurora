@@ -48,12 +48,11 @@ def generate_ovs_command(port):
     )
     return cmd
 
-def assign_ports_to_ovs(port, node_ip, password = "Datacanvas#123!!!"):
+def assign_ports_to_ovs(port, node_ip, password = ""):
     #ssh到node_ip上执行命令cmd命令
     # 读取controller_pass文件获取密码
     # with open('/etc/dingo/controller_pass', 'r') as f:
     #     password = f.read().strip()
-    #password = "Datacanvas#123!!!"
     # 使用sshpass通过ssh连接到节点并执行命令
     iface = port['name']
     check_cmd = f"sshpass -p {password} ssh -o StrictHostKeyChecking=no root@{node_ip} 'ip link show {iface}'"

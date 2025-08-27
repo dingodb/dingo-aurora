@@ -91,6 +91,7 @@ class ClusterObject(DingoopsObject):
     forward_float_ip_id: Optional[str] = Field(None, description="集群浮动ip的id")
     forward_float_ip: Optional[str] = Field(None, description="集群浮动ip")
     port_forwards: Optional[List[PortForwards]] = Field(None, description="端口转发配置")
+    charts: Optional[List[PortForwards]] = Field(None, description="端口转发配置")
 
 
 class NodeObject(DingoopsObject):

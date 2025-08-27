@@ -1225,8 +1225,9 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                 master_node_name = f"{cluster_tfvars.cluster_name}-k8s-master-{str(i)}"
                 #ssh_port = hosts_data["_meta"]["hostvars"][master_node_name].get("ansible_port", 22)
                 tmp_ip = hosts_data["_meta"]["hostvars"][master_node_name]["ansible_host"]
-                cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p 22'
-                    f'{cluster_tfvars.ssh_user}@{tmp_ip}')
+                
+                cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p 22 ' f'{cluster_tfvars.ssh_user}@{tmp_ip}')
+                print(f"config node with password: {cmd} {task_id}")
                 retry_count = 0
                 max_retries = 30
                 while retry_count < max_retries:
@@ -1243,8 +1244,9 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                 node_name = f"{cluster_tfvars.cluster_name}-node-{str(i)}"
                 #ssh_port = hosts_data["_meta"]["hostvars"][master_node_name].get("ansible_port", 22)
                 tmp_ip = hosts_data["_meta"]["hostvars"][node_name]["ansible_host"]
-                cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p 22'
-                    f'{cluster_tfvars.ssh_user}@{tmp_ip}')
+                cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p 22 '
+                       f'{cluster_tfvars.ssh_user}@{tmp_ip}')
+                print(f"config node with password: {cmd} {task_id}")
                 retry_count = 0
                 max_retries = 30
                 while retry_count < max_retries:
