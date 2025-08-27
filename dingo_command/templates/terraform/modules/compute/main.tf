@@ -170,7 +170,7 @@ locals {
   # Provide default values to prevent null
   segmentation_id = local.first_segment != null ? local.first_segment.segmentation_id : "1000"
   network_type = local.first_segment != null ? local.first_segment.network_type : "vlan"
-  protforward_external_port = 10000 + floor(random_integer.master_port.result)
+  #protforward_external_port = 10000 + floor(random_integer.master_port.result)
 }
 
 resource "openstack_networking_port_v2" "admin_master_port" {
@@ -260,7 +260,6 @@ resource "openstack_compute_instance_v2" "k8s-master" {
 
   metadata = {
     ssh_user         = var.ssh_user
-    ssh_port         = local.protforward_external_port
     kubespray_groups = "etcd,kube_control_plane,${var.supplementary_master_groups},cluster"
     depends_on       = var.network_router_id
     use_access_ip    = var.use_access_ip

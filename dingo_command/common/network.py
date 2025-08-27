@@ -37,7 +37,7 @@ def generate_ovs_command(port):
     # 检查设备是否已存在
     
     cmd = (
-        f"ovs-vsctl --may-exist add-port br-int {iface} "
+        f"ovs-vsctl --db=unix:/run/openvswitch/db.sock --may-exist add-port br-int {iface} "
         f"-- set Interface {iface} type=internal "
         f"-- set Interface {iface} external-ids:iface-status=active "
         f"-- set Interface {iface} external-ids:attached-mac={mac} "
@@ -139,7 +139,9 @@ def connect_network_to_vpc(project_id:str):
 
 def init_cluster_network(project_id:str, subnet_id:str):
     # 初始化网络配置
-    password = "Datacanvas#123!!!"
+    # 读取password文件获取密码
+    password = CONF.DEFAULT.controller_password
+    
     controller_nodes = get_controller_nodes()
     cidr, port_ip = connect_network_to_vpc(project_id)
     index = 1
