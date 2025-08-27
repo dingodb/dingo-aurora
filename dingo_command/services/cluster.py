@@ -411,21 +411,21 @@ class ClusterService:
                 user_id=cluster.user_id,
                 labels=cluster.labels,
                 status=cluster.status,
-                status_msg=getattr(cluster, "status_msg", None) or "",  # 提供默认值
+                status_msg= cluster.status_msg,
                 region_name=cluster.region_name,
                 type=cluster.type,
                 kube_info=kube_info,
-                created_at=cluster.create_time.timestamp() * 1000 if cluster.create_time else None,
-                updated_at=cluster.update_time.timestamp() * 1000 if cluster.update_time else None,
-                description=cluster.description or "",  # 提供默认值
-                gpu=getattr(cluster, "gpu", None),
-                cpu=getattr(cluster, "cpu", None),
-                mem=getattr(cluster, "mem", None),
-                forward_float_ip=forward_float_ip or "",  # 提供默认值
-                gpu_mem=getattr(cluster, "gpu_mem", None),
+                created_at=cluster.create_time.timestamp() * 1000,
+                updated_at=cluster.update_time.timestamp() * 1000,
+                description=cluster.description,
+                gpu=cluster.gpu,
+                cpu=cluster.cpu,
+                mem=cluster.mem,
+                forward_float_ip=forward_float_ip,
+                gpu_mem = cluster.gpu_mem,
                 network_config=network_config,
-                extra=cluster.extra or "",  # 提供默认值
-                private_key=getattr(cluster, "private_key", None) or ""  # 提供默认值
+                extra=cluster.extra,
+                private_key=cluster.private_key
             )
             #查询网络信息
             res_cluster.network_config.kube_lb_address = kube_info.kube_lb_address

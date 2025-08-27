@@ -153,7 +153,7 @@ class TestCreateCluster(unittest.TestCase):
 
     #调用celery_app项目下的work.py中的create_cluster方法
     # Test execution
-    create_k8s_cluster(self.cluster_tf_dict, self.cluster_dict, [])
+    create_k8s_cluster(self.cluster_tf_dict, self.cluster_dict, [], [])
 
   def test_add_exist_node(self):
      # 通过server_ids查询虚拟机信息

@@ -37,7 +37,7 @@ def generate_ovs_command(port):
     # 检查设备是否已存在
     
     cmd = (
-        f"ovs-vsctl --may-exist add-port br-int {iface} "
+        f"ovs-vsctl --db=unix:/run/openvswitch/db.sock --may-exist add-port br-int {iface} "
         f"-- set Interface {iface} type=internal "
         f"-- set Interface {iface} external-ids:iface-status=active "
         f"-- set Interface {iface} external-ids:attached-mac={mac} "
@@ -48,12 +48,11 @@ def generate_ovs_command(port):
     )
     return cmd
 
-def assign_ports_to_ovs(port, node_ip, password = "Datacanvas#123!!!"):
+def assign_ports_to_ovs(port, node_ip, password = ""):
     #ssh到node_ip上执行命令cmd命令
     # 读取controller_pass文件获取密码
     # with open('/etc/dingo/controller_pass', 'r') as f:
     #     password = f.read().strip()
-    #password = "Datacanvas#123!!!"
     # 使用sshpass通过ssh连接到节点并执行命令
     iface = port['name']
     check_cmd = f"sshpass -p {password} ssh -o StrictHostKeyChecking=no root@{node_ip} 'ip link show {iface}'"
@@ -139,7 +138,9 @@ def connect_network_to_vpc(project_id:str):
 
 def init_cluster_network(project_id:str, subnet_id:str):
     # 初始化网络配置
-    password = "Datacanvas#123!!!"
+    # 读取password文件获取密码
+    password = CONF.DEFAULT.controller_password
+    
     controller_nodes = get_controller_nodes()
     cidr, port_ip = connect_network_to_vpc(project_id)
     index = 1
