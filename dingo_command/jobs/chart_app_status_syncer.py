@@ -42,6 +42,7 @@ def check_app_status():
     """
     try:
         LOG.info(f"Starting check app status at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        os.makedirs(config_dir, exist_ok=True)
         # 先获取所有repo的cluster_id
         query_params = {}
         count, repos = RepoSQL.list_repos(query_params, page_size=-1)
@@ -75,8 +76,6 @@ def check_app_status():
             kube_config = json.loads(clusters[0].kube_info).get("kube_config")
             if not kube_config:
                 continue
-
-            os.makedirs(config_dir, exist_ok=True)
             config_file = os.path.join(config_dir, f"{cluster_id}_kube_config")
             with open(config_file, "w") as f:
                 f.write(kube_config)
