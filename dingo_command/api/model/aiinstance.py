@@ -50,8 +50,8 @@ class AiInstanceApiModel(BaseModel):
 class AiInstanceSavaImageApiModel(BaseModel):
     repo_name: Optional[str] = Field(None, description="仓库名称")
     image_label: Optional[str] = Field(None, description="镜像标签")
-    harbor_username: Optional[str] = Field(None, description="harbor名称")
-    harbor_password: Optional[str] = Field(None, description="harbor密码")
+    # harbor_username: Optional[str] = Field(None, description="harbor名称")
+    # harbor_password: Optional[str] = Field(None, description="harbor密码")
 
 # k8s kubeconfig配置
 class K8skubeconfigApiModel(BaseModel):

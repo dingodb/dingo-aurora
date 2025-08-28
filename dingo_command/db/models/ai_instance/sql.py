@@ -23,6 +23,27 @@ class AiInstanceSQL:
             session.merge(ai_instance_db)
 
     @classmethod
+    def update_specific_fields_instance(cls, ai_instance_db, **update_data):
+        """
+        更新AI实例信息（支持部分更新）
+
+        :param ai_instance_db: 要更新的AI实例ORM对象
+        :param update_data: 需要更新的字段字典（可选）
+        :return: 更新后的实例对象
+        """
+        session = get_session()
+        with session.begin():
+            # 如果有更新数据，先应用到对象
+            if update_data:
+                for key, value in update_data.items():
+                    if hasattr(ai_instance_db, key):
+                        setattr(ai_instance_db, key, value)
+
+            # 使用merge确保数据一致性（会返回新对象）
+            merged_instance = session.merge(ai_instance_db)
+            return merged_instance
+
+    @classmethod
     def delete_ai_instance_info_by_id(cls, id):
         session = get_session()
         with session.begin():
@@ -39,10 +60,12 @@ class AiInstanceSQL:
             return count
 
     @classmethod
-    def get_ai_instance_info_by_instance_name(cls, instance_name):
+    def get_instances_by_k8s_and_node(cls, k8s_id, node_name):
         session = get_session()
         with (session.begin()):
-            return session.query(AiInstanceInfo).filter(AiInstanceInfo.instance_name == instance_name).first()
+            return session.query(AiInstanceInfo).\
+                filter(AiInstanceInfo.instance_k8s_id == k8s_id). \
+                filter(AiInstanceInfo.instance_node_name == node_name).first()
 
     @classmethod
     def get_ai_instance_info_by_id(cls, id):
@@ -148,6 +171,14 @@ class AiInstanceSQL:
         session = get_session()
         with session.begin():
             return session.query(AiK8sNodeResourceInfo).filter(AiK8sNodeResourceInfo.k8s_id == k8s_id).delete()
+
+    @classmethod
+    def delete_k8s_node_resource(cls, k8s_id, node_name):
+        session = get_session()
+        with session.begin():
+            return session.query(AiK8sNodeResourceInfo). \
+                filter(AiK8sNodeResourceInfo.k8s_id == k8s_id). \
+                filter(AiK8sNodeResourceInfo.node_name == node_name).delete()
 
     @classmethod
     def save_k8s_node_resource(cls, k8s_node_resource_db):

@@ -77,7 +77,20 @@ class K8sCommonOperate:
             spec=client.V1ServiceSpec(
                 selector={"app": service_name,
                           RESOURCE_TYPE: AI_INSTANCE},  # 定义标签
-                ports=[client.V1ServicePort(port=8888, target_port=8888)],  # 定义port、target_port端口号
+                ports=[
+                    client.V1ServicePort(
+                        name="jupyter",
+                        port=8888,
+                        target_port=8888,
+                        protocol="TCP"
+                    ),
+                    client.V1ServicePort(
+                        name="ssh",
+                        port=22,
+                        target_port=22,
+                        protocol="TCP"
+                    )
+                ],  # 定义port、target_port端口号
                 # cluster_ip="",  # Headless Service
                 type="NodePort",  # svc类型为NodePort
             )
@@ -132,8 +145,12 @@ class K8sCommonOperate:
             print(f"查询 Pod {namespace}/{name} 失败: {e.reason} (状态码: {e.status})")
             raise e.reason
 
-    def list_pods_by_label(self, core_v1: client.CoreV1Api, namespace=None,
-                           label_selector="resource-type=ai-instance", limit = 2000, timeout_seconds=60):
+    def list_pods_by_label_and_node(self, core_v1: client.CoreV1Api,
+                                    namespace=None,
+                                    label_selector="resource-type=ai-instance",
+                                    node_name=None,  # 新增：节点名称参数
+                                    limit=2000,
+                                    timeout_seconds=60):
         all_pods = []
         continue_token = None
         try:
@@ -145,6 +162,10 @@ class K8sCommonOperate:
                     "_continue": continue_token,
                     "timeout_seconds": timeout_seconds
                 }
+
+                if node_name:
+                    kwargs["field_selector"] = f"spec.nodeName={node_name}"
+
                 try:
                     if namespace:
                         # 分页查询指定命名空间

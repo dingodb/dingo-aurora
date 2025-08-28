@@ -6,11 +6,11 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconn
 from kubernetes.stream import stream
 from kubernetes import client
 
-from dingo_command.api.model.aiinstance import AiInstanceApiModel, AiInstanceSavaImageApiModel, AccountCreateRequest, AccountUpdateRequest, StartInstanceModel
+from dingo_command.api.model.aiinstance import AiInstanceApiModel, AiInstanceSavaImageApiModel, AccountCreateRequest, \
+    AccountUpdateRequest, AutoDeleteRequest, AutoCloseRequest, StartInstanceModel
 from dingo_command.services.ai_instance import AiInstanceService
 from dingo_command.services.custom_exception import Fail
 from dingo_command.utils.k8s_client import get_k8s_client
-from dingo_command.api.model.aiinstance import AutoCloseRequest, AutoDeleteRequest
 
 router = APIRouter()
 ai_instance_service = AiInstanceService()
@@ -29,23 +29,22 @@ async def create_ai_instance(ai_instance:AiInstanceApiModel):
         raise HTTPException(status_code=400, detail=f"创建容器实例[{ai_instance.name}]失败:{e}")
 
 
-@router.post("/ai-instances/{id}/save-image", summary="容器实例镜像保存", description="容器实例镜像保存")
+@router.post("/ai-instances/{id}/save-image", summary="容器实例保存为镜像", description="容器实例保存为镜像")
 async def sava_ai_instance_to_image(id: str, request: AiInstanceSavaImageApiModel):
-    # 容器实例镜像保存
+    # 容器实例保存为镜像
     try:
-        # 容器实例镜像保存
+        # 容器实例保存为镜像
         return ai_instance_service.sava_ai_instance_to_image(id, request)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail=f"容器实例镜像保存[{id}]失败:{e}")
+        raise HTTPException(status_code=400, detail=f"容器实例[{id}]保存为镜像失败:{e}")
 
 @router.get("/ai-instance/list", summary="查询容器实例列表", description="查询容器实例列表")
 async def list_ai_instance_infos(
         uuid:str = Query(None, description="容器实例主键ID"),
-        instance_id:str = Query(None, description="容器实例id"),
         instance_name:str = Query(None, description="容器实例名称"),
         instance_status:str = Query(None, description="容器实例状态"),
         page: int = Query(1, description="页码"),
@@ -59,8 +58,6 @@ async def list_ai_instance_infos(
         # 查询条件组装
         if uuid:
             query_params['uuid'] = uuid
-        if instance_id:
-            query_params['instance_id'] = instance_id
         if instance_name:
             query_params['instance_name'] = instance_name
         if instance_status:
@@ -203,7 +200,7 @@ async def set_auto_delete_instance_by_id(id: str, request: AutoDeleteRequest):
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"设置定时删除容器实例失败:{id}")
 
-@router.post("/ai-instance/{id}/port/create", summary="容器实例新增端口", description="根据实例id新增端口")
+@router.post("/ai-instance/{id}/port/create", summary="容器实例端口新增端口", description="根据实例id新增端口")
 async def create_port_by_id(id: str, port: int):
     try:
         return ai_instance_service.create_port_by_id(id, port)
@@ -280,3 +277,17 @@ async def update_ai_account_by_id(id: str, request: AccountUpdateRequest):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"更新账户失败:{e}")
+
+
+# ========== 以下为 k8s node resoource相关接口 ==================================
+@router.get("/ai/resources/{k8s_id}/statistics", summary="查询k8s资源资源统计", description="查询k8s资源资源统计")
+async def get_instance_info_by_id(k8s_id:str):
+    # 查询容器实例详情
+    try:
+        return ai_instance_service.get_k8s_node_resource_statistics(k8s_id)
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"查询容器实例详情失败:{id}")

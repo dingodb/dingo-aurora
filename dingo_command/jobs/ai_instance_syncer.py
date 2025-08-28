@@ -11,7 +11,7 @@ from dingo_command.utils import datetime as datatime_util
 from datetime import datetime
 from oslo_log import log
 
-relation_scheduler = BackgroundScheduler()
+ai_instance_scheduler = BackgroundScheduler()
 ai_instance_service = AiInstanceService()
 k8s_common_operate = K8sCommonOperate()
 
@@ -39,9 +39,9 @@ def auto_actions_tick():
 
 # 将任务注册到 scheduler（与 fetch_ai_instance_info 同步周期一样或独立间隔）
 def start():
-    relation_scheduler.add_job(fetch_ai_instance_info, 'interval', seconds=60*10, next_run_time=datetime.now())
-    # relation_scheduler.add_job(auto_actions_tick, 'interval', seconds=60*30, next_run_time=datetime.now())
-    relation_scheduler.start()
+    ai_instance_scheduler.add_job(fetch_ai_instance_info, 'interval', seconds=60*10, next_run_time=datetime.now())
+    # ai_instance_scheduler.add_job(auto_actions_tick, 'interval', seconds=60*30, next_run_time=datetime.now())
+    ai_instance_scheduler.start()
 
 
 def fetch_ai_instance_info():
@@ -92,7 +92,6 @@ def sync_single_k8s_cluster(k8s_id: str, core_client, apps_client):
         # 2. 按namespace分组处理
         namespace_instance_map = {}
         for instance in db_instances:
-            print(f"sync_single_k8s_cluster-----{instance.instance_real_name}")
             namespace = NAMESPACE_PREFIX + instance.instance_root_account_id
             if namespace not in namespace_instance_map:
                 namespace_instance_map[namespace] = []
@@ -124,7 +123,7 @@ def process_namespace_resources(namespace: str, instances: list, core_client, ap
         namespace=namespace,
         label_selector="resource-type=ai-instance"
     )
-    pod_list = k8s_common_operate.list_pods_by_label(
+    pod_list = k8s_common_operate.list_pods_by_label_and_node(
         core_client,
         namespace=namespace,
         label_selector="resource-type=ai-instance"
@@ -134,7 +133,7 @@ def process_namespace_resources(namespace: str, instances: list, core_client, ap
     sts_map = {sts.metadata.name: sts for sts in sts_list}
     pod_map = {pod.metadata.name: pod for pod in pod_list}
     db_instance_map = {inst.instance_real_name: inst for inst in instances}
-    print(f"---------sts_map:{sts_map.keys()}, pod_map:{pod_map.keys()}, db_instance_map:{db_instance_map.keys()}")
+    LOG.info(f"---------sts_map:{sts_map.keys()}, pod_map:{pod_map.keys()}, db_instance_map:{db_instance_map.keys()}")
 
     # 3. 处理孤儿资源: K8s中存在但数据库不存在的资源
     handle_orphan_resources(
@@ -162,7 +161,7 @@ def process_namespace_resources(namespace: str, instances: list, core_client, ap
 def handle_orphan_resources(sts_names, db_instance_names, namespace, core_client, apps_client):
     """处理K8s中存在但数据库不存在的资源"""
     orphans = set(sts_names) - set(db_instance_names)
-    print(f"======handle_orphan_resources======orphans:{orphans}")
+    LOG.info(f"======handle_orphan_resources======orphans:{orphans}")
     for name in orphans:
         LOG.info(f"清理孤儿资源: {namespace}/{name}")
         try:
@@ -207,25 +206,36 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
         sts = sts_map[real_name]
         pod = pod_map.get(f"{real_name}-0")  # StatefulSet Pod命名规则
 
+        if not pod:
+            LOG.warning(f"Not Found Pod[{real_name}-0], skip sync")
+            continue
+
         # 确定实例状态
         k8s_status = determine_instance_real_status(sts, pod)
+        # 实例使用镜像
         k8s_image = extract_image_info(sts)
+        # 环境变量、错误信息等
         pod_details = extract_pod_details(pod)
+
         # 更新数据库记录
         try:
-            instance_db.instance_real_status = k8s_status
-            instance_db.instance_status = AiInstanceService.map_k8s_to_db_status(k8s_status, instance_db.instance_status)
-            if pod_details:
-                instance_db.instance_envs = pod_details.get('instance_envs')
-                instance_db.error_msg = pod_details.get('error_msg')
-            instance_db.instance_image = k8s_image
-            instance_db.instance_node_name = pod.spec.node_name
+            # 准备更新数据
+            update_data = {
+                'instance_real_status': k8s_status,
+                'instance_status': AiInstanceService.map_k8s_to_db_status(k8s_status, instance_db.instance_status),
+                'instance_image': k8s_image,
+                'instance_node_name': pod.spec.node_name
+            }
 
-            AiInstanceSQL.update_ai_instance_info(instance_db)
-            print(f"更新实例[{real_name}]信息: {instance_db.instance_status}")
+            if pod_details:
+                update_data['instance_envs'] = pod_details.get('instance_envs')
+                update_data['error_msg'] = pod_details.get('error_msg')
+
+            # 更新数据库
+            AiInstanceSQL.update_specific_fields_instance(instance_db, **update_data)
+            LOG.info(f"更新实例[{real_name}]信息: {update_data['instance_status']}")
         except Exception as e:
             LOG.error(f"更新实例状态失败[{real_name}]: {str(e)}")
-
 
 def extract_pod_details(pod):
     """从Pod中提取详细信息"""

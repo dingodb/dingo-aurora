@@ -22,6 +22,7 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=128), nullable=False, server_default=sa.text("UUID()"), comment='主键UUID'),
         sa.Column("k8s_id", sa.String(length=128), nullable=True, comment='k8s_id'),
         sa.Column("node_name", sa.String(length=128), nullable=True, comment='节点名称'),
+        sa.Column("less_gpu_pod_count", sa.Integer(), nullable=True, default=0 , comment='无GPU卡pod数目'),
         sa.Column("gpu_model", sa.String(length=128), nullable=True, comment='gpu型号'),
         sa.Column("gpu_total", sa.String(length=128), nullable=True, comment='gpu总量'),
         sa.Column("gpu_used", sa.String(length=128), nullable=True, comment='gpu已用量'),
@@ -36,6 +37,12 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('id'),
         comment='AI K8s node resource信息表'
     )
+    op.create_index(op.f('ix_ops_ai_k8s_node_resource_id'), 'ops_ai_k8s_node_resource', ['id'], unique=False)
+    op.create_index(op.f('ix_ops_ai_k8s_node_resource_k8s_id'), 'ops_ai_k8s_node_resource', ['k8s_id'], unique=False)
+    op.create_index(op.f('ix_ops_ai_k8s_node_resource_node_name'), 'ops_ai_k8s_node_resource', ['node_name'], unique=False)
 
 def downgrade() -> None:
+    op.drop_index(op.f('ix_ops_ai_k8s_node_resource_id'), table_name='ops_ai_k8s_node_resource')
+    op.drop_index(op.f('ix_ops_ai_k8s_node_resource_k8s_id'), table_name='ops_ai_k8s_node_resource')
+    op.drop_index(op.f('ix_ops_ai_k8s_node_resource_node_name'), table_name='ops_ai_k8s_node_resource')
     op.drop_table('ops_ai_k8s_node_resource')

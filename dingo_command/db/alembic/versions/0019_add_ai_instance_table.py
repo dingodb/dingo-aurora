@@ -20,9 +20,9 @@ def upgrade() -> None:
     op.create_table(
         "ops_ai_instance_info",
         sa.Column("id", sa.String(length=128), nullable=False, server_default=sa.text("UUID()"), comment='主键UUID'),
-        sa.Column("instance_name", sa.String(length=128), nullable=False, comment='容器实例名称(页面输入名称)'),
-        sa.Column("instance_real_name", sa.String(length=128), nullable=False, comment='容器实例名称(底层sts名称)'),
-        sa.Column("instance_node_name", sa.String(length=128), nullable=False, comment='POD所在node名称'),
+        sa.Column("instance_name", sa.String(length=128), nullable=True, comment='容器实例名称(页面输入名称)'),
+        sa.Column("instance_real_name", sa.String(length=128), nullable=True, comment='容器实例名称(底层sts名称)'),
+        sa.Column("instance_node_name", sa.String(length=128), nullable=True, comment='POD所在node名称'),
         sa.Column("instance_status", sa.String(length=128), nullable=True, comment='上层容器实例状态'),
         sa.Column("instance_real_status", sa.String(length=128), nullable=True, comment='底层容器实例真实状态'),
         sa.Column("instance_k8s_type", sa.String(length=128), nullable=True, comment='k8s类型'),
@@ -49,6 +49,10 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('id'),
         comment='AI容器实例信息表'
     )
+    op.create_index(op.f('ix_ops_ai_instance_info_id'), 'ops_ai_instance_info', ['id'], unique=False)
+    op.create_index(op.f('ix_ops_ai_instance_info_instance_k8s_id'), 'ops_ai_instance_info', ['instance_k8s_id'], unique=False)
 
 def downgrade() -> None:
+    op.create_index(op.f('ix_ops_ai_instance_info_id'), 'ops_ai_instance_info', ['id'], unique=False)
+    op.create_index(op.f('ix_ops_ai_instance_info_instance_k8s_id'), 'ops_ai_instance_info', ['instance_k8s_id'], unique=False)
     op.drop_table('ops_ai_instance_info')

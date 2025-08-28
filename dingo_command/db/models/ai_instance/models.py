@@ -1,7 +1,7 @@
 # 数据表对应的model对象
 
 from __future__ import annotations
-from sqlalchemy import Column, String, DateTime, Text, Boolean, text
+from sqlalchemy import Column, String, DateTime, Text, Boolean, text, Integer
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -57,6 +57,7 @@ class AiK8sNodeResourceInfo(Base):
     id = Column(String(length=128), nullable=False, primary_key=True, unique=True)
     k8s_id = Column(String(length=128), nullable=True, index=True, unique=True)
     node_name = Column(String(length=128), nullable=True)
+    less_gpu_pod_count = Column(Integer, nullable=True, default=0)
     gpu_model = Column(String, nullable=True)
     gpu_total = Column(String, nullable=True)
     gpu_used = Column(String, nullable=True)
