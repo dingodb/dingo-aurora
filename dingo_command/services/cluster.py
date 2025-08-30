@@ -700,7 +700,7 @@ class ClusterService:
             traceback.print_exc()
             raise e
     
-    def add_existing_nodes_to_cluster(self, cluster_id: str, server_details: list, token: str):
+    def add_existing_nodes_to_cluster(self, cluster_id: str, server_details: list, token: str, private_key=None, user=None, password=None):
         """将已有的服务器节点添加到K8s集群中"""
         try:
             # 1. 验证集群状态
@@ -720,52 +720,7 @@ class ClusterService:
             cluster_db = res.get("data")[0]
             cluster_db.status = "scaling"
             ClusterSQL.update_cluster(cluster_db)
-            #增加已有节点到node表
-            node_db_list = []
-            for server in server_details:
-                node_db = NodeDB()
-                node_db.id = str(uuid.uuid4())
-                node_db.node_type = "vm"
-                node_db.cluster_id = cluster_id
-                node_db.cluster_name = cluster.name
-                node_db.region = cluster.region_name
-                node_db.role = "worker"
-                node_db.image = server.image.id
-                node_db.status = "running"
-                #node_db.name = server.get("name", "")
-                node_db.create_time = datetime.now()
-                
-                # 赋值其他字段，确保只传递对象，不传dict
-                # 例如：node_db.user = server.get("user", "")
-                #      node_db.cpu = server.get("cpu", 0)
-                #      node_db.mem = server.get("mem", 0)
-                #      node_db.disk = server.get("disk", 0)
-                #      node_db.password = server.get("password", "")
-                #      node_db.private_key = server.get("private_key", "")
-                #      node_db.auth_type = server.get("auth_type", "")
-                #      node_db.security_group = server.get("security_group", "")
-                # 获取flavor信息
-                if hasattr(server, "flavor") and server.flavor:
-                    node_db.flavor_id = getattr(server.flavor, "id", "")
-                    node_db.cpu = getattr(server.flavor, "vcpus", 0)
-                    node_db.mem = getattr(server.flavor, "ram", 0)
-                    node_db.disk = getattr(server.flavor, "disk", 0)
-                else:
-                    node_db.flavor_id = server.get("flavor_id", "")
-                # 从 server.addresses 获取第一个 map 的 value 中的 addr
-                admin_address = ""
-                if hasattr(server, "addresses") and server.addresses:
-                    # server.addresses 是一个 dict，取第一个 key 的 value
-                    first_key = next(iter(server.addresses), None)
-                    if first_key:
-                        addr_list = server.addresses[first_key]
-                        if isinstance(addr_list, list) and addr_list:
-                            admin_address = addr_list[0].get("addr", "")
-                node_db.admin_address = admin_address
-                node_db_list.append(node_db)
-                node_db.security_group = server.get("security_group", "")
-            NodeSQL.create_node_list(node_db_list)  
-
+           
             # 3. 调用Celery任务异步处理
             result = celery_app.send_task(
                 "dingo_command.celery_api.workers.add_existing_nodes", 
