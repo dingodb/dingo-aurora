@@ -101,7 +101,7 @@ async def create_resources(
         
     )
     if resources is None:
-        raise HTTPException(status_code=500, detail=f"查询资源 '{resource_type}' 失败。")
+        raise HTTPException(status_code=500, detail=f"创建资源 '{resource_type}' 失败。")
     return JSONResponse(content=jsonable_encoder(resources)) # 确保复杂对象可以被序列化
 
 
@@ -303,6 +303,7 @@ async def update_resources(
     resource: CreateResourceRequest,
     namespace: str = Path(..., description="Kubernetes 命名空间"),
     resource_type: str = Path(..., description="Kubernetes 资源类型"),
+    name: str = Path(..., description="Kubernetes 资源名称"),
     token: str = Depends(get_token),
 ) -> List[Dict[str, Any]]:
     #根据cluster_id获取对应的kubeconfig，然后获取kubeclient
@@ -315,7 +316,7 @@ async def update_resources(
         resource_body=resource.template,
         resource_type=resource_type,
         namespace=namespace,
-        
+        name=name
     )
     if resources is None:
         raise HTTPException(status_code=500, detail=f"查询资源 '{resource_type}' 失败。")

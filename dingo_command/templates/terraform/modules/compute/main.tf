@@ -29,7 +29,7 @@ data "cloudinit_config" "master-cloudinit" {
 }
 
 data "openstack_networking_network_v2" "admin_network" {
-  count = var.use_existing_network && var.bus_network_id != "" ? 1 : 0
+  count = var.use_existing_network && var.admin_network_id != "" ? 1 : 0
   network_id  = var.admin_network_id
 }
 
@@ -538,3 +538,4 @@ resource "openstack_networking_portforwarding_v2" "pf_multi" {
     openstack_compute_instance_v2.nodes
   ]
 }
+ 

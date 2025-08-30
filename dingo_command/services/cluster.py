@@ -559,6 +559,9 @@ class ClusterService:
             #             p.external_port = self.generate_random_port()
             if not cluster.forward_float_ip_id:
                 cluster.forward_float_ip_id = ""
+            use_existing_network = False
+            if cluster.network_config.admin_network_id == "":
+                use_existing_network = True
             tfvars = ClusterTFVarsObject(
                 id = cluster_info_db.id,
                 cluster_name=cluster.name,
@@ -570,7 +573,7 @@ class ClusterService:
                 public_subnetids=public_subnetids,
                 external_subnetids=external_subnetids,
                 external_net=external_net_id,
-                use_existing_network=False,
+                use_existing_network=use_existing_network,
                 ssh_user=cluster.node_config[0].user,
                 k8s_master_loadbalancer_enabled=lb_enbale,
                 number_of_k8s_masters = 1,
@@ -726,15 +729,43 @@ class ClusterService:
                 node_db.cluster_id = cluster_id
                 node_db.cluster_name = cluster.name
                 node_db.region = cluster.region_name
-                node_db.role = server.get("role", "worker")
-                node_db.user = server.get("user", "")
-                node_db.password = server.get("password", "")
-                node_db.image = server.get("image", "")
-                node_db.instance_id = server.get("instance_id", "")
-                node_db.project_id = cluster.project_id
+                node_db.role = "worker"
+                node_db.image = server.image.id
+                node_db.status = "running"
+                #node_db.name = server.get("name", "")
+                node_db.create_time = datetime.now()
+                
+                # 赋值其他字段，确保只传递对象，不传dict
+                # 例如：node_db.user = server.get("user", "")
+                #      node_db.cpu = server.get("cpu", 0)
+                #      node_db.mem = server.get("mem", 0)
+                #      node_db.disk = server.get("disk", 0)
+                #      node_db.password = server.get("password", "")
+                #      node_db.private_key = server.get("private_key", "")
+                #      node_db.auth_type = server.get("auth_type", "")
+                #      node_db.security_group = server.get("security_group", "")
+                # 获取flavor信息
+                if hasattr(server, "flavor") and server.flavor:
+                    node_db.flavor_id = getattr(server.flavor, "id", "")
+                    node_db.cpu = getattr(server.flavor, "vcpus", 0)
+                    node_db.mem = getattr(server.flavor, "ram", 0)
+                    node_db.disk = getattr(server.flavor, "disk", 0)
+                else:
+                    node_db.flavor_id = server.get("flavor_id", "")
+                # 从 server.addresses 获取第一个 map 的 value 中的 addr
+                admin_address = ""
+                if hasattr(server, "addresses") and server.addresses:
+                    # server.addresses 是一个 dict，取第一个 key 的 value
+                    first_key = next(iter(server.addresses), None)
+                    if first_key:
+                        addr_list = server.addresses[first_key]
+                        if isinstance(addr_list, list) and addr_list:
+                            admin_address = addr_list[0].get("addr", "")
+                node_db.admin_address = admin_address
                 node_db_list.append(node_db)
-            # 保存node信息到数据库
-            NodeSQL.create_node_list(node_db_list)
+                node_db.security_group = server.get("security_group", "")
+            NodeSQL.create_node_list(node_db_list)  
+
             # 3. 调用Celery任务异步处理
             result = celery_app.send_task(
                 "dingo_command.celery_api.workers.add_existing_nodes", 

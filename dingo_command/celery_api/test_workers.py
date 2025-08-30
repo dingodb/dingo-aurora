@@ -157,17 +157,17 @@ class TestCreateCluster(unittest.TestCase):
 
   def test_add_exist_node(self):
      # 通过server_ids查询虚拟机信息
-    token = "gAAAAABokvuoZiKGvAMkOIz1UKV1W7a5XzEoqx2Zi_RqBao7m9x3hzaAhPSG35kiL3HbNGG3mjGsxPJkk3Dz49PBMlg2d6jBNJpcb_hm6AguNCcjn6B7BajfjGYD3b2oiroluAIuVxt62_rO-loiynCbmt37LwDe6pfjyfxe_Qru2hr5Dbbn7S1D7VbKph3qii1-sFdHDZWy"
+    token = "gAAAAABot-mp8c2z8-X1uHCjuhNLfiOyoo3bebubQthjwd3OOsLmf0vMso0q_XrZ8rTNbp983oVMzm3rwm-a7mHU4xjfS7-qjujZJAHBi3aIzAUJTHoEKh6KqgL85OH-O0ez7hXwHF11tFNaPx81COIwNP2GTnI-uyoIu-szNWxqalvFjNKA1tLMQCBypzRxGlibbiFrid-r"
     nova_client = NovaClient(token)
     server_details = []
-    for server_id in ["b6ca55e7-812f-481c-8dda-5ad7253a2a8f"]:
+    for server_id in ["45b8912e-1858-4c88-958d-f6a1fd9f1b15"]:
 
       server_detail = nova_client.nova_get_server_detail(server_id)
       # 检查网络是否匹配
 
       server_details.append(server_detail)
 
-    add_existing_nodes("9582f04f-0e53-4a46-accc-2a6126279ac8",server_details)
+    add_existing_nodes("64918812-0509-4045-9182-bc1ac3321c5c",server_details)
   
   def test_delete_cluster_success(self):
     #调用celery_app项目下的work.py中的create_cluster方法

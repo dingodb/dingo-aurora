@@ -665,7 +665,7 @@ def scale_kubernetes(cluster_id, scale_nodes, task_id):
                 private_key_content = key_file.read()
         else:
             private_key_content = None
-
+        #print
         thread, runner = run_playbook(playbook_file, host_file, ansible_dir,
                                       ssh_key=private_key_content, limit=scale_nodes)
         # 处理并打印事件日志
@@ -2318,6 +2318,21 @@ def add_existing_nodes(self, cluster_id, server_details):
         
         with session.begin():
             for i, server_detail in enumerate(server_details):
+                
+                # 获取 base64 编码的 user_data
+                user_data_b64 = server_detail.get("OS-EXT-SRV-ATTR:user_data")
+                if not user_data_b64:
+                    return None
+
+                # 解码
+                user_data = base64.b64decode(user_data_b64).decode("utf-8")
+                user_pass = ""
+                # 正则提取 passwd 脚本内容
+                passwd_script = re.search(r"#!/bin/sh\s*echo\s+'([^']+)' \| chpasswd", user_data)
+                if passwd_script:
+                    user_pass = passwd_script.group(1)
+                if user_pass:
+                    username, password = user_pass.split(":", 1)
                 # 创建Node记录
                 node_db = NodeInfo()
                 node_db.id = str(uuid.uuid4())
@@ -2326,15 +2341,23 @@ def add_existing_nodes(self, cluster_id, server_details):
                 node_db.cluster_name = cluster_name
                 node_db.name = f"{cluster_name}-existing-node-{i+1}"
                 node_db.role = "worker"  # 默认作为worker节点
-                node_db.status = "adding"
+                node_db.status = "joining"
                 node_db.cpu = server_detail.get("flavor", {}).get("vcpus", 0)
                 node_db.mem = server_detail.get("flavor", {}).get("ram", 0) // 1024  # MB转GB
                 node_db.disk = server_detail.get("flavor", {}).get("disk", 0)
                 node_db.gpu = 0  # 默认为0，可根据需要扩展
                 node_db.region = cluster_db.region_name
+                node_db.password = password
+                node_db.user = username
                 node_db.create_time = datetime.now()
                 node_db.update_time = datetime.now()
                 node_db.node_type = "vm"
+                admin_address = ""
+                addresses = server_detail.get("addresses", {})
+                for network_name, ips in addresses.items():
+                    if isinstance(ips, list) and ips:
+                        admin_address = ips[0].get("addr")
+                node_db.admin_address = admin_address
                 node_db.image = server_detail.get("image", {}).get("id", "")
                 session.add(node_db)
                 
@@ -2347,7 +2370,7 @@ def add_existing_nodes(self, cluster_id, server_details):
                 instance_db.name = server_detail.get("name", f"existing-server-{i+1}")
                 instance_db.server_id = server_detail.get("id")
                 instance_db.node_type = "vm"
-                instance_db.status = "adding"
+                instance_db.status = "joining"
                 instance_db.region = cluster_db.region_name
                 instance_db.flavor_id = server_detail.get("flavor", {}).get("id", "")
                 instance_db.image_id = server_detail.get("image", {}).get("id", "")
@@ -2368,6 +2391,7 @@ def add_existing_nodes(self, cluster_id, server_details):
             
         # 7. 生成节点主机名列表（用于Ansible playbook）
         node_names = []
+        index = 1
         for ni in node_instances:
             # 从服务器详情中获取IP地址
             addresses = ni["server_detail"].get("addresses", {})
@@ -2381,11 +2405,14 @@ def add_existing_nodes(self, cluster_id, server_details):
                     break
                     
             if ip_address:
-                node_names.append(f"{ni['instance'].name}:{ip_address}")
-        
+                node_names.append(f"{cluster_db.name}-existing-node-{index}:{ip_address}")
+                index += 1
+
         # 8. 执行Ansible扩容
         if node_names:
+            os.environ['CURRENT_CLUSTER_DIR']=cluster_dir
             scale_nodes = ",".join([name.split(":")[0] for name in node_names])
+            print("准备扩容的节点: %s", scale_nodes)
             ansible_result = scale_kubernetes(cluster_id, scale_nodes, task_id)
             
             if not ansible_result[0]:
