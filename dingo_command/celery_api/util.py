@@ -1,4 +1,7 @@
+from dingo_command.api.chart import ChartService
+from dingo_command.api.k8s.resource import List
 from dingo_command.db.models.cluster.models import Taskinfo
+from dingo_command.api.model.chart import CreateAppObject
 from dingo_command.db.models.cluster.sql import TaskSQL
 
 def update_task_state(task:Taskinfo):
@@ -17,3 +20,12 @@ def update_task_state(task:Taskinfo):
         first_task.detail = task.detail
         TaskSQL.update(task)
         return task.task_id
+def install_app_chart(charts:List[CreateAppObject]):
+    # 判空
+    for chart in charts:
+        chart.namespace = "default" if not chart.namespace else chart.namespace
+        chart.values = {} if not chart.values else chart.values
+    # 调用service库chart.py中的install_app方法
+    chart_service = ChartService()
+    chart_service.install_app(chart)
+    

@@ -230,14 +230,17 @@ async def add_node(cluster_id:str, server_ids: List[str], token: str = Depends(g
         server_details = []
         for server_id in server_ids:
             try:
+                nova_client = NovaClient()
                 server_detail = nova_client.nova_get_server_detail(server_id)
                 #根据server_detail对应的网络信息，是否与集群的网络信息匹配
                 if not server_detail:
                     raise HTTPException(status_code=400, detail=f"Server {server_id} not found")
-                if not server_detail.networks:
+                if not server_detail.get("addresses"):
                     raise HTTPException(status_code=400, detail=f"Server {server_id} has no networks")
                 # 检查网络是否匹配
-                if not any(net['network']['id'] == result.network_id for net in server_detail.networks):
+                # 获取第一个网络的地址信息
+                first_network = list(server_detail["addresses"].keys())
+                if not any(net == result.network_config.admin_network_name for net in first_network):
                     raise HTTPException(status_code=400, detail=f"Server {server_id} network does not match the cluster network")
                 server_details.append(server_detail)
             except Exception as e:

@@ -559,7 +559,7 @@ async def get_apps(create_data: CreateAppObject, background_tasks: BackgroundTas
             for app_data in data.get("data"):
                 if app_data.name == create_data.name and app_data.namespace == create_data.namespace:
                     raise ValueError("app name already exists")
-
+        
         background_tasks.add_task(chart_service.install_app, create_data, update=False)
         return {"success": True, "message": "install app started, please wait"}
     except Exception as e:

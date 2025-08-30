@@ -3,7 +3,7 @@ output "router_id" {
 }
 
 output "admin_network_id" {
-  value = element(concat(openstack_networking_network_v2.cluster.*.id, [""]),0)
+  value = var.use_existing_network ? var.admin_network_id : element(concat(openstack_networking_network_v2.cluster.*.id, [""]),0)
 }
 
 output "router_internal_port_id" {
@@ -11,5 +11,5 @@ output "router_internal_port_id" {
 }
 
 output "admin_subnet_id" {
-  value = element(concat(openstack_networking_subnet_v2.cluster.*.id, [""]), 0)
+  value = var.use_existing_network ? var.admin_subnet_id : element(concat(openstack_networking_subnet_v2.cluster.*.id, [""]), 0)
 }

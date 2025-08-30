@@ -16,10 +16,6 @@
 #
 # original: https://github.com/CiscoCloud/terraform.py
 
-"""\
-Dynamic inventory for Terraform - finds all `.tfstate` files below the working
-directory and generates an inventory based on them.
-"""
 import argparse
 from collections import defaultdict
 import random
@@ -106,20 +102,25 @@ def convert_server_to_network_format(server_detail):
 def query_database_nodes(args):
     """从数据库查询所有节点信息"""
     try:
-        print(f" querying database nodes: {args.cluster}")
+        #print(f" querying database nodes: {args.cluster}")
+        cluster_dir = args.root
+        # 解析目录cluster_dir，以/分隔，获取路径最后一个值
+        cluster_name = os.path.basename(cluster_dir.rstrip('/'))
+        #print(f"cluster_name from dir: {cluster_name}")
+
         session = get_session()
         with session.begin():
             # 查询所有状态为 running 的节点
             nodes = session.query(NodeInfo).filter(
                 NodeInfo.status == 'joining',
-                NodeInfo.cluster_id == args.cluster  # 只查询虚拟机类型的节点
+                NodeInfo.cluster_id == cluster_name # 只查询虚拟机类型的节点
             ).all()
-            print(f" querying database nodes: {nodes[0].admin_address}")
+            #print(f" querying database nodes: {nodes[0].admin_address}")
             # 查询相关的实例信息
             db_nodes = []
             nova_client = NovaClient()
             for node in nodes:
-                print(f" aaaaaaaaaaaaaaaaaaaa")
+                #print(f" aaaaaaaaaaaaaaaaaaaa")
                 # 构造节点信息，格式与 openstack_host 函数返回的格式一致
                 name = node.name
                 # 使用novaclient根据server_id查询实例信息
@@ -142,8 +143,9 @@ def query_database_nodes(args):
                     'node_type': node.node_type,
                     'flavor_id': node.flavor_id if node else '',
                     'image_id': node.image if node else '',
-                    'ansible_host': node.floating_forward_ip if node and node.floating_forward_ip else '',
+                    'ansible_host': node.admin_address if node and node.admin_address else '',
                     'ansible_user': node.user if node and node.user else 'root',
+                    "ansible_ssh_pass": node.password,
                     'provider': 'database',
                     # 默认值
                     
@@ -151,7 +153,9 @@ def query_database_nodes(args):
                         'role': node.role,
                         'cluster_id': node.cluster_id,
                         'cluster_name': node.cluster_name,
-                        'kubespray_groups': f"{node.role}" if node.role else '',
+                        'ansible_user': node.user,
+                        'password': node.password,
+                        'kubespray_groups': 'kube_node,cluster',
                     },
                     #从instance中获取network信息
                     'network': network,
@@ -186,13 +190,14 @@ def query_database_nodes(args):
                 # 添加kubespray相关的组
                 if node.role:
                     groups.append(node.role)
-                
+                for group in attrs['metadata'].get('kubespray_groups', "").split(","):
+                    groups.append(group)
                 db_nodes.append((name, attrs, groups))
             
             return db_nodes
             
     except Exception as e:
-        print(f"Error querying database nodes: {e}", file=sys.stderr)
+        #print(f"Error querying database nodes: {e}", file=sys.stderr)
         import traceback
         traceback.print_exc()
         return []
@@ -212,9 +217,10 @@ def merge_hosts_with_db_nodes(terraform_hosts, db_nodes):
     for name, attrs, groups in db_nodes:
         if name not in terraform_hostnames:
             merged_hosts.append((name, attrs, groups))
-            print(f"Added database node to inventory: {name}", file=sys.stderr)
+            #print(f"Added database node to inventory: {name}", file=sys.stderr)
         else:
-            print(f"Skipped duplicate node from database: {name}", file=sys.stderr)
+            #print(f"Skipped duplicate node from database: {name}", file=sys.stderr)
+            pass
     
     return merged_hosts
 
