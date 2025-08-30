@@ -559,6 +559,9 @@ class ClusterService:
             #             p.external_port = self.generate_random_port()
             if not cluster.forward_float_ip_id:
                 cluster.forward_float_ip_id = ""
+            use_existing_network = False
+            if cluster.network_config.admin_network_id == "":
+                use_existing_network = True
             tfvars = ClusterTFVarsObject(
                 id = cluster_info_db.id,
                 cluster_name=cluster.name,
@@ -570,7 +573,7 @@ class ClusterService:
                 public_subnetids=public_subnetids,
                 external_subnetids=external_subnetids,
                 external_net=external_net_id,
-                use_existing_network=False,
+                use_existing_network=use_existing_network,
                 ssh_user=cluster.node_config[0].user,
                 k8s_master_loadbalancer_enabled=lb_enbale,
                 number_of_k8s_masters = 1,
