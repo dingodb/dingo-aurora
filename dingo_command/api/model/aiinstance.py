@@ -89,5 +89,8 @@ class StartInstanceModel(BaseModel):
     image_type: Optional[str] = Field(None, description="镜像仓库")
     image: Optional[str] = Field(None, description="镜像名称")
 
-class AddNodePortModel(BaseModel):
-    port: int = Field(None, description="端口号")
+class AddPortModel(BaseModel):
+    port: int = Field(None, description="服务端口号")
+    target_port: Optional[int] = Field(None, description="容器端口号")
+    node_port: Optional[int] = Field(None, description="节点端口号")
+    protocol: str = Field(None, description="协议类型 TCP")

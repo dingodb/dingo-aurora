@@ -134,6 +134,23 @@ class K8sCommonOperate:
             # 如果检查失败，为安全起见视为已占用，避免冲突
             return True
 
+    def is_port_in_use(self, core_v1: client.CoreV1Api, port: int) -> bool:
+        """检查某个 Service Port 是否在整个集群范围内已被占用"""
+        try:
+            services = core_v1.list_service_for_all_namespaces()
+            for svc in services.items:
+                if not svc.spec or not svc.spec.ports:
+                    continue
+                for p in svc.spec.ports:
+                    if getattr(p, 'port', None) == port:
+                        return True
+            return False
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            # 如果检查失败，为安全起见视为已占用，避免冲突
+            return True
+
     def get_pod_info(self, core_v1: client.CoreV1Api, name: str, namespace: str):
         """
         查询单个 Pod 的基础信息
