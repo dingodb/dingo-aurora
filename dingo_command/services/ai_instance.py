@@ -1090,7 +1090,7 @@ class AiInstanceService:
 
         return result_status.value
 
-    def create_port_by_id(self, id: str, port: int):
+    def add_node_port_by_id(self, id: str, port: int):
         try:
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if not ai_instance_info_db:
@@ -1098,7 +1098,7 @@ class AiInstanceService:
 
             core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
             namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
-            service_name = ai_instance_info_db.instance_real_name or ai_instance_info_db.instance_name
+            service_name = ai_instance_info_db.instance_real_name
 
             # NodePort 占用校验（以 node_port=port 的策略暴露）
             if k8s_common_operate.is_node_port_in_use(core_k8s_client, int(port)):
@@ -1114,7 +1114,10 @@ class AiInstanceService:
                 if int(p.port) == int(port) or getattr(p, 'node_port', None) == int(port):
                     return {"data": "success", "port": port}  # 幂等
 
-            new_port = client.V1ServicePort(port=int(port), target_port=int(port))
+            new_port = client.V1ServicePort(port=int(8888), target_port=int(8888))
+            # 必须为每个端口设置唯一 name 字段
+            new_port.name = f"port-{port}"
+
             # 设为固定 nodePort
             if not svc.spec.type:
                 svc.spec.type = "NodePort"
@@ -1142,18 +1145,34 @@ class AiInstanceService:
 
             core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
             namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
-            service_name = ai_instance_info_db.instance_real_name or ai_instance_info_db.instance_name
+            service_name = ai_instance_info_db.instance_real_name
 
             svc = core_k8s_client.read_namespaced_service(name=service_name, namespace=namespace_name)
             if not svc or not svc.spec:
                 raise Fail("service invalid", error_message="Service 无效")
 
-            old_len = len(svc.spec.ports or [])
-            svc.spec.ports = [p for p in (svc.spec.ports or []) if int(p.port) != int(port) and getattr(p, 'node_port', None) != int(port)]
-            if len(svc.spec.ports or []) == old_len:
-                return {"data": "success", "port": port}  # 幂等
+            old_ports = svc.spec.ports or []
+            # 新增：如果端口为空或只有一个，不允许删除
+            if not old_ports or len(old_ports) <= 1:
+                raise Fail("can not delete port: service must have at least one port", error_message="Service 至少需要保留一个端口，无法删除")
 
-            core_k8s_client.patch_namespaced_service(name=service_name, namespace=namespace_name, body=svc)
+            # 查找目标端口的 index
+            target_index = None
+            for idx, p in enumerate(old_ports):
+                if int(getattr(p, 'node_port', -1)) == int(port):
+                    target_index = idx
+                    break
+            if target_index is None:
+                raise Fail("port not found", error_message=f"未找到指定端口: {port}")
+
+            # 用 json patch 删除指定 index 的端口
+            patch_operations = [
+                {
+                    "op": "remove",
+                    "path": f"/spec/ports/{target_index}"
+                }
+            ]
+            core_k8s_client.patch_namespaced_service(name=service_name, namespace=namespace_name, body=patch_operations)
             return {"data": "success", "port": port}
         except Fail:
             raise

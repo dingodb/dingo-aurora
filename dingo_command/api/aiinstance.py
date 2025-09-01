@@ -7,7 +7,7 @@ from kubernetes.stream import stream
 from kubernetes import client
 
 from dingo_command.api.model.aiinstance import AiInstanceApiModel, AiInstanceSavaImageApiModel, AccountCreateRequest, \
-    AccountUpdateRequest, AutoDeleteRequest, AutoCloseRequest, StartInstanceModel
+    AccountUpdateRequest, AutoDeleteRequest, AutoCloseRequest, StartInstanceModel, AddNodePortModel
 from dingo_command.services.ai_instance import AiInstanceService
 from dingo_command.services.custom_exception import Fail
 from dingo_command.utils.k8s_client import get_k8s_client
@@ -207,10 +207,10 @@ async def set_auto_delete_instance_by_id(id: str, request: AutoDeleteRequest):
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"设置定时删除容器实例失败:{id}")
 
-@router.post("/ai-instance/{id}/port/create", summary="容器实例端口新增端口", description="根据实例id新增端口")
-async def create_port_by_id(id: str, port: int):
+@router.post("/ai-instance/{id}/node-ports/add", summary="容器实例新增端口", description="根据实例id新增端口")
+async def add_node_port_by_id(id: str, request: AddNodePortModel):
     try:
-        return ai_instance_service.create_port_by_id(id, port)
+        return ai_instance_service.add_node_port_by_id(id, request.port)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
@@ -218,7 +218,7 @@ async def create_port_by_id(id: str, port: int):
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"新增端口失败:{id}")
 
-@router.post("/ai-instance/{id}/port/delete", summary="容器实例删除端口", description="根据实例id删除端口")
+@router.delete("/ai-instance/{id}/node-ports/{port}/delete", summary="容器实例删除端口", description="根据实例id删除端口")
 async def delete_port_by_id(id: str, port: int):
     try:
         return ai_instance_service.delete_port_by_id(id, port)
@@ -229,7 +229,7 @@ async def delete_port_by_id(id: str, port: int):
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"删除端口失败:{id}")
 
-@router.post("/ai-instance/{id}/port/list", summary="容器实例查询端口列表", description="根据实例id查询端口列表")
+@router.get("/ai-instance/{id}/node-ports/list", summary="容器实例查询端口列表", description="根据实例id查询端口列表")
 async def list_port_by_id(id: str):
     try:
         return ai_instance_service.list_port_by_id(id)
