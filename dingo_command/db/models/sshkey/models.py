@@ -11,7 +11,7 @@ class KeyInfo(Base):
     __tablename__ = "ops_sshkey_info"
 
     id = Column(String(length=256), primary_key= True, nullable=False, index=True, unique=True)
-    name = Column(String(length=128), nullable=False)
+    name = Column(String(length=256), nullable=False)
     project_id = Column(String(length=256), nullable=True)
     project_name = Column(String(length=256), nullable=True)
     account_id = Column(String(length=256), nullable=True)

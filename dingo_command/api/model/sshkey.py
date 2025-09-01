@@ -10,10 +10,13 @@ ValueType = Union[
 ]
 
 
-class CreateRepoObject(BaseModel):
+class CreateKeyObject(BaseModel):
     name: Optional[str] = Field(None, description="sshkey的name")
     owner: Optional[str] = Field(None, description="sshkey的owner")
+    k8s_id: Optional[str] = Field(None, description="sshkey的k8s_id")
     user_id: Optional[str] = Field(None, description="sshkey的user_id")
+    user_name: Optional[str] = Field(None, description="sshkey的user_name")
     account_id: Optional[str] = Field(None, description="sshkey的account_id")
-    key: Optional[str] = Field(None, description="sshkey的内容")
-    description: Optional[str] = Field(None, description="repo仓库的描述")
+    is_admin: Optional[str] = Field(None, description="是否是主账户")
+    key_content: Optional[str] = Field(None, description="sshkey的内容")
+    description: Optional[str] = Field(None, description="sshkey的描述")
