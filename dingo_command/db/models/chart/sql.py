@@ -262,6 +262,8 @@ class AppSQL:
                 query = query.filter(AppInfo.type == query_params["type"])
             if "chart_id" in query_params and query_params["chart_id"]:
                 query = query.filter(AppInfo.chart_id == query_params["chart_id"])
+            if "chart_name" in query_params and query_params["chart_name"]:
+                query = query.filter(AppInfo.chart_name == query_params["chart_name"])
             if "repo_id" in query_params and query_params["repo_id"]:
                 query = query.filter(AppInfo.repo_id == query_params["repo_id"])
             if "namespace" in query_params and query_params["namespace"]:

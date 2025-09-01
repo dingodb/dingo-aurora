@@ -48,6 +48,7 @@ async def create_harbor_repo(repo_name=util.repo_global_name, url=harbor_url, us
     """
     # 创建全局harbor的仓库，如果已经存在就不创建，如果不存在才会创建
     try:
+        Log.info("starting add global repo with harbor")
         query_params = {}
         query_params['name'] = repo_name
         query_params['cluster_id'] = util.repo_global_cluster_id
@@ -85,6 +86,7 @@ async def create_harbor_repo(repo_name=util.repo_global_name, url=harbor_url, us
         repo_info_db.status = "creating"
         RepoSQL.create_repo(repo_info_db)
         await ChartService().handle_oci_repo(repo_info_db)
+        Log.info("finished add global repo with harbor")
     except asyncio.TimeoutError as e:
         Log.error("Harbor API请求超时，请检查网络或Harbor服务状态")
         raise e
@@ -1067,10 +1069,11 @@ class ChartService:
         app_db.name = create_info.name
         app_db.cluster_id = create_info.cluster_id
         app_db.chart_id = create_data.id
+        app_db.chart_name = create_data.name
         app_db.repo_id = create_data.repo_id
         app_db.version = create_info.chart_version
         app_db.values = json.dumps(create_info.values)
-        app_db.namespace = create_info.namespace
+        app_db.namespace = create_info.namespace or "default"
         app_db.description = create_info.description
         app_db.repo_name = create_data.repo_name
         app_db.type = create_data.type

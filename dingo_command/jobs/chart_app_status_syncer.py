@@ -32,8 +32,8 @@ def start():
     scheduler.add_job(check_app_status, 'interval', seconds=300)
     scheduler.add_job(check_cluster_status, 'interval', seconds=3600)
     scheduler.start()
-    scheduler_async.add_job(check_sync_status,'cron', hour=0, minute=0)
-    scheduler_async.start()
+    # scheduler_async.add_job(check_sync_status,'cron', hour=0, minute=0)
+    # scheduler_async.start()
 
 
 def check_app_status():

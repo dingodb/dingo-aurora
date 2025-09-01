@@ -380,13 +380,14 @@ async def get_tags(tag_id: Union[str, int]):
         raise HTTPException(status_code=400, detail=f"get tag detail error: {str(e)}")
 
 @router.get("/app/list", summary="显示所有的已安装应用信息", description="显示所有的已安装应用信息")
-async def get_apps(app_id: str = Query(None, description="集群id"),
-                     app_name: str = Query(None, description="集群id"),
+async def get_apps(app_id: str = Query(None, description="app的id"),
+                     app_name: str = Query(None, description="app名称"),
                      cluster_id: str = Query(None, description="集群id"),
-                     chart_id: str = Query(None, description="集群id"),
-                     repo_id: str = Query(None, description="集群id"),
-                     repo_name: str = Query(None, description="集群id"),
-                     namespace: int = Query(None, description="tag的id"),
+                     chart_id: str = Query(None, description="chart的id"),
+                     chart_name: str = Query(None, description="chart名称"),
+                     repo_id: str = Query(None, description="repo的id"),
+                     repo_name: str = Query(None, description="repo名称"),
+                     namespace: int = Query(None, description="命名空间"),
                      tag_name: str = Query(None, description="tag的name"),
                      tag_id: str = Query(None, description="tag的name"),
                      status: str = Query(None, description="status状态"),
@@ -419,6 +420,8 @@ async def get_apps(app_id: str = Query(None, description="集群id"),
             query_params['type'] = type
         if chart_id:
             query_params['chart_id'] = chart_id
+        if chart_name:
+            query_params['chart_name'] = chart_name
         if repo_id:
             query_params['repo_id'] = repo_id
         if namespace:
@@ -533,6 +536,8 @@ async def get_apps(app_id: Union[str, int], background_tasks: BackgroundTasks):
 async def get_apps(create_data: CreateAppObject, background_tasks: BackgroundTasks):
     try:
         Log.info(f"install app {create_data.name}, data info {create_data}")
+        if not create_data.namespace:
+            create_data.namespace = "default"
         query_params = {}
         query_params["cluster_id"] = create_data.cluster_id
         data = chart_service.list_apps(query_params, 1, -1, None, None)

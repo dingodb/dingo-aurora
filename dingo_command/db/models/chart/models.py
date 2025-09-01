@@ -71,6 +71,7 @@ class AppInfo(Base):
     cluster_id = Column(String(length=256), nullable=False)
     repo_id = Column(Integer, nullable=True)
     chart_id = Column(Integer, nullable=True)
+    chart_name = Column(String(length=256), nullable=True)
     status = Column(String(length=128), nullable=True)
     status_msg = Column(LONGTEXT, nullable=True)
     namespace = Column(String(length=128), nullable=True)

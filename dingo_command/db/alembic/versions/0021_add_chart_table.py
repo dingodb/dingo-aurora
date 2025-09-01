@@ -27,6 +27,7 @@ def upgrade() -> None:
     sa.Column('cluster_id', sa.String(length=256), nullable=False),
     sa.Column('repo_id', sa.Integer(), nullable=True),
     sa.Column('chart_id', sa.Integer(), nullable=True),
+    sa.Column('chart_name', sa.String(length=256), nullable=True),
     sa.Column('status', sa.String(length=128), nullable=True),
     sa.Column('status_msg', mysql.LONGTEXT(), nullable=True),
     sa.Column('namespace', sa.String(length=128), nullable=True),
