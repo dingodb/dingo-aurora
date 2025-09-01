@@ -85,3 +85,6 @@ class AccountUpdateRequest(BaseModel):
 class StartInstanceModel(BaseModel):
     image_type: Optional[str] = Field(None, description="镜像仓库")
     image: Optional[str] = Field(None, description="镜像名称")
+
+class AddNodePortModel(BaseModel):
+    port: int = Field(None, description="端口号")
