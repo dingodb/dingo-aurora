@@ -68,9 +68,17 @@ async def list_repos(background_tasks: BackgroundTasks, cluster_id: str = Query(
         current_time = datetime.now()
         repo_list = []
         for repo in data.get("data"):
-            if repo.id == 1 or repo.id == "1" or repo.status != "creating":
+            if repo.id == 1 or repo.id == "1" or repo.status not in (util.repo_status_create, util.repo_status_update,
+                                                                     util.repo_status_sync):
                 continue
-            if (current_time - repo.create_time).total_seconds() < util.repo_update_time_out:
+            if (repo.status == util.repo_status_create and (current_time - repo.create_time).total_seconds()
+                    < util.repo_update_time_out):
+                continue
+            if (repo.status == util.repo_status_update and (current_time - repo.update_time).total_seconds()
+                    < util.repo_update_time_out):
+                continue
+            if (repo.status == util.repo_status_sync and (current_time - repo.update_time).total_seconds()
+                    < util.repo_update_time_out):
                 continue
             repo_data_info = CreateRepoObject(
                 id=str(repo.id),

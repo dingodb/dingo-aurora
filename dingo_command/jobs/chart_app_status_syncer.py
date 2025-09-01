@@ -8,7 +8,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.schedulers.background import BackgroundScheduler
 from oslo_log import log
 
-from dingo_command.db.models.chart.sql import AppSQL, RepoSQL
+from dingo_command.db.models.chart.sql import AppSQL, RepoSQL, ChartSQL
 from dingo_command.db.models.cluster.sql import ClusterSQL
 from dingo_command.services.chart import ChartService
 from dingo_command.api.model.chart import CreateRepoObject, CreateAppObject
@@ -30,6 +30,7 @@ chart_service = ChartService()
 def start():
     # 添加检查集群状态的定时任务，每180秒执行一次
     scheduler.add_job(check_app_status, 'interval', seconds=300)
+    scheduler.add_job(remove_global_chart, 'interval', seconds=300, next_run_time=datetime.now())
     scheduler.add_job(check_cluster_status, 'interval', seconds=3600)
     scheduler.start()
     # scheduler_async.add_job(check_sync_status,'cron', hour=0, minute=0)
@@ -183,6 +184,30 @@ def check_cluster_status():
         LOG.info(f"Finished check cluster_status at {time.strftime('%Y-%m-%d %H:%M:%S')}")
     except Exception as e:
         LOG.error(f"Error in cluster_status: {str(e)}")
+
+
+def remove_global_chart():
+    """
+    定期检查k8s集群状态并更新数据库
+    """
+    try:
+        LOG.info(f"Starting remove chart at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        # 1、先获取cluster的状态，如果已经删除那就把所有的关于此cluster的repo都删除
+        query_params = {}
+        query_params["repo_id"] = "1"
+        remove_chart_list = []
+        chart_name_list = []
+        count, charts = ChartSQL.list_charts(query_params, page_size=-1)
+        for chart in charts:
+            if chart.name in chart_name_list:
+                remove_chart_list.append(chart)
+                continue
+            if chart.status != util.chart_status_stop:
+                chart_name_list.append(chart.name)
+        ChartSQL.delete_chart_list(remove_chart_list)
+        LOG.info(f"Finished remove chart at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    except Exception as e:
+        LOG.error(f"Error in remove_chart: {str(e)}")
 
 
 async def check_sync_status():

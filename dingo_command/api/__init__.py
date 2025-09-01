@@ -3,7 +3,7 @@ import os
 
 from fastapi import APIRouter
 from dingo_command.api import assets, bigscreens, system, monitor, cluster, node, instance, websocket, resources, \
-    message, cloudkitty, aiinstance, chart
+    message, cloudkitty, aiinstance, chart, sshkey
 from dingo_command.api.k8s import resource
 from dingo_command.api import harbor
 
@@ -28,3 +28,4 @@ api_router.include_router(resource.router, tags=["K8s"])
 api_router.include_router(aiinstance.router, tags=["Ai Instance"])
 api_router.include_router(chart.router, tags=["Chart"])
 api_router.include_router(harbor.router, tags=["Harbor"])
+api_router.include_router(sshkey.router, tags=["SshKey"])

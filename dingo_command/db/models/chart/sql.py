@@ -192,7 +192,7 @@ class ChartSQL:
             raise
 
     @classmethod
-    def update_repo(cls, chart):
+    def update_chart(cls, chart):
         # Session = sessionmaker(bind=engine, expire_on_commit=False)
         # session = Session()
         session = get_session()
