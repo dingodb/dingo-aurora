@@ -18,7 +18,7 @@ from kubernetes import client
 from kubernetes.stream import stream
 from oslo_log import log
 
-from dingo_command.api.model.aiinstance import StorageObj
+from dingo_command.api.model.aiinstance import StorageObj, AddPortModel
 from dingo_command.common.Enum.AIInstanceEnumUtils import AiInstanceStatus, K8sStatus
 from dingo_command.common.k8s_common_operate import K8sCommonOperate
 from dingo_command.db.models.ai_instance.models import AiInstanceInfo, AccountInfo
@@ -1090,7 +1090,7 @@ class AiInstanceService:
 
         return result_status.value
 
-    def add_node_port_by_id(self, id: str, port: int):
+    def add_node_port_by_id(self, id: str, model: AddPortModel):
         try:
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if not ai_instance_info_db:
@@ -1100,9 +1100,14 @@ class AiInstanceService:
             namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
             service_name = ai_instance_info_db.instance_real_name
 
+            port = int(model.port)
+            target_port = int(model.target_port) if hasattr(model, 'target_port') and model.target_port is not None else 8888
+            node_port = int(model.node_port) if getattr(model, 'node_port', None) is not None else None
+            protocol = getattr(model, 'protocol', None) or 'TCP'
+
             # NodePort 占用校验（以 node_port=port 的策略暴露）
-            if k8s_common_operate.is_node_port_in_use(core_k8s_client, int(port)):
-                raise Fail(f"nodePort {port} already in use", error_message=f"节点端口 {port} 已被占用")
+            if k8s_common_operate.is_port_in_use(core_k8s_client, port):
+                raise Fail(f"port {port} already in use", error_message=f"节点端口 {port} 已被占用")
 
             # 读取 Service 并追加端口
             svc = core_k8s_client.read_namespaced_service(name=service_name, namespace=namespace_name)
@@ -1110,11 +1115,8 @@ class AiInstanceService:
                 raise Fail("service invalid", error_message="Service 无效")
 
             existing_ports = svc.spec.ports or []
-            for p in existing_ports:
-                if int(p.port) == int(port) or getattr(p, 'node_port', None) == int(port):
-                    return {"data": "success", "port": port}  # 幂等
+            new_port = client.V1ServicePort(port=port, target_port=target_port, protocol=protocol)
 
-            new_port = client.V1ServicePort(port=int(8888), target_port=int(8888))
             # 必须为每个端口设置唯一 name 字段
             new_port.name = f"port-{port}"
 
@@ -1123,7 +1125,7 @@ class AiInstanceService:
                 svc.spec.type = "NodePort"
             if svc.spec.type != "NodePort":
                 svc.spec.type = "NodePort"
-            new_port.node_port = int(port)
+            new_port.node_port = node_port
 
             existing_ports.append(new_port)
             svc.spec.ports = existing_ports
@@ -1159,7 +1161,7 @@ class AiInstanceService:
             # 查找目标端口的 index
             target_index = None
             for idx, p in enumerate(old_ports):
-                if int(getattr(p, 'node_port', -1)) == int(port):
+                if int(getattr(p, 'port', -1)) == int(port):
                     target_index = idx
                     break
             if target_index is None:
@@ -1181,7 +1183,7 @@ class AiInstanceService:
             traceback.print_exc()
             raise e
 
-    def list_port_by_id(self, id: str):
+    def list_port_by_id(self, id: str, page, page_size):
         try:
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if not ai_instance_info_db:
@@ -1193,7 +1195,7 @@ class AiInstanceService:
 
             svc = core_k8s_client.read_namespaced_service(name=service_name, namespace=namespace_name)
             if not svc or not svc.spec:
-                return {"data": []}
+                return {"data": [], "total": 0, "currentPage": page, "pageSize": page_size, "totalPages": 0}
 
             ports = []
             for p in (svc.spec.ports or []):
@@ -1203,7 +1205,23 @@ class AiInstanceService:
                     "nodePort": int(p.node_port) if getattr(p, 'node_port', None) is not None else None,
                     "protocol": p.protocol
                 })
-            return {"data": ports}
+            total = len(ports)
+            # 分页处理
+            if page and page_size:
+                start = (int(page) - 1) * int(page_size)
+                end = start + int(page_size)
+                paged_ports = ports[start:end]
+                total_pages = (total + int(page_size) - 1) // int(page_size)
+            else:
+                paged_ports = ports
+                total_pages = 1 if total > 0 else 0
+            return {
+                "data": paged_ports,
+                "total": total,
+                "currentPage": page,
+                "pageSize": page_size,
+                "totalPages": total_pages
+            }
         except Fail:
             raise
         except Exception as e:
@@ -1219,7 +1237,7 @@ class AiInstanceService:
 
             core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
             namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
-            service_name = ai_instance_info_db.instance_real_name or ai_instance_info_db.instance_name
+            service_name = ai_instance_info_db.instance_real_name
 
             # 确保 Service 暴露了 jupyter 端口，如没有则自动新增，并让 k8s 自动分配 nodePort
             svc = core_k8s_client.read_namespaced_service(name=service_name, namespace=namespace_name)

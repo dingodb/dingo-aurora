@@ -7,7 +7,7 @@ from kubernetes.stream import stream
 from kubernetes import client
 
 from dingo_command.api.model.aiinstance import AiInstanceApiModel, AiInstanceSavaImageApiModel, AccountCreateRequest, \
-    AccountUpdateRequest, AutoDeleteRequest, AutoCloseRequest, StartInstanceModel, AddNodePortModel
+    AccountUpdateRequest, AutoDeleteRequest, AutoCloseRequest, StartInstanceModel, AddPortModel
 from dingo_command.services.ai_instance import AiInstanceService
 from dingo_command.services.custom_exception import Fail
 from dingo_command.utils.k8s_client import get_k8s_client
@@ -134,9 +134,20 @@ async def pod_console(
         # resp = ai_instance_service.ai_instance_web_ssh(id)
         # 创建异步任务处理双向数据流
         async def receive_from_ws():
+            buffer = ""
             while True:
                 data = await websocket.receive_text()
-                resp.write_stdin(data + "\n")
+                for char in data:
+                    if char in ['\b', '\x08', '\x7f']:  # 支持退格和 Delete
+                        buffer = buffer[:-1] if buffer else ""  # 防止空 buffer 报错
+                        await websocket.send_text("\b \b")  # 回显删除效果（退格 + 空格 + 退格）
+                    elif char == '\n' or char == '\r':  # 支持回车
+                        if buffer:  # 避免空命令
+                            resp.write_stdin(buffer + "\n")  # 确保命令以换行结束
+                            buffer = ""
+                    else:
+                        buffer += char
+                        await websocket.send_text(char)  # 实时回显输入字符
 
         async def send_to_ws():
             while resp.is_open():
@@ -208,9 +219,9 @@ async def set_auto_delete_instance_by_id(id: str, request: AutoDeleteRequest):
         raise HTTPException(status_code=400, detail=f"设置定时删除容器实例失败:{id}")
 
 @router.post("/ai-instance/{id}/node-ports/add", summary="容器实例新增端口", description="根据实例id新增端口")
-async def add_node_port_by_id(id: str, request: AddNodePortModel):
+async def add_node_port_by_id(id: str, request: AddPortModel):
     try:
-        return ai_instance_service.add_node_port_by_id(id, request.port)
+        return ai_instance_service.add_node_port_by_id(id, request)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
@@ -230,9 +241,11 @@ async def delete_port_by_id(id: str, port: int):
         raise HTTPException(status_code=400, detail=f"删除端口失败:{id}")
 
 @router.get("/ai-instance/{id}/node-ports/list", summary="容器实例查询端口列表", description="根据实例id查询端口列表")
-async def list_port_by_id(id: str):
+async def list_port_by_id(id: str,
+                          page: int = Query(1, description="页码"),
+                          page_size: int = Query(10, description="页数量大小")):
     try:
-        return ai_instance_service.list_port_by_id(id)
+        return ai_instance_service.list_port_by_id(id, page, page_size)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
