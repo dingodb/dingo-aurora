@@ -15,6 +15,7 @@ class KeyInfo(Base):
     project_id = Column(String(length=256), nullable=True)
     project_name = Column(String(length=256), nullable=True)
     account_id = Column(String(length=256), nullable=True)
+    k8s_id = Column(String(length=256), nullable=True)
     is_admin = Column(Boolean, nullable=True)
     description = Column(String(length=256), nullable=True)
     create_time = Column(DateTime, nullable= True)

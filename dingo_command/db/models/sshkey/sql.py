@@ -25,6 +25,8 @@ class KeySQL:
                 query = query.filter(KeyInfo.name == query_params["name"])
             if "status" in query_params and query_params["status"]:
                 query = query.filter(KeyInfo.status == query_params["status"])
+            if "k8s_id" in query_params and query_params["k8s_id"]:
+                query = query.filter(KeyInfo.k8s_id == query_params["k8s_id"])
             if "account_id" in query_params and query_params["account_id"]:
                 query = query.filter(KeyInfo.account_id == query_params["account_id"])
             if "user_id" in query_params and query_params["user_id"]:
@@ -113,3 +115,11 @@ class KeySQL:
             raise
         finally:
             session.close()
+
+    @classmethod
+    def delete_key(cls, key):
+        # Session = sessionmaker(bind=engine, expire_on_commit=False)
+        # session = Session()
+        session = get_session()
+        with session.begin():
+            session.delete(key)

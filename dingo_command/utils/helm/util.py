@@ -34,6 +34,10 @@ resource_status_pend = "pending"
 resource_status_failed = "failed"
 resource_status_unknown = "unknown"
 registry_config = "config.json"
+key_status_create = "creating"
+key_status_success = "running"
+key_status_delete = "deleting"
+key_status_failed = "failed"
 tag_data = {
     1: {"chinese_name": "基础设施", "name": "Infrastructure"},
     2: {"chinese_name": "监控", "name": "Monitor"},

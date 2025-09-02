@@ -5,6 +5,8 @@ import uuid
 KUBECONFIG_DIR_DEFAULT = "/home/dingo-command/kubeconfig/"
 #容器实例命名空间前缀
 NAMESPACE_PREFIX = "ns-"
+#用户公钥存放configmap的前缀
+CONFIGMAP_PREFIX = "cm-"
 #容器实例系统盘默认挂载路径
 AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT = "/root/public-system/"
 #容器实例PVC默认挂载路径
