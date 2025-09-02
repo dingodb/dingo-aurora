@@ -1,32 +1,15 @@
-import time
-import json
-import os
 import uuid
-import subprocess
-import requests
-import shutil
-from requests.auth import HTTPBasicAuth
 from datetime import datetime
 from math import ceil
-from yaml import CLoader
-import yaml
-from harborapi import HarborAsyncClient
-import asyncio
-from urllib.parse import urlparse
-from typing import List
-from httpx import HTTPStatusError
+from kubernetes.client.exceptions import ApiException
+from kubernetes import client
 from dingo_command.db.models.sshkey.sql import KeySQL
-from dingo_command.services import CONF
+from dingo_command.db.models.sshkey.models import KeyInfo
+from dingo_command.api.model.sshkey import CreateKeyObject
 from dingo_command.utils.helm import util
 from dingo_command.utils.helm.util import ChartLOG as Log
-
-WORK_DIR = CONF.DEFAULT.cluster_work_dir
-auth_url = CONF.DEFAULT.auth_url
-image_master = CONF.DEFAULT.k8s_master_image
-harbor_url = CONF.DEFAULT.chart_harbor_url
-harbor_user = CONF.DEFAULT.chart_harbor_user
-harbor_passwd = CONF.DEFAULT.chart_harbor_passwd
-index_yaml = "index.yaml"
+from dingo_command.utils.k8s_client import get_k8s_core_client
+from dingo_command.utils.constant import CONFIGMAP_PREFIX, NAMESPACE_PREFIX
 
 
 class KeyService:
@@ -52,20 +35,195 @@ class KeyService:
     def delete_key(self, key_id):
         # 根据key的id删除具体的key
         # 把这个key从configmap中删除
+        # 再把其他的key的内容更新到configmap中（将所有的这个用户的sshkey的内容都写入指定ns指定name的configmap里面）
         query_params = {}
         query_params['id'] = key_id
         data = self.list_keys(query_params, 1, -1, None, None)
         if data.get("total") > 0:
-            # 执行删除的操作
-            return {"data": data.get("data")[0]}
+            key_info = data.get("data")[0]
+            key_info.status = util.key_status_delete
+            KeySQL.update_key(key_info)
+            namespace = key_info.namespace
+            configmap_name = key_info.configmap_name
+            key_content = key_info.key_content
+            k8s_id = key_info.k8s_id
+            try:
+                core_k8s_client = get_k8s_core_client(k8s_id)
+                # 2. 获取现有的 ConfigMap
+                configmap = core_k8s_client.read_namespaced_config_map(name=configmap_name, namespace=namespace)
+                # 3. 获取当前的 authorized_keys 内容
+                current_keys = configmap.data.get("authorized_keys", "")
+                if not current_keys:
+                    KeySQL.delete_key(key_info)
+                    Log.info("No authorized_keys found in ConfigMap.")
+                    return {"success": True, "message": "delete key success"}
+                # 4. 将内容分割成单独的公钥行
+                key_lines = current_keys.split('\n')
+                # 5. 查找并移除指定的公钥
+                original_key_count = len(key_lines)
+                # 使用列表推导式移除匹配的行（完全匹配）
+                new_key_lines = [line for line in key_lines if line.strip() != key_content.strip()]
+                new_key_count = len(new_key_lines)
+                # 检查是否实际移除了公钥
+                if original_key_count == new_key_count:
+                    KeySQL.delete_key(key_info)
+                    Log.info("Specified public key not found in ConfigMap.")
+                    return {"success": True, "message": "delete key success"}
+                # 6. 将剩余的公钥重新组合成字符串
+                new_keys_content = '\n'.join(new_key_lines)
+                # 确保以换行符结尾（如果还有内容）
+                if new_keys_content and not new_keys_content.endswith('\n'):
+                    new_keys_content += '\n'
+                # 7. 更新 ConfigMap 数据
+                configmap.data["authorized_keys"] = new_keys_content
+                # 8. 应用更新到集群
+                core_k8s_client.patch_namespaced_config_map(
+                    name=configmap_name,
+                    namespace=namespace,
+                    body=configmap
+                )
+                KeySQL.delete_key(key_info)
+                Log.info(f"Successfully removed SSH public key from ConfigMap.")
+                # 执行删除的操作
+                return {"success": True, "message": "delete key success"}
+
+            except ApiException as e:
+                if e.status == 404:
+                    Log.error(f"ConfigMap '{configmap_name}' not found in namespace '{namespace}'.")
+                    raise ValueError(f"ConfigMap '{configmap_name}' not found in namespace '{namespace}'.") from e
+                else:
+                    Log.error(f"Failed to access ConfigMap: {e}")
+                    raise e
+            except Exception as e:
+                Log.error(f"Unexpected error occurred: {e}")
+                raise e
         else:
             raise ValueError("key not found")
 
-    def create_key(self, create_key_object):
+
+    def create_key(self, create_key_object: CreateKeyObject):
         # 创建key
-        # 具体步骤：1、接收前端发来的请求
-        # 2、校验参数是否合法
-        # 3、调用数据库接口
-        # 4、把这个key的内容添加到configmap中
-        # 5、返回结果
-        pass
+        # 问题：kube_config文件从哪获取，从文博的数据库里获取？
+        # 具体步骤：1、接收前端发来的请求，获取一些参数
+        # 2、校验参数是否合法，哪些参数要校验，哪些参数不需要校验
+        k8s_id = create_key_object.k8s_id
+        name = create_key_object.name
+        user_id = create_key_object.user_id
+        account_id = create_key_object.root_account_id
+        key_content = create_key_object.key_content
+        description = create_key_object.description or ""
+        if not k8s_id:
+            raise ValueError("k8s_id not found")
+        if not user_id:
+            raise ValueError("user_id not found")
+        if not account_id:
+            raise ValueError("account_id not found")
+        if not key_content:
+            raise ValueError("key_content not found")
+        if not name:
+            raise ValueError("name not found")
+        query_params = {}
+        query_params['name'] = name
+        query_params['user_id'] = user_id
+        query_params['account_id'] = account_id
+        data = self.list_keys(query_params, 1, -1, None, None)
+        if data.get("total") > 0:
+            raise ValueError("key name already exists")
+        core_k8s_client = get_k8s_core_client(k8s_id)
+        # 3、调用数据库接口，存入数据库中
+        namespace = NAMESPACE_PREFIX + account_id
+        configmap_name = CONFIGMAP_PREFIX + user_id
+        key_info = KeyInfo(
+            id=str(uuid.uuid4()),
+            name=name,
+            k8s_id=k8s_id,
+            user_id=user_id,
+            account_id=account_id,
+            project_id=create_key_object.project_id,
+            project_name=create_key_object.project_name,
+            user_name=create_key_object.user_name,
+            is_admin=create_key_object.is_admin,
+            key_content=key_content,
+            description=description,
+            status=util.key_status_create,
+            create_time=datetime.now(),
+            namespace=namespace,
+            configmap_name=configmap_name
+        )
+        KeySQL.create_key(key_info)
+        try:
+            # 首先检查命名空间是否存在，如果不存在则创建
+            try:
+                # 尝试获取命名空间
+                core_k8s_client.read_namespace(namespace)
+                Log.info(f"Namespace '{namespace}' already exists.")
+            except ApiException as e:
+                if e.status == 404:
+                    # 命名空间不存在，创建新的命名空间
+                    Log.info(f"Namespace '{namespace}' not found. Creating new namespace.")
+
+                    # 创建命名空间对象
+                    namespace_metadata = client.V1ObjectMeta(name=namespace)
+                    namespace_body = client.V1Namespace(metadata=namespace_metadata)
+
+                    # 创建命名空间
+                    core_k8s_client.create_namespace(body=namespace_body)
+                    Log.info(f"Namespace '{namespace}' created successfully.")
+                else:
+                    # 其他 API 错误
+                    Log.error(f"Failed to access namespace: {e}")
+                    raise e
+
+            # 4、把这个key的内容添加到configmap中（将所有的这个用户的sshkey的内容都写入指定ns指定name的configmap里面）
+            try:
+                configmap = core_k8s_client.read_namespaced_config_map(configmap_name, namespace)
+                current_keys = configmap.data.get("authorized_keys", "")
+                if current_keys and not current_keys.endswith("\n"):
+                    current_keys += "\n"
+                current_keys += key_content + "\n"
+                configmap.data["authorized_keys"] = current_keys
+                core_k8s_client.patch_namespaced_config_map(
+                    name=configmap_name,
+                    namespace=namespace,
+                    body=configmap
+                )
+            except ApiException as e:
+                if e.status == 404:
+                    # ConfigMap 不存在，创建新的
+                    Log.info(f"ConfigMap '{configmap_name}' not found in namespace '{namespace}'. Creating new one.")
+
+                    # 创建新的 ConfigMap 对象
+                    new_configmap = client.V1ConfigMap(
+                        api_version="v1",
+                        kind="ConfigMap",
+                        metadata=client.V1ObjectMeta(
+                            name=configmap_name,
+                            namespace=namespace
+                        ),
+                        data={
+                            "authorized_keys": key_content + "\n"
+                        }
+                    )
+
+                    # 创建 ConfigMap
+                    core_k8s_client.create_namespaced_config_map(
+                        namespace=namespace,
+                        body=new_configmap
+                    )
+                    Log.info(f"Successfully created new ConfigMap '{configmap_name}' with the SSH public key.")
+                    return {"success": True, "message": "create key success"}
+                else:
+                    # 其他 API 错误
+                    Log.error(f"Failed to access ConfigMap: {e}")
+                    raise e
+            # 5、返回结果
+            key_info.status = util.key_status_success
+            KeySQL.update_key(key_info)
+            Log.info(f"create key success, key info {key_info}")
+            return {"data": key_info}
+        except Exception as e:
+            key_info.status = util.key_status_failed
+            key_info.status_msg = str(e)
+            KeySQL.update_key(key_info)
+            Log.error(f"Error in create_key: {str(e)}")
+            raise e
