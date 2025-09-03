@@ -171,6 +171,9 @@ class KeyService:
                     Log.info(f"Namespace '{namespace}' created successfully.")
                 else:
                     # 其他 API 错误
+                    key_info.status = util.key_status_failed
+                    key_info.status_msg = str(e)
+                    KeySQL.update_key(key_info)
                     Log.error(f"Failed to access namespace: {e}")
                     raise e
 
@@ -214,6 +217,9 @@ class KeyService:
                     return {"success": True, "message": "create key success"}
                 else:
                     # 其他 API 错误
+                    key_info.status = util.key_status_failed
+                    key_info.status_msg = str(e)
+                    KeySQL.update_key(key_info)
                     Log.error(f"Failed to access ConfigMap: {e}")
                     raise e
             # 5、返回结果

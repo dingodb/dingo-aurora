@@ -78,6 +78,7 @@ class ResourcesObject(BaseModel):
     kind: Optional[str] = Field(None, description="resource的类型")
     status: Optional[str] = Field(None, description="status状态")
     namespace: Optional[str] = Field(None, description="resource的名称空间")
+    yaml: Optional[str] = Field(None, description="resource的yaml")
 
 
 class AppChartObject(BaseModel):

@@ -1273,6 +1273,31 @@ class ChartService:
         else:
             return result.stdout
 
+    def get_helm_release_manifest(self, release_name, kube_config, namespace='default'):
+        """
+        获取指定Helm release的所有资源的YAML清单
+        """
+        try:
+            # 构建命令
+            cmd = ['helm', 'get', 'manifest', release_name, '-n', namespace, '--kubeconfig', kube_config]
+            # 执行命令并捕获输出
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            release_manifest = result.stdout
+            parsed_documents = list(yaml.safe_load_all(release_manifest))
+
+            k8s_resources_dict = {}
+            for doc in parsed_documents:
+                if doc is not None:  # 确保文档不为空
+                    kind = doc.get('kind')
+                    name = doc['metadata'].get('name') if doc.get('metadata') else 'Unknown'
+                    # 使用 kind 和 name 组合作为键，以确保唯一性
+                    key = f"{kind}_{name}"
+                    k8s_resources_dict[key] = doc
+            return k8s_resources_dict
+        except subprocess.CalledProcessError as e:
+            Log.error(f"Error fetching manifest for release {release_name}: {e}")
+            raise ValueError(f"Error fetching manifest for release {release_name}: {e}")
+
     def get_app_detail(self, app_data: AppDB):
         try:
             query_params = {}
@@ -1286,6 +1311,7 @@ class ChartService:
                 content = self.get_info_cmd(kube_config, app_data.namespace, app_data.name)
                 dict_content = json.loads(content)
                 resourc_obj_list = []
+                dict_yaml_info = self.get_helm_release_manifest(app_data.name, kube_config, app_data.namespace)
                 # 1、获取chart信息
                 update_time = app_data.update_time.isoformat() if app_data.update_time else None
                 app_obj = AppChartObject(
@@ -1319,7 +1345,9 @@ class ChartService:
                                         name=vv.get("metadata").get("name"),
                                         namespace=vv.get("metadata").get("namespace"),
                                         kind=vv.get("kind"),
-                                        status=vv.get("status").get("phase")
+                                        status=vv.get("status").get("phase"),
+                                        yaml=json.dumps(dict_yaml_info.get(
+                                            f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
                                     )
                                     resourc_obj_list.append(resourc_obj)
                                     continue
@@ -1333,7 +1361,9 @@ class ChartService:
                                                 name=vv.get("metadata").get("name"),
                                                 namespace=vv.get("metadata").get("namespace"),
                                                 kind=vv.get("kind"),
-                                                status=util.resource_status_active
+                                                status=util.resource_status_active,
+                                                yaml=json.dumps(dict_yaml_info.get(
+                                                    f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
                                             )
                                             resourc_obj_list.append(resourc_obj)
                                             continue
@@ -1342,7 +1372,9 @@ class ChartService:
                                                 name=vv.get("metadata").get("name"),
                                                 namespace=vv.get("metadata").get("namespace"),
                                                 kind=vv.get("kind"),
-                                                status=util.resource_status_pend
+                                                status=util.resource_status_pend,
+                                                yaml=json.dumps(dict_yaml_info.get(
+                                                    f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
                                             )
                                             resourc_obj_list.append(resourc_obj)
                                             continue
@@ -1351,7 +1383,9 @@ class ChartService:
                                             name=vv.get("metadata").get("name"),
                                             namespace=vv.get("metadata").get("namespace"),
                                             kind=vv.get("kind"),
-                                            status=util.resource_status_failed
+                                            status=util.resource_status_failed,
+                                            yaml=json.dumps(dict_yaml_info.get(
+                                                f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
                                         )
                                         resourc_obj_list.append(resourc_obj)
                                         continue
@@ -1361,7 +1395,9 @@ class ChartService:
                                                 name=vv.get("metadata").get("name"),
                                                 namespace=vv.get("metadata").get("namespace"),
                                                 kind=vv.get("kind"),
-                                                status=util.resource_status_pend
+                                                status=util.resource_status_pend,
+                                                yaml=json.dumps(dict_yaml_info.get(
+                                                    f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
                                             )
                                             resourc_obj_list.append(resourc_obj)
                                             continue
@@ -1370,7 +1406,9 @@ class ChartService:
                                                 name=vv.get("metadata").get("name"),
                                                 namespace=vv.get("metadata").get("namespace"),
                                                 kind=vv.get("kind"),
-                                                status=util.resource_status_active
+                                                status=util.resource_status_active,
+                                                yaml=json.dumps(dict_yaml_info.get(
+                                                    f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
                                             )
                                             resourc_obj_list.append(resourc_obj)
                                             continue
@@ -1379,7 +1417,9 @@ class ChartService:
                                             name=vv.get("metadata").get("name"),
                                             namespace=vv.get("metadata").get("namespace"),
                                             kind=vv.get("kind"),
-                                            status=util.resource_status_active
+                                            status=util.resource_status_active,
+                                            yaml=json.dumps(dict_yaml_info.get(
+                                                f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
                                         )
                                         resourc_obj_list.append(resourc_obj)
                                         continue
@@ -1390,7 +1430,9 @@ class ChartService:
                                                 name=vv.get("metadata").get("name"),
                                                 namespace=vv.get("metadata").get("namespace"),
                                                 kind=vv.get("kind"),
-                                                status=util.resource_status_active
+                                                status=util.resource_status_active,
+                                                yaml=json.dumps(dict_yaml_info.get(
+                                                    f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
                                             )
                                             resourc_obj_list.append(resourc_obj)
                                             continue
@@ -1399,7 +1441,9 @@ class ChartService:
                                                 name=vv.get("metadata").get("name"),
                                                 namespace=vv.get("metadata").get("namespace"),
                                                 kind=vv.get("kind"),
-                                                status=util.resource_status_pend
+                                                status=util.resource_status_pend,
+                                                yaml=json.dumps(dict_yaml_info.get(
+                                                    f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
                                             )
                                             resourc_obj_list.append(resourc_obj)
                                             continue
@@ -1411,7 +1455,9 @@ class ChartService:
                                                 name=vv.get("metadata").get("name"),
                                                 namespace=vv.get("metadata").get("namespace"),
                                                 kind=vv.get("kind"),
-                                                status=util.resource_status_active
+                                                status=util.resource_status_active,
+                                                yaml=json.dumps(dict_yaml_info.get(
+                                                    f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
                                             )
                                             resourc_obj_list.append(resourc_obj)
                                             continue
@@ -1420,7 +1466,9 @@ class ChartService:
                                                 name=vv.get("metadata").get("name"),
                                                 namespace=vv.get("metadata").get("namespace"),
                                                 kind=vv.get("kind"),
-                                                status=util.resource_status_pend
+                                                status=util.resource_status_pend,
+                                                yaml=json.dumps(dict_yaml_info.get(
+                                                    f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
                                             )
                                             resourc_obj_list.append(resourc_obj)
                                             continue
@@ -1430,7 +1478,9 @@ class ChartService:
                                         name=vv.get("metadata").get("name"),
                                         namespace=vv.get("metadata").get("namespace"),
                                         kind=vv.get("kind"),
-                                        status=util.resource_status_active
+                                        status=util.resource_status_active,
+                                        yaml=json.dumps(dict_yaml_info.get(
+                                            f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
                                     )
                                     resourc_obj_list.append(resourc_obj)
                                     continue
@@ -1438,7 +1488,9 @@ class ChartService:
                                     name=vv.get("metadata").get("name"),
                                     namespace=vv.get("metadata").get("namespace"),
                                     kind=vv.get("kind"),
-                                    status=util.resource_status_unknown
+                                    status=util.resource_status_unknown,
+                                    yaml=json.dumps(dict_yaml_info.get(
+                                        f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
                                 )
                                 resourc_obj_list.append(resourc_obj)
 
