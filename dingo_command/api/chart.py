@@ -311,6 +311,8 @@ async def start_repo(repo_id: Union[str, int], cluster_id: str = Query(None, des
 @router.get("/charts/list", summary="显示所有的charts信息", description="显示所有的charts信息")
 async def get_repo_charts(cluster_id: str = Query(None, description="集群id"),
                      repo_id: str = Query(None, description="集群id"),
+                     id: str = Query(None, description="chart的id"),
+                     name: str = Query(None, description="chart的name"),
                      repo_name: str = Query(None, description="集群id"),
                      tag_id: int = Query(None, description="tag的id"),
                      tag_name: str = Query(None, description="tag的name"),
@@ -339,6 +341,10 @@ async def get_repo_charts(cluster_id: str = Query(None, description="集群id"),
             query_params['tag_name'] = tag_name
         if type:
             query_params['type'] = type
+        if name:
+            query_params['name'] = name
+        if id:
+            query_params['id'] = id
         # 显示repo列表的逻辑
         return chart_service.list_charts(query_params, page, page_size, sort_keys, sort_dirs)
     except Exception as e:

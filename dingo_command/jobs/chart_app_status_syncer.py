@@ -84,6 +84,8 @@ def check_app_status():
             content = chart_service.get_helm_list(config_file)
             content_list = json.loads(content)
             for app in apps:
+                if app.status != util.app_status_success:
+                    continue
                 flag = False
                 # 看看数据库中的app是否存在，如果存在，但是helm list中不存在，说明app已经被删除，需要重新安装下这个app
                 # 3、比对app的名称和数据库中的app名称是否存在，如果数据库中存在但是helm list中不存在，说明app已经被删除，
