@@ -26,6 +26,7 @@ from dingo_command.db.models.chart.models import AppInfo as AppDB
 from dingo_command.db.models.chart.models import TagInfo as TagDB
 from dingo_command.db.models.chart.sql import RepoSQL, AppSQL, ChartSQL, TagSQL
 from dingo_command.services.cluster import ClusterService
+from dingo_command.api.model.cluster import KubeClusterObject
 
 from dingo_command.services.system import SystemService
 from dingo_command.services import CONF
@@ -634,6 +635,7 @@ class ChartService:
                             dict_info["create_time"] = dict_version["create_time"]
                             dict_info["readme_url"] = harbor_url + dict_tmp_info.get("readme.md").get("href")
                             dict_info["values_url"] = harbor_url + dict_tmp_info.get("values.yaml").get("href")
+                            dict_info["app_version"] = dict_chart_info.get("appVersion")
                             dict_version["version"][dict_chart_info.get("version")] = dict_info
 
                         chart_info_db = self.convert_db_harbor(chartname, dict_version, repo_info_db, prefix_name)
@@ -706,6 +708,7 @@ class ChartService:
                         else:
                             dict_info["create_time"] = version.get("created")
                         dict_info["urls"] = version.get("urls")
+                        dict_info["app_version"] = version.get("appVersion")
                         dict_info["deprecated"] = version.get("deprecated", False)
                         dict_version["version"][version.get("version")] = dict_info
                     chart_info_db = self.convert_chart_db(chart_name, dict_version, repo_info_db)
@@ -1048,30 +1051,34 @@ class ChartService:
     def get_kubeconfig(self, cluster_id):
         res_cluster = ClusterService().get_cluster(cluster_id)
         helm_cache_dir = os.path.join(WORK_DIR, "ansible-deploy/inventory/", cluster_id, util.helm_cache)
-        print("helm_cache_dir is:", helm_cache_dir)
         os.makedirs(helm_cache_dir, exist_ok=True)
         kube_config = os.path.join(WORK_DIR, "ansible-deploy/inventory/", cluster_id, "kube_config")
         with open(kube_config, "w") as f :
-            f.write(yaml.dump(json.loads(res_cluster.kube_info.kube_config)))
+            f.write(res_cluster.kube_info.kube_config)
+            # f.write(yaml.dump(json.loads(res_cluster.kube_info.kube_config)))
         return kube_config, helm_cache_dir
 
     def convert_app_db(self, create_data: ChartDB, create_info: CreateAppObject, update=False):
         app_db = AppDB()
+        dict_version = json.loads(create_data.version)
         if update:
             app_db.id = create_info.id
             app_db.status = util.app_status_update
             app_db.version = create_info.chart_version
+            app_db.app_version = dict_version.get(create_info.chart_version).get("app_version")
             app_db.update_time = datetime.now()
             return app_db
         else:
             app_db.status = util.app_status_create
             app_db.create_time = datetime.now()
+            app_db.update_time = datetime.now()
         app_db.name = create_info.name
         app_db.cluster_id = create_info.cluster_id
         app_db.chart_id = create_data.id
         app_db.chart_name = create_data.name
         app_db.repo_id = create_data.repo_id
         app_db.version = create_info.chart_version
+        app_db.app_version = dict_version.get(create_info.chart_version).get("app_version")
         app_db.values = json.dumps(create_info.values)
         app_db.namespace = create_info.namespace or "default"
         app_db.description = create_info.description
@@ -1280,11 +1287,17 @@ class ChartService:
                 dict_content = json.loads(content)
                 resourc_obj_list = []
                 # 1、获取chart信息
+                update_time = app_data.update_time.isoformat() if app_data.update_time else None
                 app_obj = AppChartObject(
                     name=chart_data.name,
                     description=chart_data.description,
                     repo_name=chart_data.repo_name,
-                    icon=chart_data.icon
+                    icon=chart_data.icon,
+                    namespace=app_data.namespace,
+                    app_name=app_data.name,
+                    update_time=update_time,
+                    chart_version=app_data.version,
+                    app_version=app_data.app_version
                 )
 
                 if dict_content.get("info") and dict_content.get("info").get("resources"):

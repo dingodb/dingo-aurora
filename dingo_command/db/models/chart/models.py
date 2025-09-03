@@ -81,6 +81,7 @@ class AppInfo(Base):
     update_time = Column(DateTime, nullable=True)
     type = Column(String(length=128), nullable=True)
     version = Column(String(length=128), nullable=True)
+    app_version = Column(String(length=128), nullable=True)
     tag_id = Column(Integer, nullable=True)
     tag_name = Column(String(length=256), nullable=True)
     values = Column(LONGTEXT, nullable=True)

@@ -85,6 +85,11 @@ class AppChartObject(BaseModel):
     description: Optional[str] = Field(None, description="chart的describe信息")
     icon: Optional[str] = Field(None, description="chart的图标")
     repo_name: Optional[str] = Field(None, description="repo的名字")
+    namespace: Optional[str] = Field(None, description="命名空间")
+    app_name: Optional[str] = Field(None, description="app的名字")
+    update_time: Optional[str] = Field(None, description="更新时间")
+    chart_version: Optional[str] = Field(None, description="chart的版本")
+    app_version: Optional[str] = Field(None, description="app的版本")
 
 
 class ResponseAppObject(BaseModel):
