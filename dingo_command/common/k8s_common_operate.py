@@ -16,6 +16,9 @@ class K8sCommonOperate:
             # 1. 定义命名空间对象
             namespace = client.V1Namespace(
                 metadata=client.V1ObjectMeta(
+                    labels= {
+                        "dc.com/osm.jspolicy.verify":  "false" # 不再校验GPU类型
+                    },
                     name=namespace_name,
                 )
             )
@@ -79,9 +82,9 @@ class K8sCommonOperate:
                           RESOURCE_TYPE: AI_INSTANCE},  # 定义标签
                 ports=[
                     client.V1ServicePort(
-                        name="jupyter",
-                        port=8888,
-                        target_port=8888,
+                        name="user-defined",
+                        port=9001,
+                        target_port=9001,
                         protocol="TCP"
                     ),
                     client.V1ServicePort(
@@ -141,13 +144,13 @@ class K8sCommonOperate:
         """
         try:
             return core_v1.read_namespaced_pod(name, namespace)
-        except ApiException as e:
-            print(f"查询 Pod {namespace}/{name} 失败: {e.reason} (状态码: {e.status})")
-            raise e.reason
+        except Exception as e:
+            print(f"查询 Pod {namespace}/{name} 失败: {e}")
+            raise e
 
     def list_pods_by_label_and_node(self, core_v1: client.CoreV1Api,
                                     namespace=None,
-                                    label_selector="resource-type=ai-instance",
+                                    label_selector=None,
                                     node_name=None,  # 新增：节点名称参数
                                     limit=2000,
                                     timeout_seconds=60):

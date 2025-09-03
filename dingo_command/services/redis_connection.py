@@ -37,6 +37,32 @@ class RedisConnection:
         # 返回数据
         return self.redis_connection.set(redis_key, redis_value)
 
+    def set_redis_by_key_with_expire(self, redis_key: str, redis_value, expire_seconds=None):
+        """
+        向Redis中写入键值对，支持设置秒级超时时间
+
+        Args:
+            redis_key: Redis键名
+            redis_value: 要存储的值
+            expire_seconds: 超时时间（秒），默认为None表示不过期
+
+        Returns:
+            bool: 设置成功返回True，否则返回False
+        """
+        if not redis_key:
+            return False
+
+        try:
+            if expire_seconds is not None:
+                # 使用setex命令同时设置值和过期时间[6,7](@ref)
+                return self.redis_connection.setex(redis_key, expire_seconds, redis_value)
+            else:
+                # 不使用过期时间
+                return self.redis_connection.set(redis_key, redis_value)
+        except Exception as e:
+            print(f"Redis set operation failed: {e}")
+            return False
+
 # 声明redis的连接工具
 redis_connection = RedisConnection()
 

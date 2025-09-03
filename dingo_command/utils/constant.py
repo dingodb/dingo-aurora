@@ -24,6 +24,10 @@ SYSTEM_DISK_SIZE_DEFAULT = "30Gi"
 RESOURCE_TYPE = "resource-type"
 APP_LABEL = "app"
 AI_INSTANCE = "ai-instance"
+# grpc相关
+GRPC_SECRET = "/common/grpc_nerdctl/client.crt"
+GRPC_KEY = "/common/grpc_nerdctl/client.key"
+GRPC_CA = "/common/grpc_nerdctl/root_ca.crt"
 
 # excel的目录文件
 EXCEL_TEMP_DIR = "/home/dingo_command/temp_excel/"

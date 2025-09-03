@@ -26,10 +26,11 @@ class StorageObj(BaseModel):
 
 # 容器实例信息
 class AiInstanceApiModel(BaseModel):
-    project_id: Optional[str] = Field(None, description="租户id")
-    project_name: Optional[str] = Field(None, description="租户名称")
+    # project_id: Optional[str] = Field(None, description="租户id")
+    # project_name: Optional[str] = Field(None, description="租户名称")
     user_id: Optional[str] = Field(None, description="用户id")
     user_name: Optional[str] = Field(None, description="用户id")
+    is_root_account: Optional[bool] = Field(None, description="是否是主账号")
     root_account_id: Optional[str] = Field(None, description="主账号ID")
     root_account_name: Optional[str] = Field(None, description="主账号ID")
     order_id: Optional[str] = Field(None, description="订单ID")
@@ -48,10 +49,8 @@ class AiInstanceApiModel(BaseModel):
     # data_set: Optional[DataSetObj] = Field(None, description="数据集信息")
 
 class AiInstanceSavaImageApiModel(BaseModel):
-    repo_name: Optional[str] = Field(None, description="仓库名称")
-    image_label: Optional[str] = Field(None, description="镜像标签")
-    # harbor_username: Optional[str] = Field(None, description="harbor名称")
-    # harbor_password: Optional[str] = Field(None, description="harbor密码")
+    image_name: Optional[str] = Field(None, description="镜像名称")
+    image_tag: Optional[str] = Field(None, description="镜像Tag")
 
 # k8s kubeconfig配置
 class K8skubeconfigApiModel(BaseModel):

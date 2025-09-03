@@ -6,8 +6,8 @@ from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
 
-class AiK8sKubeConfigConfigs(Base):
-    __tablename__ = "ops_ai_k8s_kubeconfig_configs"
+class AiK8sConfigs(Base):
+    __tablename__ = "ops_ai_k8s_configs"
 
     id = Column(String(length=128), primary_key= True, nullable=False, index=True, unique=True)
     k8s_id = Column(String(length=128), nullable=True, index=True, unique=True)
@@ -16,6 +16,9 @@ class AiK8sKubeConfigConfigs(Base):
     kubeconfig_path = Column(String(length=255), nullable=True)
     kubeconfig_context_name = Column(String(length=128), nullable=True)
     kubeconfig = Column(Text, nullable=False)
+    harbor_address = Column(String(length=128), nullable=True)
+    harbor_username = Column(String(length=128), nullable=True)
+    harbor_password = Column(String(length=128), nullable=True)
     create_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
     update_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"))
 
@@ -31,10 +34,11 @@ class AiInstanceInfo(Base):
     instance_k8s_type = Column(String(length=128), nullable=True)
     instance_k8s_id = Column(String(length=128), nullable=True)
     instance_k8s_name = Column(String(length=128), nullable=True)
-    instance_project_id = Column(String(length=128), nullable=True)
-    instance_project_name = Column(String(length=128), nullable=True)
+    # instance_project_id = Column(String(length=128), nullable=True)
+    # instance_project_name = Column(String(length=128), nullable=True)
     instance_user_id = Column(String(length=128), nullable=True)
     instance_user_name = Column(String(length=128), nullable=True)
+    is_root_account = Column(Boolean,nullable=False, default=False, )
     instance_root_account_id = Column(String(length=128), nullable=True)
     instance_root_account_name = Column(String(length=128), nullable=True)
     instance_image = Column(String(length=128), nullable=True)
@@ -57,7 +61,9 @@ class AiK8sNodeResourceInfo(Base):
     id = Column(String(length=128), nullable=False, primary_key=True, unique=True)
     k8s_id = Column(String(length=128), nullable=True, index=True, unique=True)
     node_name = Column(String(length=128), nullable=True)
+    node_ip = Column(String(length=128), nullable=True)
     less_gpu_pod_count = Column(Integer, nullable=True, default=0)
+    gpu_pod_count = Column(Integer, nullable=True, default=0)
     gpu_model = Column(String, nullable=True)
     gpu_total = Column(String, nullable=True)
     gpu_used = Column(String, nullable=True)

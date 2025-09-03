@@ -49,7 +49,7 @@ def fetch_ai_instance_info():
     print(f"同步容器实例开始时间: {start_time}")
     try:
         # 查询所有容器实例
-        k8s_kubeconfig_configs_db = AiInstanceSQL.list_k8s_kubeconfig_configs()
+        k8s_kubeconfig_configs_db = AiInstanceSQL.list_k8s_configs()
         if not k8s_kubeconfig_configs_db:
             LOG.info("ai k8s kubeconfig configs is temp")
             return

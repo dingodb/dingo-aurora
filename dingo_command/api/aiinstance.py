@@ -34,7 +34,7 @@ async def sava_ai_instance_to_image(id: str, request: AiInstanceSavaImageApiMode
     # 容器实例保存为镜像
     try:
         # 容器实例保存为镜像
-        return ai_instance_service.sava_ai_instance_to_image(id, request)
+        ai_instance_service.sava_ai_instance_to_image(id, request)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
@@ -47,6 +47,8 @@ async def list_ai_instance_infos(
         uuid:str = Query(None, description="容器实例主键ID"),
         instance_name:str = Query(None, description="容器实例名称"),
         instance_status:str = Query(None, description="容器实例状态"),
+        user_id:str = Query(None, description="当前用户ID"),
+        is_root_account: bool = Query('False', description="是否为主账号"),
         page: int = Query(1, description="页码"),
         page_size: int = Query(10, description="页数量大小"),
         sort_keys: str = Query(None, description="排序字段"),
@@ -62,6 +64,10 @@ async def list_ai_instance_infos(
             query_params['instance_name'] = instance_name
         if instance_status:
             query_params['instance_status'] = instance_status
+        if is_root_account:
+            query_params['is_root_account'] = is_root_account
+        if user_id:
+            query_params['user_id'] = user_id
         return ai_instance_service.list_ai_instance_info(query_params, page, page_size, sort_keys, sort_dirs)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
@@ -70,7 +76,7 @@ async def list_ai_instance_infos(
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"查询容器实例列表失败:{e}")
 
-@router.get("/ai-instance/{id}", summary="查询容器实例详情", description="查询容器实例详情")
+@router.get("/ai-instance/{id}/detail", summary="查询容器实例详情", description="查询容器实例详情")
 async def get_instance_info_by_id(id:str):
     # 查询容器实例详情
     try:
@@ -106,7 +112,7 @@ async def pod_console(
     await websocket.accept()
 
     try:
-        k8s_client = get_k8s_client("test_wwb-2", client.CoreV1Api)
+        k8s_client = get_k8s_client("test-176", client.CoreV1Api)
         # 创建k8s exec连接
         exec_command = [
             '/bin/sh',
@@ -125,6 +131,7 @@ async def pod_console(
             _preload_content=False
         )
 
+        # resp = ai_instance_service.ai_instance_web_ssh(id)
         # 创建异步任务处理双向数据流
         async def receive_from_ws():
             while True:
