@@ -37,6 +37,7 @@ def upgrade() -> None:
     sa.Column('update_time', sa.DateTime(), nullable=True),
     sa.Column('type', sa.String(length=128), nullable=True),
     sa.Column('version', sa.String(length=128), nullable=True),
+    sa.Column('app_version', sa.String(length=128), nullable=True),
     sa.Column('tag_id', sa.Integer(), nullable=True),
     sa.Column('tag_name', sa.String(length=256), nullable=True),
     sa.Column('values', mysql.LONGTEXT(), nullable=True),
