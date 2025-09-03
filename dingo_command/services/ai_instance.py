@@ -7,6 +7,7 @@ import string
 import uuid
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
+
 from keystoneclient import client
 from math import ceil
 from kubernetes.client import V1PersistentVolumeClaim, V1ObjectMeta, V1PersistentVolumeClaimSpec, \
@@ -14,6 +15,7 @@ from kubernetes.client import V1PersistentVolumeClaim, V1ObjectMeta, V1Persisten
     V1ConfigMapVolumeSource, V1EnvVar, V1PodSpec, V1StatefulSetSpec, V1LifecycleHandler, V1ExecAction, V1Lifecycle, \
     V1ContainerPort, V1Toleration, V1EmptyDirVolumeSource
 from kubernetes import client
+from kubernetes.stream import stream
 from oslo_log import log
 
 from dingo_command.api.model.aiinstance import StorageObj
@@ -21,8 +23,9 @@ from dingo_command.common.Enum.AIInstanceEnumUtils import AiInstanceStatus, K8sS
 from dingo_command.common.k8s_common_operate import K8sCommonOperate
 from dingo_command.db.models.ai_instance.models import AiInstanceInfo, AccountInfo
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
+from dingo_command.services.redis_connection import redis_connection, RedisLock
 from dingo_command.utils.constant import NAMESPACE_PREFIX, AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT, \
-    SYSTEM_DISK_NAME_DEFAULT, RESOURCE_TYPE, AI_INSTANCE, AI_INSTANCE_PVC_MOUNT_PATH_DEFAULT, AI_INSTANCE_CM_MOUNT_PATH_DEFAULT, \
+    SYSTEM_DISK_NAME_DEFAULT, RESOURCE_TYPE, AI_INSTANCE, AI_INSTANCE_PVC_MOUNT_PATH_DEFAULT, \
     SYSTEM_DISK_SIZE_DEFAULT, APP_LABEL, AI_INSTANCE_CM_MOUNT_PATH_SSHKEY, AI_INSTANCE_CM_MOUNT_PATH_SSHKEY_SUB_PATH, \
     CONFIGMAP_PREFIX
 from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client
@@ -68,6 +71,12 @@ class AiInstanceService:
 
         # 删除数据库记录
         AiInstanceSQL.delete_ai_instance_info_by_id(id)
+
+        # 移除pod在ops_ai_k8s_node_resource表中的资源占用
+        node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id(ai_instance_info_db.instance_k8s_id)
+        if node_resource_db and ai_instance_info_db.instance_config:
+            instance_config_dict = json.loads(ai_instance_info_db.instance_config)
+            self.update_node_resources(node_resource_db, instance_config_dict, "release")
         return {"data": "success", "uuid": id}
 
     # ================= 账户相关 =================
@@ -145,43 +154,220 @@ class AiInstanceService:
             raise e
 
     def sava_ai_instance_to_image(self, id, request):
+        """
+        异步保存AI实例为镜像（立即返回，实际操作在后台执行）
+        """
         try:
-            ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
-            if not ai_instance_info_db:
-                raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
+            with RedisLock(redis_connection.redis_connection, f"ai-instance-image-{id}", expire_time=3600) as lock:
+                if lock:
+                    # 参数验证和基本信息获取
+                    ai_instance_info_db = self._validate_and_get_instance_info(id, request)
 
-            repo_name = request.repo_name
-            image_label = request.image_label
-            # harbor_username = request.harbor_username
-            # harbor_password = request.harbor_password
+                    # 获取harbor信息
+                    harbor_address, harbor_username, harbor_password  = self.get_harbor_info(ai_instance_info_db.instance_k8s_id)
 
-            if not repo_name:
-                raise Fail(f"image repository name for saving the ai instance to image - [{id}] - is empty.", error_message=f"容器实例[{id}]保存镜像到的镜像库名称为空")
+                    # 获取k8s客户端和Pod信息
+                    core_k8s_client, sts_pod_info = self._get_k8s_sts_pod_info(ai_instance_info_db)
 
-            if not image_label:
-                raise Fail(f"image label for saving the ai instance to image - [{id}] - is empty.",
-                           error_message=f"容器实例[{id}]保存的镜像的标签为空")
+                    # 获取nerdctl-api Pod信息
+                    nerdctl_api_pod = self._get_nerdctl_api_pod(core_k8s_client, sts_pod_info['node_name'])
 
-            # if not harbor_username or not harbor_password:
-            #     raise Fail(f"harbor username or password is empty",
-            #                error_message=f"harbor username or password is empty")
+                    # 立即返回响应，后续操作异步执行
+                    asyncio.create_task(
+                        self._async_save_operation(
+                            id, core_k8s_client, nerdctl_api_pod,
+                            sts_pod_info['container_id'], harbor_address, harbor_username, harbor_password,
+                            request.image_name, request.image_tag
+                        )
+                    )
+                    print("wwwwww")
+                    return {
+                        "status": "accepted",
+                        "message": "容器实例保存操作已开始异步执行",
+                        "instance_id": id,
+                        "image_name": f"{request.image_name}:{request.image_tag}"
+                    }
 
-            core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
+                else:
+                    print(f"未获取到锁{id}")
+                    raise Fail(f"Ai instance [{id}] is saving, not allow to operation")
 
-            # 执行函数
-            # self.process_large_volume_and_build(
-            #     core_k8s_client,
-            #     pod_name=ai_instance_info_db.instance_real_name + "-0",
-            #     namespace=NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id,
-            #     source_path=AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT,
-            #     harbor_repo=repo_name,
-            #     new_tag=image_label
-            # )
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            return e
+            # 记录日志并重新抛出异常
+            print(f"Failed to start save operation for instance {id}: {str(e)}")
+            raise Fail(f"Failed to start save operation: {str(e)}")
 
+    def get_harbor_info(self, k8s_id):
+        k8s_configs = AiInstanceSQL.get_k8s_configs_info_by_k8s_id(k8s_id)
+        if not k8s_configs:
+            raise Fail(f"ai instance[{id}] k8s kube configs is not found", error_message=f"容器实例[{id} k8s配置找不到]")
+        return  k8s_configs.harbor_address,  k8s_configs.harbor_username,  k8s_configs.harbor_password
+
+    def _validate_and_get_instance_info(self, id, request):
+        """验证参数并获取实例信息"""
+        ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
+        if not ai_instance_info_db:
+            raise Fail(f"ai instance[{id}] is not found", error_message=f"容器实例[{id}找不到]")
+
+        if not request.image_name:
+            raise Fail(
+                f"image name for saving the ai instance to image - [{id}] - is empty.",
+                error_message=f"容器实例[{id}]保存的镜像的名称为空"
+            )
+
+        if not request.image_tag:
+            raise Fail(
+                f"image tag for saving the ai instance to image - [{id}] - is empty.",
+                error_message=f"容器实例[{id}]保存的镜像的标签为空"
+            )
+
+        return ai_instance_info_db
+
+    def _get_k8s_sts_pod_info(self, ai_instance_info_db):
+        """获取K8s Pod信息"""
+        core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
+
+        pod = k8s_common_operate.get_pod_info(
+            core_k8s_client,
+            ai_instance_info_db.instance_real_name + "-0",
+            NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
+        )
+
+        container_id = pod.status.container_statuses[0].container_id
+        clean_container_id = container_id.split('//')[-1]
+
+        return core_k8s_client, {
+            'container_id': clean_container_id,
+            'node_name': pod.spec.node_name
+        }
+
+
+    def _get_nerdctl_api_pod(self, core_k8s_client, node_name):
+        """获取nerdctl-api Pod"""
+        nerdctl_api_pod = k8s_common_operate.list_pods_by_label_and_node(
+            core_v1=core_k8s_client,
+            label_selector="name=nerdctl-api",
+            node_name=node_name
+        )
+
+        if not nerdctl_api_pod:
+            raise Fail(
+                f"Fail to save ai instance as image, can not exec command.",
+                error_message=f"保存容器实例为镜像失败,无法执行保存命令"
+            )
+
+        return {
+            'name': nerdctl_api_pod[0].metadata.name,
+            'namespace': nerdctl_api_pod[0].metadata.namespace
+        }
+
+    async def _async_save_operation(self, id, core_k8s_client, nerdctl_api_pod,
+                                    clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag):
+        """
+        实际的异步保存操作（受分布式锁保护）
+        """
+        try:
+            # 1. Harbor登录
+            await self._harbor_login(core_k8s_client, nerdctl_api_pod, harbor_address, harbor_username, harbor_password)
+
+            # 2. Commit操作
+            image_name = f"{harbor_address}/{image_name}:{image_tag}"
+
+
+            await self._commit_container(
+                core_k8s_client, nerdctl_api_pod, clean_container_id, image_name
+            )
+
+            # 3. Push操作
+            await self._push_image(core_k8s_client, nerdctl_api_pod, image_name)
+            print(f"Successfully saved and pushed image: {image_name}")
+
+            # 存入redis，镜像推送完成标识
+            redis_key = id + "_"+ image_name
+            redis_connection.set_redis_by_key_with_expire(redis_key, 'True', 3600)
+            print(f"容器实例[{id}]推送镜像[{image_name}]完成")
+        except Exception as e:
+            print(f"Async save operation failed for instance {id}: {str(e)}")
+            # 这里可以添加错误处理逻辑，如更新实例状态为失败
+
+    async def _execute_k8s_command(self, core_k8s_client, pod_name, namespace, command):
+        """异步执行K8s命令的辅助函数"""
+        loop = asyncio.get_event_loop()
+
+        def _sync_execute():
+            resp = stream(
+                core_k8s_client.connect_get_namespaced_pod_exec,
+                pod_name,
+                namespace,
+                container=None,
+                command=command,
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+                _preload_content=False
+            )
+
+            # 读取输出
+            output = []
+            while resp.is_open():
+                resp.update(timeout=1)
+                if resp.peek_stdout():
+                    stdout = resp.read_stdout()
+                    output.append(f"STDOUT: {stdout}")
+                if resp.peek_stderr():
+                    stderr = resp.read_stderr()
+                    output.append(f"STDERR: {stderr}")
+
+            resp.close()
+            return resp.returncode, "\n".join(output)
+
+        return await loop.run_in_executor(None, _sync_execute)
+
+    async def _harbor_login(self, core_k8s_client, nerdctl_api_pod, harbor_address, harbor_username, harbor_password):
+        """Harbor登录"""
+        harbor_login_command = [
+            'nerdctl', 'login',
+            '-u', harbor_username,
+            '-p', harbor_password,
+            harbor_address,
+            '--insecure-registry'
+        ]
+
+        returncode, output = await self._execute_k8s_command(
+            core_k8s_client, nerdctl_api_pod['name'], nerdctl_api_pod['namespace'], harbor_login_command
+        )
+
+        if returncode != 0:
+            raise Exception(f"Harbor login failed: {output}")
+
+    async def _commit_container(self, core_k8s_client, nerdctl_api_pod, clean_container_id, image_name):
+        """执行commit操作"""
+        commit_command = [
+            'nerdctl', 'commit', clean_container_id, image_name,
+            '--pause=false', '--namespace', 'k8s.io', '--insecure-registry'
+        ]
+
+        returncode, output = await self._execute_k8s_command(
+            core_k8s_client, nerdctl_api_pod['name'], nerdctl_api_pod['namespace'], commit_command
+        )
+
+        if returncode != 0:
+            raise Exception(f"Commit failed: {output}")
+
+    async def _push_image(self, core_k8s_client, nerdctl_api_pod, image_name):
+        """执行push操作"""
+        push_command = [
+            'nerdctl', 'push', image_name,
+            '--namespace', 'k8s.io', '--insecure-registry'
+        ]
+
+        returncode, output = await self._execute_k8s_command(
+            core_k8s_client, nerdctl_api_pod['name'], nerdctl_api_pod['namespace'], push_command
+        )
+
+        if returncode != 0:
+            raise Exception(f"Push failed: {output}")
 
     def get_ai_instance_info_by_id(self, id):
         ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
@@ -227,10 +413,11 @@ class AiInstanceService:
         temp["instance_k8s_type"] = r.instance_k8s_type
         temp["instance_k8s_id"] = r.instance_k8s_id
         temp["instance_k8s_name"] = r.instance_k8s_name
-        temp["instance_project_id"] = r.instance_project_id
-        temp["instance_project_name"] = r.instance_project_name
+        # temp["instance_project_id"] = r.instance_project_id
+        # temp["instance_project_name"] = r.instance_project_name
         temp["instance_user_id"] = r.instance_user_id
         temp["instance_user_name"] = r.instance_user_name
+        temp["is_root_account"] = r.is_root_account
         temp["instance_root_account_id"] = r.instance_root_account_id
         temp["instance_root_account_name"] = r.instance_root_account_name
         temp["instance_image"] = r.instance_image
@@ -268,28 +455,26 @@ class AiInstanceService:
             resource_limits['cpu'] = str(ai_instance.instance_config.compute_cpu)
             resource_limits['memory'] = ai_instance.instance_config.compute_memory + "Gi"
             if ai_instance.instance_config.gpu_model:
-                if "nvidia" in ai_instance.instance_config.gpu_model.lower():
-                    resource_limits['nvidia.com/gpu'] = str(ai_instance.instance_config.gpu_count)
-                    # resource_limits['nvidia.com/gpu.memory'] = str(ai_instance.instance_config.gpu_memory)
-                    node_selector_gpu['nvidia.com/gpu.product'] = ai_instance.instance_config.gpu_model
-                    node_selector_gpu['nvidia.com/gpu.count'] = str(ai_instance.instance_config.gpu_count)
+                print(f"创建AI ai_instance.instance_config.gpu_model： {ai_instance.instance_config.gpu_model}")
+                node_gpu_model = "nvidia.com/" + ai_instance.instance_config.gpu_model.lower()
+                resource_limits[node_gpu_model] = ai_instance.instance_config.gpu_count
+                node_selector_gpu['nvidia.com/gpu.product'] = "NVIDIA-L40S"
+                # node_selector_gpu['nvidia.com/gpu.count'] = str(ai_instance.instance_config.gpu_count)
 
-                    toleration = V1Toleration(
-                            key="nvidia.com/gpu",
-                            operator="Exists",
-                            effect="NoSchedule"
-                        )
-                    toleration_gpus.append(toleration)
-
-                elif "amd" in ai_instance.instance_config.gpu_model.lower():
-                    resource_limits['amd.com/gpu'] = str(ai_instance.instance_config.gpu_count)
-                else:
-                    LOG.erorr(f"ai instance[{ai_instance.name}] instance_config gpu model[{ai_instance.instance_config.gpu_model}] is unknown")
+                toleration = V1Toleration(
+                        key="NVIDIA-L40S",
+                        operator="Exists",
+                        effect="NoSchedule"
+                    )
+                toleration_gpus.append(toleration)
 
             results = []
             if ai_instance.instance_config.replica_count == 1:
                 # 校验namespace是否存在，不存在则创建
                 namespace_name = self.handling_and_create_namespace_info(ai_instance, core_k8s_client)
+
+                # TODO: 创建project
+
                 # 组装statefulset pod数据
                 ai_instance_info_db_rel = self.assemble_create_sts_pod_to_save(
                                                              ai_instance, ai_instance_info_db, app_k8s_client,
@@ -387,7 +572,7 @@ class AiInstanceService:
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if not ai_instance_info_db:
                 raise Fail(f"ai instance[{id}] is not found", error_message=f"容器实例[{id}找不到]")
-            
+
             # 检查实例状态，只有 stopped 状态的实例才能开机
             if ai_instance_info_db.instance_status != AiInstanceStatus.STOPPED:
                 raise Fail(f"ai instance[{id}] status is {ai_instance_info_db.instance_status}, cannot start",
@@ -618,7 +803,7 @@ class AiInstanceService:
         # 处理ConfigMap
         if volumes and volumes.configmap_name:
             volume_mounts.append(
-                V1VolumeMount(name=volumes.configmap_name, mount_path=AI_INSTANCE_CM_MOUNT_PATH_DEFAULT)
+                V1VolumeMount(name=volumes.configmap_name, mount_path=volumes.configmap_path)
             )
             pod_volumes.append(
                 V1Volume(
@@ -644,7 +829,7 @@ class AiInstanceService:
             name=sts_name,
             image=image,
             env=env_list,
-            ports=[V1ContainerPort(container_port=22)],
+            ports=[V1ContainerPort(container_port=22), V1ContainerPort(container_port=9001)],
             resources=V1ResourceRequirements(
                 requests=resource_limits,
                 limits=resource_limits
@@ -653,10 +838,19 @@ class AiInstanceService:
             lifecycle=V1Lifecycle(
                 post_start=V1LifecycleHandler(
                     _exec=V1ExecAction(
-                        command=["chmod", "755", AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT]
+                        command=[
+                            "/bin/sh",
+                            "-c",
+                            f"mkdir -p {AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT} && chmod 755 {AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT}"
+                        ]
                     )
                 )
             )
+            # command=[  # 覆盖镜像默认启动命令
+            #     "/bin/sh",
+            #     "-c",
+            #     f"mkdir -p {AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT} && chmod -R 755 {AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT} && while [ ! -d {AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT} ]; do sleep 1; done;"
+            # ]
         )
 
         # 4. 定义Pod模板
@@ -672,6 +866,7 @@ class AiInstanceService:
                 }
             ),
             spec=V1PodSpec(
+                node_name="dev01-5-gpu-1",
                 containers=[container],
                 volumes=pod_volumes,  # 直接传递Volume列表,
                 node_selector=node_selector_gpu,
@@ -701,10 +896,11 @@ class AiInstanceService:
                                              instance_k8s_type=ai_instance.k8s_type,
                                              instance_k8s_id=ai_instance.k8s_id,
                                              instance_k8s_name=ai_instance.k8s_name,
-                                             instance_project_id=ai_instance.project_id,
-                                             instance_project_name=ai_instance.project_name,
+                                             # instance_project_id=ai_instance.project_id,
+                                             # instance_project_name=ai_instance.project_name,
                                              instance_user_id=ai_instance.user_id,
                                              instance_user_name=ai_instance.user_name,
+                                             is_root_account=ai_instance.is_root_account,
                                              instance_root_account_id=ai_instance.root_account_id,
                                              instance_root_account_name=ai_instance.root_account_name,
                                              # dev_tool=ai_instance.dev_tool,
@@ -725,7 +921,7 @@ class AiInstanceService:
                                                        id: str,
                                                        pod_name: str,
                                                        namespace: str,
-                                                       timeout: int = 300
+                                                       timeout: int = 360
                                                        ):
         """
         异步检查 Pod 状态并更新数据库
@@ -791,6 +987,8 @@ class AiInstanceService:
                                 else:
                                     node_resource_db.storage_used = new_storage_used
 
+                                # TODO: 增加GPU卡数
+
                                 AiInstanceSQL.update_k8s_node_resource(node_resource_db)
                                 LOG.error(f"k8s[{k8s_id}] node[{node_name}] resource update success")
                             except Exception as e:
@@ -811,15 +1009,15 @@ class AiInstanceService:
                     traceback.print_exc()
                     # 检查是否为 NotFound 错误
                     if "Not Found" in str(e):
-                        print(f"Pod {pod_name} 不存在，直接结束")
-                        return  # 直接结束整个函数
+                        print(f"Pod {pod_name} 不存在")
+                        # return  # 直接结束整个函数
 
                     await asyncio.sleep(3)
 
             # 5. 检查是否超时
             if (datetime.now() - start_time).total_seconds() >= timeout:
                 print(f"Pod {pod_name} 状态检查超时(5分钟)")
-                # self.update_pod_status_and_node_name_in_db(id, pod_real_status, pod_located_node_name)
+                self.update_pod_status_and_node_name_in_db(id, K8sStatus.ERROR.value, pod_located_node_name)
 
         except Exception as e:
             print(f"检查Pod状态时发生未预期错误: {e}")
@@ -1054,7 +1252,7 @@ class AiInstanceService:
             for n in getattr(nodes, 'items', []) or []:
                 addresses = getattr(n.status, 'addresses', []) or []
                 node_ip = None
-                # 优先 ExternalIP，其次 InternalIP
+                    # 优先 ExternalIP，其次 InternalIP
                 for addr in addresses:
                     if addr.type == 'ExternalIP' and addr.address:
                         node_ip = addr.address
@@ -1205,3 +1403,59 @@ class AiInstanceService:
         except (ValueError, TypeError) as e:
             LOG.error(f"Convert failed: {value} to {convert_type.__name__}, error: {str(e)}")
             return None
+
+    def update_node_resources(self, node_resource_db, compute_resource_dict, operation='release'):
+        """
+        更新节点资源（分配或释放）
+        :param node_resource_db: 节点资源数据库对象
+        :param compute_resource_dict : 计算资源配置字典
+        :param operation: 'allocate' 分配资源, 'release' 释放资源
+        :return: 是否成功更新资源
+        """
+        try:
+            operation_factor = 1 if operation == 'allocate' else -1
+            print(f"============compute_resource_dict :{compute_resource_dict}")
+            # 处理GPU资源（需要型号匹配）
+            if ('gpu_model' in compute_resource_dict and
+                    'gpu_count' in compute_resource_dict and
+                    compute_resource_dict['gpu_model'] and
+                    node_resource_db.gpu_model and
+                    compute_resource_dict['gpu_model'] in node_resource_db.gpu_model):
+                current_gpu = self.safe_float(node_resource_db.gpu_used or '0')
+                resource_gpu = self.safe_float(compute_resource_dict['gpu_count'])
+                node_resource_db.gpu_used = str(max(0, current_gpu + operation_factor * resource_gpu))
+
+            # 处理CPU资源
+            if 'compute_cpu' in compute_resource_dict:
+                current_cpu = self.safe_float(node_resource_db.cpu_used or '0')
+                resource_cpu = self.safe_float(compute_resource_dict['compute_cpu'])
+                node_resource_db.cpu_used = str(max(0, current_cpu + operation_factor * resource_cpu))
+
+            # 处理内存资源
+            if 'compute_memory' in compute_resource_dict:
+                current_memory = self.safe_float(node_resource_db.memory_used or '0')
+                resource_memory = self.safe_float(compute_resource_dict['compute_memory'])
+                node_resource_db.memory_used = str(max(0, current_memory + operation_factor * resource_memory))
+
+            # 处理系统磁盘资源
+            if 'system_disk_size' in compute_resource_dict:
+                current_disk = self.safe_float(node_resource_db.storage_used or '0')
+                resource_disk = self.safe_float(compute_resource_dict['system_disk_size'])
+                node_resource_db.storage_used = str(max(0, current_disk + operation_factor * resource_disk))
+
+            # 更新数据库
+            AiInstanceSQL.update_k8s_node_resource(node_resource_db)
+            return True
+
+        except Exception as e:
+            LOG.error(f"{operation}节点资源失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def safe_float(self, value, default=0.0):
+        """安全转换为float类型"""
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return default

@@ -5,7 +5,7 @@ from typing import Optional
 
 from kubernetes import client, config
 
-from dingo_command.db.models.ai_instance.models import AiK8sKubeConfigConfigs
+from dingo_command.db.models.ai_instance.models import AiK8sConfigs
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
 import yaml
 
@@ -35,7 +35,7 @@ def get_k8s_client(k8s_id: str,client_type: Type[T], **kwargs: Any) -> T:
     """
 
     # 1. 获取数据库配置
-    kubeconfig_configs_db = AiInstanceSQL.get_k8s_kubeconfig_info_by_k8s_id(k8s_id)
+    kubeconfig_configs_db = AiInstanceSQL.get_k8s_configs_info_by_k8s_id(k8s_id)
     if not kubeconfig_configs_db:
         error_msg = f"by {k8s_id} 无法获取 kubeconfig 配置信息"
         logger.error(error_msg)
@@ -89,7 +89,7 @@ def get_k8s_app_client(k8s_id: str) -> client.AppsV1Api:
     return get_k8s_client(k8s_id, client.AppsV1Api)
 
 
-def _validate_kubeconfig_config(config_info: AiK8sKubeConfigConfigs, k8s_id: str) -> None:
+def _validate_kubeconfig_config(config_info: AiK8sConfigs, k8s_id: str) -> None:
     """验证配置合法性"""
     if not config_info:
         raise ValueError(f"{k8s_id} kubeconfig configs配置为空")
@@ -97,7 +97,7 @@ def _validate_kubeconfig_config(config_info: AiK8sKubeConfigConfigs, k8s_id: str
         raise ValueError(f"必须提供{k8s_id} kubeconfig_path或kubeconfig内容")
 
 
-def _resolve_kubeconfig_path(config_info: AiK8sKubeConfigConfigs) -> str:
+def _resolve_kubeconfig_path(config_info: AiK8sConfigs) -> str:
     """
     解析kubeconfig文件路径（优先检查已有文件，否则动态生成）
 
@@ -153,7 +153,7 @@ def _resolve_kubeconfig_path(config_info: AiK8sKubeConfigConfigs) -> str:
     return config_file
 
 
-def _resolve_context_name(config_info: AiK8sKubeConfigConfigs) -> Optional[str]:
+def _resolve_context_name(config_info: AiK8sConfigs) -> Optional[str]:
     """解析上下文名称（显式指定 > 自动解析）"""
     # 优先级1: 直接指定的上下文
     if config_info.kubeconfig_context_name:
@@ -175,7 +175,7 @@ def _parse_contexts(kubeconfig_content: str) -> list[str]:
         return sorted(
             ctx["name"]
             for ctx in config_data.get("contexts", [])
-            if "-admin" in ctx.get("context", {}).get("user", "").lower()
+            if "admin" in ctx.get("context", {}).get("user", "").lower()
         )
     except yaml.YAMLError as e:
         logger.error(f"Failed to parse kubeconfig: {str(e)}")

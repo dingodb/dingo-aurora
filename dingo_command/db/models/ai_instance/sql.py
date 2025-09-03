@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from dingo_command.db.engines.mysql import get_session
-from dingo_command.db.models.ai_instance.models import AiK8sKubeConfigConfigs, AiInstanceInfo, AiK8sNodeResourceInfo, AccountInfo
+from dingo_command.db.models.ai_instance.models import AiK8sConfigs, AiInstanceInfo, AiK8sNodeResourceInfo, AccountInfo
 
 # 容器实例排序字段字典
 ai_instance_dir_dic= {"instance_name":AiInstanceInfo.instance_name}
@@ -92,10 +92,11 @@ class AiInstanceSQL:
                                   AiInstanceInfo.instance_k8s_type.label("instance_k8s_type"),
                                   AiInstanceInfo.instance_k8s_id.label("instance_k8s_id"),
                                   AiInstanceInfo.instance_k8s_name.label("instance_k8s_name"),
-                                  AiInstanceInfo.instance_project_id.label("instance_project_id"),
-                                  AiInstanceInfo.instance_project_name.label("instance_project_name"),
+                                  # AiInstanceInfo.instance_project_id.label("instance_project_id"),
+                                  # AiInstanceInfo.instance_project_name.label("instance_project_name"),
                                   AiInstanceInfo.instance_user_id.label("instance_user_id"),
                                   AiInstanceInfo.instance_user_name.label("instance_user_name"),
+                                  AiInstanceInfo.is_root_account.label("is_root_account"),
                                   AiInstanceInfo.instance_root_account_id.label("instance_root_account_id"),
                                   AiInstanceInfo.instance_root_account_name.label("instance_root_account_name"),
                                   AiInstanceInfo.instance_image.label("instance_image"),
@@ -116,6 +117,10 @@ class AiInstanceSQL:
                 # 状态拆分
                 instance_status_arr = query_params["instance_status"].split(",")
                 query = query.filter(AiInstanceInfo.instance_status.in_(instance_status_arr))
+            if "is_root_account" in query_params and query_params["is_root_account"]:
+                query = query.filter(AiInstanceInfo.instance_root_account_id == query_params["user_id"])
+            elif query_params["user_id"]:
+                query = query.filter(AiInstanceInfo.instance_user_id == query_params["user_id"])
 
             # 总数
             count = query.count()
@@ -142,16 +147,16 @@ class AiInstanceSQL:
 
     # ================= 以下为 kubeconfig 相关 =======================
     @classmethod
-    def get_k8s_kubeconfig_info_by_k8s_id(cls, k8s_id):
+    def get_k8s_configs_info_by_k8s_id(cls, k8s_id):
         session = get_session()
         with session.begin():
-            return session.query(AiK8sKubeConfigConfigs).filter(AiK8sKubeConfigConfigs.k8s_id == k8s_id).first()
+            return session.query(AiK8sConfigs).filter(AiK8sConfigs.k8s_id == k8s_id).first()
 
     @classmethod
-    def list_k8s_kubeconfig_configs(cls):
+    def list_k8s_configs(cls):
         session = get_session()
         with session.begin():
-            return session.query(AiK8sKubeConfigConfigs).all()
+            return session.query(AiK8sConfigs).all()
 
     # ================= 以下为 node resource 相关 =======================
     @classmethod
