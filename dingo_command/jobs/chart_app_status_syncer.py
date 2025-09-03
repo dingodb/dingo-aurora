@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.schedulers.background import BackgroundScheduler
-from oslo_log import log
+from dingo_command.utils.helm.util import ChartLOG as LOG
 
 from dingo_command.db.models.chart.sql import AppSQL, RepoSQL, ChartSQL
 from dingo_command.db.models.cluster.sql import ClusterSQL
@@ -15,7 +15,6 @@ from dingo_command.api.model.chart import CreateRepoObject, CreateAppObject
 from dingo_command.utils.helm import util
 
 
-LOG = log.getLogger(__name__)
 config_dir = "/tmp/kube_config_dir"
 scheduler = BackgroundScheduler()
 scheduler_async = AsyncIOScheduler()
@@ -29,9 +28,9 @@ chart_service = ChartService()
 
 def start():
     # 添加检查集群状态的定时任务，每180秒执行一次
-    scheduler.add_job(check_app_status, 'interval', seconds=300)
-    scheduler.add_job(remove_global_chart, 'interval', seconds=300, next_run_time=datetime.now())
-    scheduler.add_job(check_cluster_status, 'interval', seconds=3600)
+    scheduler.add_job(check_app_status, 'interval', seconds=180)
+    scheduler.add_job(remove_global_chart, 'interval', seconds=180, next_run_time=datetime.now())
+    scheduler.add_job(check_cluster_status, 'interval', seconds=1800)
     scheduler.start()
     # scheduler_async.add_job(check_sync_status,'cron', hour=0, minute=0)
     # scheduler_async.start()
@@ -223,6 +222,8 @@ async def check_sync_status():
         if not data.get("data"):
             raise ValueError("repo not found")
         repo_data = data.get("data")
+        if repo_data.status == util.repo_status_sync:
+            return
         # 先删除原来的repo的charts应用
         data = chart_service.get_repo_from_name(repo_id)
         if data.get("data"):

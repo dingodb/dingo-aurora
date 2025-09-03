@@ -6,13 +6,16 @@ KUBECONFIG_DIR_DEFAULT = "/home/dingo-command/kubeconfig/"
 #容器实例命名空间前缀
 NAMESPACE_PREFIX = "ns-"
 #用户公钥存放configmap的前缀
-CONFIGMAP_PREFIX = "cm-"
+CONFIGMAP_PREFIX = "cm-ssh-key-"
 #容器实例系统盘默认挂载路径
 AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT = "/root/public-system/"
 #容器实例PVC默认挂载路径
 AI_INSTANCE_PVC_MOUNT_PATH_DEFAULT="/root/pvc"
 #容器实例configMap默认挂载路径
 AI_INSTANCE_CM_MOUNT_PATH_DEFAULT="/root/configmap"
+#容器实例ssh公钥configMap默认挂载路径
+AI_INSTANCE_CM_MOUNT_PATH_SSHKEY="/root/.ssh/authorized_keys"
+AI_INSTANCE_CM_MOUNT_PATH_SSHKEY_SUB_PATH="authorized_keys"
 #容器实例系统盘默认名称
 SYSTEM_DISK_NAME_DEFAULT = "system-disk"
 #容器实例系统盘默认大小
