@@ -342,6 +342,11 @@ class AiInstanceService:
         # 创建Service(StatefulSet需要)
         k8s_common_operate.create_ai_instance_sts_service(core_k8s_client, namespace_name, bottom_name)
 
+        # 创建sshkey的configmap（如果有就跳过，没有就创建）
+        configmap_name = CONFIGMAP_PREFIX + ai_instance.user_id
+        k8s_common_operate.create_ns_configmap(core_k8s_client, namespace_name, configmap_name,
+                                               {"authorized_keys": ""})
+
         system_limit_disk = ai_instance.instance_config.system_disk_size
         if not system_limit_disk:
             system_limit_disk = SYSTEM_DISK_SIZE_DEFAULT

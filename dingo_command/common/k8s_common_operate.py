@@ -313,3 +313,41 @@ class K8sCommonOperate:
         except ApiException as e:
             print(f"查询Node失败: {e.reason} (状态码: {e.status})")
             raise e.reason
+
+    def create_ns_configmap(self, core_v1: client.CoreV1Api, namespace_name: str, configmap_name: str,
+                            configmap_data: Dict[str, str]):
+        """
+        创建 ConfigMap
+        :param core_v1: CoreV1Api 客户端实例
+        :param namespace_name: 命名空间名称
+        :param configmap_name: ConfigMap 名称
+        """
+        try:
+            core_v1.read_namespaced_config_map(configmap_name, namespace_name)
+        except ApiException as e:
+            if e.status == 404:
+                # ConfigMap 不存在，创建新的
+                LOG.info(f"ConfigMap '{configmap_name}' not found in namespace '{namespace_name}'. Creating new one.")
+
+                # 创建新的 ConfigMap 对象
+                new_configmap = client.V1ConfigMap(
+                    api_version="v1",
+                    kind="ConfigMap",
+                    metadata=client.V1ObjectMeta(
+                        name=configmap_name,
+                        namespace=namespace_name
+                    ),
+                    data=configmap_data
+                )
+                try:
+                    # 创建 ConfigMap
+                    core_v1.create_namespaced_config_map(
+                        namespace=namespace_name,
+                        body=new_configmap
+                    )
+                    LOG.info(f"Successfully created new ConfigMap '{configmap_name}' with the SSH public key.")
+                except ApiException as e:
+                    raise e
+            else:
+                # 其他 API 错误
+                raise e
