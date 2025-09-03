@@ -23,7 +23,8 @@ from dingo_command.db.models.ai_instance.models import AiInstanceInfo, AccountIn
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
 from dingo_command.utils.constant import NAMESPACE_PREFIX, AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT, \
     SYSTEM_DISK_NAME_DEFAULT, RESOURCE_TYPE, AI_INSTANCE, AI_INSTANCE_PVC_MOUNT_PATH_DEFAULT, AI_INSTANCE_CM_MOUNT_PATH_DEFAULT, \
-    SYSTEM_DISK_SIZE_DEFAULT, APP_LABEL
+    SYSTEM_DISK_SIZE_DEFAULT, APP_LABEL, AI_INSTANCE_CM_MOUNT_PATH_SSHKEY, AI_INSTANCE_CM_MOUNT_PATH_SSHKEY_SUB_PATH, \
+    CONFIGMAP_PREFIX
 from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client
 from dingo_command.services.custom_exception import Fail
 
@@ -620,6 +621,18 @@ class AiInstanceService:
                     config_map=V1ConfigMapVolumeSource(name=volumes.configmap_name)
                 )
             )
+
+        # 添加ssh公钥的ConfigMap
+        volume_mounts.append(
+            V1VolumeMount(name=CONFIGMAP_PREFIX + user_id, mount_path=AI_INSTANCE_CM_MOUNT_PATH_SSHKEY,
+                          sub_path=AI_INSTANCE_CM_MOUNT_PATH_SSHKEY_SUB_PATH)
+        )
+        pod_volumes.append(
+            V1Volume(
+                name=CONFIGMAP_PREFIX + user_id,
+                config_map=V1ConfigMapVolumeSource(name=CONFIGMAP_PREFIX + user_id)
+            )
+        )
 
         # 3. 定义容器
         container = V1Container(

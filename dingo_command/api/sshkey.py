@@ -7,8 +7,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from dingo_command.api.model.sshkey import CreateKeyObject
 from dingo_command.services.sshkey import KeyService
 from dingo_command.db.models.sshkey.sql import KeySQL
-from dingo_command.utils.helm.util import ChartLOG as Log
-from dingo_command.utils.helm import util
+from dingo_command.utils.helm.util import SshLOG as Log
 
 
 router = APIRouter()
@@ -75,3 +74,25 @@ async def delete_key(sshkey_id: str):
         traceback.print_exc()
         Log.error(f"delete key error: {str(e)}")
         raise HTTPException(status_code=400, detail=f"delete key error: {str(e)}")
+
+
+@router.get("/sshkey/{sshkey_id}", summary="删除某个repo的仓库", description="删除某个repo的仓库")
+async def get_key(sshkey_id: str):
+    try:
+        # 删除某个key以及它的数据信息
+        Log.info("get key, sshkey_id info %s" % sshkey_id)
+        # 声明查询条件的dict
+        query_params = {}
+        # 查询条件组装
+        if sshkey_id:
+            query_params['id'] = sshkey_id
+        # 显示repo列表的逻辑
+        data = key_service.list_keys(query_params, 1, -1, None, None)
+        if not data.get("data"):
+            raise HTTPException(status_code=404, detail=f"get key error: key not exist")
+        return data.get("data")[0]
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        Log.error(f"delete key error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"get key error: {str(e)}")

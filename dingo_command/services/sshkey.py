@@ -7,7 +7,7 @@ from dingo_command.db.models.sshkey.sql import KeySQL
 from dingo_command.db.models.sshkey.models import KeyInfo
 from dingo_command.api.model.sshkey import CreateKeyObject
 from dingo_command.utils.helm import util
-from dingo_command.utils.helm.util import ChartLOG as Log
+from dingo_command.utils.helm.util import SshLOG as Log
 from dingo_command.utils.k8s_client import get_k8s_core_client
 from dingo_command.utils.constant import CONFIGMAP_PREFIX, NAMESPACE_PREFIX
 

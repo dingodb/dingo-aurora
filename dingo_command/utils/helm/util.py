@@ -100,3 +100,4 @@ def init_logger(service_name):
     return logger
 
 ChartLOG = init_logger("chart")
+SshLOG = init_logger("sshkey")
