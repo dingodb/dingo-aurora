@@ -94,5 +94,5 @@ async def get_key(sshkey_id: str):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        Log.error(f"delete key error: {str(e)}")
+        Log.error(f"get key error: {str(e)}")
         raise HTTPException(status_code=400, detail=f"get key error: {str(e)}")
