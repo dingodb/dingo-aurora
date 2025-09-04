@@ -211,6 +211,7 @@ class HarborService:
                             pull_command=f"docker pull {clean_url}/{project_name}/{repository_name}"
                         )
                     )
+                    repository.update(dict(image_url=clean_url))
 
                     # 获取镜像仓库的标签和详细信息
                     public_project_artifacts = self.harbor.get_repository_artifacts(
@@ -280,6 +281,7 @@ class HarborService:
                         pull_command=f"docker pull {clean_url}/{project_name}/{repository_name}"
                     )
                 )
+                repository.update(dict(image_url=clean_url))
 
                 # 获取镜像仓库的标签和详细信息
                 public_project_artifacts = self.harbor.get_repository_artifacts(
