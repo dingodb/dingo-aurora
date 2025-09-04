@@ -10,6 +10,7 @@ from dingo_command.utils.helm import util
 from dingo_command.utils.helm.util import SshLOG as Log
 from dingo_command.utils.k8s_client import get_k8s_core_client
 from dingo_command.utils.constant import CONFIGMAP_PREFIX, NAMESPACE_PREFIX
+from sshpubkeys import SSHKey
 
 
 class KeyService:
@@ -122,6 +123,13 @@ class KeyService:
             raise ValueError("key_content not found")
         if not name:
             raise ValueError("name not found")
+        # 创建 SSHKey 对象，并启用严格模式以提高验证强度
+        key = SSHKey(key_content, strict_mode=True)
+        try:
+            # 尝试解析和验证公钥
+            key.parse()
+        except Exception as e:
+            raise ValueError(f"ssh key format error: {str(e)}")
         query_params = {}
         query_params['name'] = name
         query_params['user_id'] = user_id

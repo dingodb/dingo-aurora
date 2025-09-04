@@ -76,7 +76,7 @@ async def delete_key(sshkey_id: str):
         raise HTTPException(status_code=400, detail=f"delete key error: {str(e)}")
 
 
-@router.get("/sshkey/{sshkey_id}", summary="删除某个repo的仓库", description="删除某个repo的仓库")
+@router.get("/sshkey/{sshkey_id}", summary="获取某个repo的仓库", description="删除某个repo的仓库")
 async def get_key(sshkey_id: str):
     try:
         # 删除某个key以及它的数据信息
