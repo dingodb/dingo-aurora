@@ -63,6 +63,27 @@ class RedisConnection:
             print(f"Redis set operation failed: {e}")
             return False
 
+    def delete_redis_key(self, redis_key: str) -> bool:
+        """
+        删除Redis中指定的key
+
+        Args:
+            redis_key: 要删除的Redis键名
+
+        Returns:
+            bool: 成功删除返回True (即使key不存在也会返回True)，
+                  如果遇到异常则返回False
+        """
+        if not redis_key:
+            return False
+
+        try:
+            result = self.redis_connection.delete(redis_key)
+            return True
+        except Exception as e:
+            print(f"Redis delete operation failed: {e}")
+            return False
+
 # 声明redis的连接工具
 redis_connection = RedisConnection()
 

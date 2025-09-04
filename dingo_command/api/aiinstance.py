@@ -34,7 +34,7 @@ async def sava_ai_instance_to_image(id: str, request: AiInstanceSavaImageApiMode
     # 容器实例保存为镜像
     try:
         # 容器实例保存为镜像
-        ai_instance_service.sava_ai_instance_to_image(id, request)
+        return ai_instance_service.sava_ai_instance_to_image(id, request)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
@@ -42,9 +42,21 @@ async def sava_ai_instance_to_image(id: str, request: AiInstanceSavaImageApiMode
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"容器实例[{id}]保存为镜像失败:{e}")
 
+@router.get("/ai-instances/{id}/save-image/process_status", summary="容器实例保存为镜像的进度状态", description="容器实例保存为镜像的进度状态")
+async def get_sava_ai_instance_to_image_process_status(id: str):
+    try:
+        # 容器实例保存为镜像
+        return ai_instance_service.sava_ai_instance_to_image_process_status(id)
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"查询容器实例[{id}]保存为镜像状态:{e}")
+
 @router.get("/ai-instance/list", summary="查询容器实例列表", description="查询容器实例列表")
 async def list_ai_instance_infos(
-        uuid:str = Query(None, description="容器实例主键ID"),
+        id:str = Query(None, description="容器实例主键ID"),
         instance_name:str = Query(None, description="容器实例名称"),
         instance_status:str = Query(None, description="容器实例状态"),
         user_id:str = Query(None, description="当前用户ID"),
@@ -58,8 +70,8 @@ async def list_ai_instance_infos(
     # 声明查询条件的dict
         query_params = {}
         # 查询条件组装
-        if uuid:
-            query_params['uuid'] = uuid
+        if id:
+            query_params['id'] = id
         if instance_name:
             query_params['instance_name'] = instance_name
         if instance_status:

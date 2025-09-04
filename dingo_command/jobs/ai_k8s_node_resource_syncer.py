@@ -19,7 +19,7 @@ k8s_common_operate = K8sCommonOperate()
 LOG = log.getLogger(__name__)
 
 def start():
-    node_resource_scheduler.add_job(fetch_ai_k8s_node_resource, 'interval', seconds=60, next_run_time=datetime.now(),  misfire_grace_time=300,coalesce=True, max_instances=1)
+    node_resource_scheduler.add_job(fetch_ai_k8s_node_resource, 'interval', seconds=60*10, next_run_time=datetime.now(),  misfire_grace_time=300,coalesce=True, max_instances=1)
     node_resource_scheduler.start()
 
 def fetch_ai_k8s_node_resource():
@@ -166,7 +166,7 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
     """
     try:
         # 获取节点上所有POD
-        pods = k8s_common_operate.list_pods_by_label_and_node(core_v1=core_client, label_selector="resource-type=ai-instance", node_name=node_name)
+        pods = k8s_common_operate.list_pods_by_label_and_node(core_v1=core_client, label_selector="resource-type=CCI", node_name=node_name)
 
         # 初始化资源使用总量
         total_usage = {

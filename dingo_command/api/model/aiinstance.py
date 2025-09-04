@@ -15,8 +15,8 @@ class InstanceConfigObj(BaseModel):
     system_disk_size: Optional[str] = Field(None, description="系统盘大小(默认单位Gib)")
 
 class StorageObj(BaseModel):
-    configmap_name: Optional[str] = Field(None, description="configmap名称")
-    configmap_path: Optional[str] = Field(None, description="configmap挂载路径")
+    # configmap_name: Optional[str] = Field(None, description="configmap名称")
+    # configmap_path: Optional[str] = Field(None, description="configmap挂载路径")
     pvc_name: Optional[str] = Field(None, description="pvc名称")
     pvc_size: Optional[str] = Field(None, description="pvc大小（默认单位为Gib）")
 
@@ -28,6 +28,7 @@ class StorageObj(BaseModel):
 class AiInstanceApiModel(BaseModel):
     # project_id: Optional[str] = Field(None, description="租户id")
     # project_name: Optional[str] = Field(None, description="租户名称")
+    instance_id: Optional[str] = Field(None, description="容器实例ID，由云上服务bs传下来")
     user_id: Optional[str] = Field(None, description="用户id")
     user_name: Optional[str] = Field(None, description="用户id")
     is_root_account: Optional[bool] = Field(None, description="是否是主账号")
@@ -52,14 +53,17 @@ class AiInstanceSavaImageApiModel(BaseModel):
     image_name: Optional[str] = Field(None, description="镜像名称")
     image_tag: Optional[str] = Field(None, description="镜像Tag")
 
-# k8s kubeconfig配置
-class K8skubeconfigApiModel(BaseModel):
+# k8s configs配置
+class AiK8sConfigsApiModel(BaseModel):
     k8s_id: Optional[str] = Field(None, description="k8s集群ID")
     k8s_name: Optional[str] = Field(None, description="k8s集群名称")
     k8s_type: Optional[str] = Field(None, description="k8s集群类型")
     kubeconfig_path: Optional[str] = Field(None, description="k8s kubeconfig配置文件存放路径")
     kubeconfig_context_name: Optional[str] = Field(None, description="k8s kubeconfig 使用用户")
     kubeconfig: Optional[Any] = Field(None, description="k8s kubeconfig配置文件内容")
+    harbor_address: Optional[str] = Field(None, description="k8s集群使用harbor address")
+    harbor_username: Optional[str] = Field(None, description="k8s集群使用harbor用户名")
+    harbor_password: Optional[str] = Field(None, description="k8s集群使用harbor密码")
 
 # 定时关机请求模型
 class AutoCloseRequest(BaseModel):

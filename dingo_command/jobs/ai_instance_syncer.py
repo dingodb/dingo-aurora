@@ -39,7 +39,7 @@ def auto_actions_tick():
 
 # 将任务注册到 scheduler（与 fetch_ai_instance_info 同步周期一样或独立间隔）
 def start():
-    ai_instance_scheduler.add_job(fetch_ai_instance_info, 'interval', seconds=60*10, next_run_time=datetime.now())
+    ai_instance_scheduler.add_job(fetch_ai_instance_info, 'interval', seconds=60*10, next_run_time=datetime.now(), misfire_grace_time=300,coalesce=True, max_instances=1)
     # ai_instance_scheduler.add_job(auto_actions_tick, 'interval', seconds=60*30, next_run_time=datetime.now())
     ai_instance_scheduler.start()
 
@@ -121,12 +121,12 @@ def process_namespace_resources(namespace: str, instances: list, core_client, ap
     sts_list = k8s_common_operate.list_sts_by_label(
         apps_client,
         namespace=namespace,
-        label_selector="resource-type=ai-instance"
+        label_selector="resource-type=CCI"
     )
     pod_list = k8s_common_operate.list_pods_by_label_and_node(
         core_client,
         namespace=namespace,
-        label_selector="resource-type=ai-instance"
+        label_selector="resource-type=CCI"
     )
 
     # 2. 构建资源映射

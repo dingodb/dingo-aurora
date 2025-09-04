@@ -11,8 +11,6 @@ CONFIGMAP_PREFIX = "cm-ssh-key-"
 AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT = "/root/public-system/"
 #容器实例PVC默认挂载路径
 AI_INSTANCE_PVC_MOUNT_PATH_DEFAULT="/root/pvc"
-#容器实例configMap默认挂载路径
-AI_INSTANCE_CM_MOUNT_PATH_DEFAULT="/root/configmap"
 #容器实例ssh公钥configMap默认挂载路径
 AI_INSTANCE_CM_MOUNT_PATH_SSHKEY="/root/.ssh/authorized_keys"
 AI_INSTANCE_CM_MOUNT_PATH_SSHKEY_SUB_PATH="authorized_keys"
@@ -23,11 +21,7 @@ SYSTEM_DISK_SIZE_DEFAULT = "30Gi"
 #资源类型
 RESOURCE_TYPE = "resource-type"
 APP_LABEL = "app"
-AI_INSTANCE = "ai-instance"
-# grpc相关
-GRPC_SECRET = "/common/grpc_nerdctl/client.crt"
-GRPC_KEY = "/common/grpc_nerdctl/client.key"
-GRPC_CA = "/common/grpc_nerdctl/root_ca.crt"
+AI_INSTANCE = "CCI"
 
 # excel的目录文件
 EXCEL_TEMP_DIR = "/home/dingo_command/temp_excel/"
