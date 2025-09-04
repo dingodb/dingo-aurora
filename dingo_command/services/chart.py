@@ -1,5 +1,3 @@
-import time
-
 import json
 import os
 import uuid
@@ -9,7 +7,6 @@ import shutil
 from requests.auth import HTTPBasicAuth
 from datetime import datetime
 from math import ceil
-from openpyxl.styles import Border, Side
 from yaml import CLoader
 import yaml
 from harborapi import HarborAsyncClient
@@ -26,9 +23,6 @@ from dingo_command.db.models.chart.models import AppInfo as AppDB
 from dingo_command.db.models.chart.models import TagInfo as TagDB
 from dingo_command.db.models.chart.sql import RepoSQL, AppSQL, ChartSQL, TagSQL
 from dingo_command.services.cluster import ClusterService
-from dingo_command.api.model.cluster import KubeClusterObject
-
-from dingo_command.services.system import SystemService
 from dingo_command.services import CONF
 from dingo_command.utils.helm import util
 from dingo_command.utils.helm.util import ChartLOG as Log
@@ -56,8 +50,7 @@ async def create_harbor_repo(repo_name=util.repo_global_name, url=harbor_url, us
         data = ChartService().list_repos(query_params, 1, -1, None, None)
         if data.get("total") > 0:
             # 是否要添加当repo的url修改了，重新创建harbor的仓库的charts包
-            if (data.get("data")[0].url != url and data.get("data")[0].status == util.repo_status_success or
-                    data.get("data")[0].status == util.repo_status_failed):
+            if data.get("data")[0].url != url or data.get("data")[0].status != util.repo_status_success:
                 repo_info_db = data.get("data")[0]
                 repo_info_db.url = url
                 repo_info_db.username = username
@@ -1248,6 +1241,9 @@ class ChartService:
             AppSQL.delete_app(app_data)
         except Exception as e:
             # 写入failed的状态
+            if "not found" in str(e):
+                AppSQL.delete_app(app_data)
+                return
             app_data.status = util.app_status_failed
             app_data.status_msg = str(e)
             AppSQL.update_app(app_data)
