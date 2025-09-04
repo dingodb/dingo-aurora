@@ -1,3 +1,4 @@
+import time
 from typing import Union
 import asyncio
 from datetime import datetime
@@ -6,20 +7,40 @@ from fastapi import Query
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from dingo_command.api.model.chart import CreateRepoObject, CreateAppObject
 from dingo_command.services.chart import ChartService, create_harbor_repo, create_tag_info
-from dingo_command.db.models.chart.sql import RepoSQL, AppSQL, ChartSQL, TagSQL
+from dingo_command.db.models.chart.sql import RepoSQL
 from dingo_command.utils.helm.util import ChartLOG as Log
+from dingo_command.utils.helm.redis_lock import RedisSentinelDistributedLock
+from dingo_command.celery_api import CONF
 from dingo_command.utils.helm import util
 
 router = APIRouter()
 chart_service = ChartService()
+SENTINEL_URL = CONF.redis.sentinel_url
 
 async def init():
     """
     初始化函数，用于初始化一些全局变量
     :return:
     """
-    await create_harbor_repo()
-    create_tag_info()
+    master_name = "kolla"
+    lock = RedisSentinelDistributedLock(
+        sentinel_url=SENTINEL_URL,
+        master_name=master_name,
+        lock_key="my_resource_lock",
+        expire_time=30
+    )
+    try:
+        with lock:
+            await create_harbor_repo()
+            create_tag_info()
+            time.sleep(3)
+    except Exception as e:
+        if "acquire lock" not in str(e):
+            Log.error(f"执行过程中发生错误: {e}")
+            import traceback
+            traceback.print_exc()
+            raise e
+
 
 asyncio.run(init())
 
