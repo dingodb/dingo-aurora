@@ -18,7 +18,7 @@ class K8sCommonOperate:
             namespace = client.V1Namespace(
                 metadata=client.V1ObjectMeta(
                     labels= {
-                        "dc.com/osm.jspolicy.verify":  "false" # 不再校验GPU类型
+                        "dc.com/osm.jspolicy.verify":  "false" # 不再校验GPU类型,之前针对vks的
                     },
                     name=namespace_name,
                 )
@@ -198,7 +198,7 @@ class K8sCommonOperate:
         return all_pods
 
     def list_sts_by_label(self, app_v1: client.AppsV1Api, namespace="",
-                          label_selector="resource-type=ai-instance", limit=2000, timeout_seconds=60):
+                          label_selector="resource-type=CCI", limit=2000, timeout_seconds=60):
         all_sts = []
         continue_token = None
         try:

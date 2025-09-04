@@ -36,7 +36,7 @@ def upgrade() -> None:
 
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('k8s_id', name='uq_k8s_id'),  # 显式定义唯一约束
-        comment='AI k8s集群kube-config配置表'
+        comment='AI k8s集群configs配置表'
     )
 
 def downgrade() -> None:

@@ -119,7 +119,7 @@ class AiInstanceSQL:
                 query = query.filter(AiInstanceInfo.instance_status.in_(instance_status_arr))
             if "is_root_account" in query_params and query_params["is_root_account"]:
                 query = query.filter(AiInstanceInfo.instance_root_account_id == query_params["user_id"])
-            elif query_params["user_id"]:
+            elif "user_id" in query_params and query_params["user_id"]:
                 query = query.filter(AiInstanceInfo.instance_user_id == query_params["user_id"])
 
             # 总数
