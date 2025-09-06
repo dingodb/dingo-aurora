@@ -46,15 +46,18 @@ def fetch_ai_k8s_node_resource():
                     LOG.info(f"k8s cluster {k8s_kubeconfig_db.k8s_id} no available node, clear old data")
                     AiInstanceSQL.delete_k8s_node_resource_by_k8s_id(k8s_kubeconfig_db.k8s_id)
                     continue
-
+                # k8s node 信息
                 k8s_node_map = {node.metadata.name: node for node in k8s_nodes}
 
                 # 获取数据库中记录的节点
                 db_node_map = {node.node_name: node for node in
                             AiInstanceSQL.get_k8s_node_resource_by_k8s_id(k8s_kubeconfig_db.k8s_id)}
+                # 移除node 名称
+                removed_node_names = set(db_node_map.keys()) - set(k8s_node_map.keys())
+                print(f"fetch_ai_k8s_node_resource k8s_node_name:{json.dumps(k8s_node_map.keys())}, db_node_map:{json.dumps(db_node_map.keys())}, removed_node_names:{json.dumps(removed_node_names)}")
 
                 # 处理节点删除场景
-                handle_removed_nodes(k8s_kubeconfig_db.k8s_id, set(db_node_map.keys()) - set(k8s_node_map.keys()))
+                handle_removed_nodes(k8s_kubeconfig_db.k8s_id, removed_node_names)
 
                 for k8s_node in k8s_nodes:
                     # 同步单个node资源
@@ -106,10 +109,12 @@ def sync_node_and_pod_resources(k8s_id, k8s_node, core_client):
     """
     同步单个节点的资源和POD使用量
     """
-    if not sync_node_resource_total(k8s_id, k8s_node, core_client):
+    # 处理node资源总量
+    if not sync_node_resource_total(k8s_id, k8s_node):
         LOG.error(f"k8s [{k8s_id}] node  {k8s_node.metadata.name} resource total sync fail")
         return
 
+    # 处理node资源使用量
     if not sync_pod_resource_usage(k8s_id, k8s_node.metadata.name, core_client):
         LOG.error(f"k8s [{k8s_id}] node {k8s_node.metadata.name} POD resource used sync fail")
         return
@@ -117,12 +122,11 @@ def sync_node_and_pod_resources(k8s_id, k8s_node, core_client):
     LOG.info(f"k8s [{k8s_id}] node {k8s_node.metadata.name} resource sync end")
 
 
-def sync_node_resource_total(k8s_id, k8s_node, core_client):
+def sync_node_resource_total(k8s_id, k8s_node):
     """
     同步节点资源总量到数据库
     :param k8s_id: K8s集群ID
     :param k8s_node: k8s node数据
-    :param core_client: K8s客户端
     :return: 是否同步成功
     """
     try:
@@ -166,7 +170,19 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
     """
     try:
         # 获取节点上所有POD
-        pods = k8s_common_operate.list_pods_by_label_and_node(core_v1=core_client, label_selector="resource-type=CCI", node_name=node_name)
+        pods = k8s_common_operate.list_pods_by_label_and_node(core_v1=core_client, node_name=node_name)
+        if not pods:
+            node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(k8s_id, node_name)
+            if node_resource_db:
+                node_resource_db.less_gpu_pod_count = 0
+                node_resource_db.gpu_pod_count = 0
+                node_resource_db.cpu_used = "0"
+                node_resource_db.memory_used = "0"
+                node_resource_db.gpu_used = "0"
+                node_resource_db.storage_used = "0"
+                AiInstanceSQL.update_k8s_node_resource(node_resource_db)
+                return True
+
 
         # 初始化资源使用总量
         total_usage = {

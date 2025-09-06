@@ -34,7 +34,7 @@ async def sava_ai_instance_to_image(id: str, request: AiInstanceSavaImageApiMode
     # 容器实例保存为镜像
     try:
         # 容器实例保存为镜像
-        return ai_instance_service.sava_ai_instance_to_image(id, request)
+        return ai_instance_service.sava_ai_instance_to_image(id, request.image_name, request.image_tag)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
@@ -302,7 +302,7 @@ async def delete_ai_account_by_id(id: str):
 @router.post("/ai-account/{id}/update", summary="更新账户", description="根据ID更新账户信息")
 async def update_ai_account_by_id(id: str, request: AccountUpdateRequest):
     try:
-        return ai_instance_service.update_ai_account_by_id(id, request.account, request.is_vip)
+        return ai_instance_service.update_ai_account_by_id(id, request.account, request.vip)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:

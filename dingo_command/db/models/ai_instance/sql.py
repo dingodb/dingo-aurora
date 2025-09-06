@@ -106,6 +106,7 @@ class AiInstanceSQL:
                                   AiInstanceInfo.instance_config.label("instance_config"),
                                   AiInstanceInfo.instance_volumes.label("instance_volumes"),
                                   AiInstanceInfo.instance_envs.label("instance_envs"),
+                                  AiInstanceInfo.instance_start_time.label("instance_start_time"),
                                   AiInstanceInfo.instance_create_time.label("instance_create_time"))
 
             # 数据库查询参数

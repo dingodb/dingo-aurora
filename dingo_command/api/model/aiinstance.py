@@ -9,7 +9,7 @@ class InstanceConfigObj(BaseModel):
     compute_model: Optional[str] = Field(None, description="计算资源型号")
     compute_cpu: Optional[str] = Field(None, description="计算资源CPU")
     compute_memory: Optional[str] = Field(None, description="计算资源内存")
-    gpu_memory: Optional[str] = Field(None, description="GPU显存")
+    # gpu_memory: Optional[str] = Field(None, description="GPU显存")
     gpu_model: Optional[str] = Field(None, description="GPU型号")
     gpu_count: Optional[int] = Field(None, description="GPU卡数")
     system_disk_size: Optional[str] = Field(None, description="系统盘大小(默认单位Gib)")
@@ -82,7 +82,7 @@ class AccountCreateRequest(BaseModel):
 
 class AccountUpdateRequest(BaseModel):
     account: Optional[str] = Field(None, description="账户账号")
-    is_vip: Optional[bool] = Field(None, description="是否为VIP账户")
+    vip: Optional[str] = Field(None, description="VIP")
 
 # 开机请求参数
 class StartInstanceModel(BaseModel):

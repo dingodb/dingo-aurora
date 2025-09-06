@@ -4,7 +4,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from dingo_command.common.k8s_common_operate import K8sCommonOperate
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
-from dingo_command.utils.constant import NAMESPACE_PREFIX
+from dingo_command.utils.constant import NAMESPACE_PREFIX, PRODUCT_TYPE_CCI, RESOURCE_TYPE_KEY, DEV_TOOL_JUPYTER
 from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client
 from dingo_command.services.ai_instance import AiInstanceService
 from dingo_command.utils import datetime as datatime_util
@@ -64,6 +64,7 @@ def fetch_ai_instance_info():
                 # 获取client
                 core_k8s_client = get_k8s_core_client(k8s_kubeconfig_db.k8s_id)
                 app_k8s_client = get_k8s_app_client(k8s_kubeconfig_db.k8s_id)
+                networking_k8s_client = get_k8s_app_client(k8s_kubeconfig_db.k8s_id)
             except Exception as e:
                 LOG.error(f"获取k8s[{k8s_kubeconfig_db.k8s_id}_{k8s_kubeconfig_configs_db.k8s_name}] client失败: {e}")
                 continue
@@ -72,7 +73,8 @@ def fetch_ai_instance_info():
             sync_single_k8s_cluster(
                 k8s_id=k8s_kubeconfig_db.k8s_id,
                 core_client=core_k8s_client,
-                apps_client=app_k8s_client
+                apps_client=app_k8s_client,
+                networking_client=networking_k8s_client
             )
     except Exception as e:
         LOG.error(f"同步容器实例失败: {e}")
@@ -81,7 +83,7 @@ def fetch_ai_instance_info():
         LOG.error(f"同步容器实例结束时间: {datatime_util.get_now_time()}, 耗时：{(end_time - start_time).total_seconds()}秒")
 
 
-def sync_single_k8s_cluster(k8s_id: str, core_client, apps_client):
+def sync_single_k8s_cluster(k8s_id: str, core_client, apps_client, networking_client):
     """同步单个K8s集群中的StatefulSet资源"""
     try:
         # 1. 获取数据库中的记录
@@ -104,7 +106,8 @@ def sync_single_k8s_cluster(k8s_id: str, core_client, apps_client):
                     namespace=namespace,
                     instances=instances,
                     core_client=core_client,
-                    apps_client=apps_client
+                    apps_client=apps_client,
+
                 )
             except Exception as e:
                 LOG.error(f"处理namespace[{namespace}]失败: {str(e)}", exc_info=True)
@@ -113,20 +116,18 @@ def sync_single_k8s_cluster(k8s_id: str, core_client, apps_client):
         LOG.error(f"同步K8s集群[{k8s_id}]资源失败: {str(e)}", exc_info=True)
 
 
-def process_namespace_resources(namespace: str, instances: list, core_client, apps_client):
+def process_namespace_resources(namespace: str, instances: list, core_client, apps_client, networking_client):
     """处理单个namespace下的资源"""
     LOG.info(f"开始处理namespace: {namespace}")
 
     # 1. 获取K8s中的资源
     sts_list = k8s_common_operate.list_sts_by_label(
         apps_client,
-        namespace=namespace,
-        label_selector="resource-type=CCI"
+        namespace=namespace
     )
     pod_list = k8s_common_operate.list_pods_by_label_and_node(
         core_client,
-        namespace=namespace,
-        label_selector="resource-type=CCI"
+        namespace=namespace
     )
 
     # 2. 构建资源映射
@@ -141,7 +142,8 @@ def process_namespace_resources(namespace: str, instances: list, core_client, ap
         db_instance_names=db_instance_map.keys(),
         namespace=namespace,
         core_client=core_client,
-        apps_client=apps_client
+        apps_client=apps_client,
+        networking_client=networking_client
     )
 
     # 4. 处理缺失资源: 数据库中存在但K8s中不存在的记录
@@ -158,31 +160,55 @@ def process_namespace_resources(namespace: str, instances: list, core_client, ap
     )
 
 
-def handle_orphan_resources(sts_names, db_instance_names, namespace, core_client, apps_client):
+def handle_orphan_resources(sts_names, db_instance_names, namespace, core_client, apps_client, networking_client):
     """处理K8s中存在但数据库不存在的资源"""
     orphans = set(sts_names) - set(db_instance_names)
     LOG.info(f"======handle_orphan_resources======orphans:{orphans}")
     for name in orphans:
         LOG.info(f"清理孤儿资源: {namespace}/{name}")
-        try:
-            # 删除StatefulSet
-            k8s_common_operate.delete_sts_by_name(
-                apps_client,
-                real_sts_name=name,
-                namespace=namespace
-            )
-        except Exception as e:
-            LOG.error(f"删除sts资源[{namespace}/{name}]失败: {str(e)}")
+        cleanup_cci_resources(apps_client, core_client, networking_client, name, namespace,)
 
-        try:
-            # 删除Service
-            k8s_common_operate.delete_service_by_name(
-                core_client,
-                service_name=name,
-                namespace=namespace
-            )
-        except Exception as e:
-            LOG.error(f"删除svc资源[{namespace}/{name}]失败: {str(e)}")
+
+def cleanup_cci_resources(apps_client, core_client, networking_client, name, namespace,):
+    try:
+        # 删除StatefulSet
+        k8s_common_operate.delete_sts_by_name(
+            apps_client,
+            real_sts_name=name,
+            namespace=namespace
+        )
+    except Exception as e:
+        LOG.error(f"删除sts资源[{namespace}/{name}]失败: {str(e)}")
+
+    try:
+        # 删除default Service
+        k8s_common_operate.delete_service_by_name(
+            core_client,
+            service_name=name,
+            namespace=namespace
+        )
+    except Exception as e:
+        LOG.error(f"删除 default svc资源[{namespace}/{name}]失败: {str(e)}")
+
+    try:
+        # 删除 jupyter Service
+        k8s_common_operate.delete_service_by_name(
+            core_client,
+            service_name=name + "-" + DEV_TOOL_JUPYTER,
+            namespace=namespace
+        )
+    except Exception as e:
+        LOG.error(f"删除 jupyter svc资源[{namespace}/{name}]失败: {str(e)}")
+
+    try:
+        # 删除 ingress rule
+        k8s_common_operate.delete_namespaced_ingress(
+            networking_client,
+            ingress_name=name,
+            namespace=namespace
+        )
+    except Exception as e:
+        LOG.error(f"删除ingress资源[{namespace}/{name}]失败: {str(e)}")
 
 
 def handle_missing_resources(sts_names, db_instances):
