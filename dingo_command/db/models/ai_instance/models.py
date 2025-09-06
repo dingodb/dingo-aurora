@@ -13,6 +13,7 @@ class AiK8sConfigs(Base):
     k8s_id = Column(String(length=128), nullable=True, index=True, unique=True)
     k8s_name = Column(String(length=128), nullable=True)
     k8s_type = Column(String(length=128), nullable=True)
+    public_ip = Column(String(length=128), nullable=True)
     kubeconfig_path = Column(String(length=255), nullable=True)
     kubeconfig_context_name = Column(String(length=128), nullable=True)
     kubeconfig = Column(Text, nullable=False)
@@ -50,6 +51,7 @@ class AiInstanceInfo(Base):
     instance_envs = Column(Text, nullable=True)
     instance_description = Column(Text, nullable=True)
     # data_set = Column(Text)
+    instance_start_time = Column(DateTime, nullable=True)
     instance_create_time = Column(DateTime, nullable=True)
     create_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
     update_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"))
@@ -79,7 +81,7 @@ class AccountInfo(Base):
     __tablename__ = "ops_account_info"
 
     id = Column(String(length=128), primary_key=True, nullable=False, index=True, unique=True)
-    account = Column(String(length=128), nullable=False, index=True, unique=True, comment="账户账号")
-    is_vip = Column(Boolean, nullable=False, default=False, comment="是否是VIP账户")
+    account = Column(String(length=128), nullable=True, comment="账户账号")
+    vip = Column(String(length=128), nullable=True, comment="VIP")
     create_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"), comment="创建时间")
     update_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"), comment="更新时间")

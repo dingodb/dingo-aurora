@@ -17,11 +17,15 @@ AI_INSTANCE_CM_MOUNT_PATH_SSHKEY_SUB_PATH="authorized_keys"
 #容器实例系统盘默认名称
 SYSTEM_DISK_NAME_DEFAULT = "system-disk"
 #容器实例系统盘默认大小
-SYSTEM_DISK_SIZE_DEFAULT = "30Gi"
+SYSTEM_DISK_SIZE_DEFAULT = "50Gi"
 #资源类型
-RESOURCE_TYPE = "resource-type"
+RESOURCE_TYPE_KEY = "dc.com/product.item"
+PRODUCT_TYPE_CCI = "CCI"
 APP_LABEL = "app"
-AI_INSTANCE = "CCI"
+#jupyter开发工具
+DEV_TOOL_JUPYTER = "jupyter"
+#CCI保存为镜像后缀
+SAVE_TO_IMAGE_CCI_SUFFIX = "_saving_to_image_cci"
 
 # excel的目录文件
 EXCEL_TEMP_DIR = "/home/dingo_command/temp_excel/"
@@ -108,4 +112,31 @@ MESSAGE_TYPE_TABLE = {
     "Report_Dwd_Pod_Detail_Five_Minutes": "bsm_dwd_pod_detail_info_five_minutes",
     "Report_Dwd_Tenant_Bandwidth_Detail": "bsm_dwd_tenant_bandwidth_detail_info",
     "Report_Dwd_Operator_Bandwidth_Detail": "bsm_dwd_operator_bandwidth_detail_info",
+}
+
+GPU_CARD_MAPPING = {
+    "NVIDIA-H800A-NV-80G": {
+        "original_name": "NVIDIA-H100-80GB-HBM3",
+        "gpu_code": "nvidia.com/gpu-h100-80gb-hbm3"
+    },
+    "NVIDIA-H800A-NV-96G": {
+        "original_name": "NVIDIA-H100",
+        "gpu_code": "nvidia.com/gpu-h100"
+    },
+    "NVIDIA-L40S-PCIE-48G": {
+        "original_name": "NVIDIA-L40S",
+        "gpu_code": "nvidia.com/gpu-l40s"
+    },
+    "NVIDIA-H800-NV-80G": {
+        "original_name": "NVIDIA-H800",
+        "gpu_code": "nvidia.com/gpu-h800"
+    },
+    "NVIDIA-H800E-NV-141G": {
+        "original_name": "NVIDIA-H200",
+        "gpu_code": "nvidia.com/gpu-h200"
+    },
+    "NVIDIA-H800E-NV-35G": {
+        "original_name": "NVIDIA-H200-MIG",
+        "gpu_code": "nvidia.com/mig-h200-1g.35gb"
+    }
 }

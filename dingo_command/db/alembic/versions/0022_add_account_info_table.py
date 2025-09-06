@@ -24,7 +24,7 @@ def upgrade() -> None:
     op.create_table('ops_account_info',
     sa.Column('id', sa.String(length=128), nullable=False),
     sa.Column('account', sa.String(length=128), nullable=False, comment='账户账号'),
-    sa.Column('is_vip', sa.Boolean(), nullable=False, server_default=sa.text('0'), comment='是否是VIP账户'),
+    sa.Column('vip', sa.String(length=128), nullable=False, comment='VIP'),
     sa.Column('create_time', sa.DateTime(), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP'), comment='创建时间'),
     sa.Column('update_time', sa.DateTime(), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'), comment='更新时间'),
     sa.PrimaryKeyConstraint('id')

@@ -88,6 +88,10 @@ def get_k8s_app_client(k8s_id: str) -> client.AppsV1Api:
     """获取 AppsV1Api 客户端"""
     return get_k8s_client(k8s_id, client.AppsV1Api)
 
+def get_k8s_networking_client(k8s_id: str) -> client.NetworkingV1Api:
+    """获取 NetworkingV1Api 客户端"""
+    return get_k8s_client(k8s_id, client.NetworkingV1Api)
+
 
 def _validate_kubeconfig_config(config_info: AiK8sConfigs, k8s_id: str) -> None:
     """验证配置合法性"""
