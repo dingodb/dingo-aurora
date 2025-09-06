@@ -13,7 +13,8 @@ from math import ceil
 from kubernetes.client import V1PersistentVolumeClaim, V1ObjectMeta, V1PersistentVolumeClaimSpec, \
     V1ResourceRequirements, V1PodTemplateSpec, V1StatefulSet, V1LabelSelector, V1Container, V1VolumeMount, V1Volume, \
     V1ConfigMapVolumeSource, V1EnvVar, V1PodSpec, V1StatefulSetSpec, V1LifecycleHandler, V1ExecAction, V1Lifecycle, \
-    V1ContainerPort, V1Toleration, V1EmptyDirVolumeSource
+    V1ContainerPort, V1Toleration, V1EmptyDirVolumeSource, V1Affinity, V1PodAffinity, V1WeightedPodAffinityTerm, \
+    V1PodAffinityTerm
 from kubernetes import client
 from kubernetes.stream import stream
 from oslo_log import log
@@ -27,7 +28,8 @@ from dingo_command.services.redis_connection import redis_connection, RedisLock
 from dingo_command.utils.constant import NAMESPACE_PREFIX, AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT, \
     SYSTEM_DISK_NAME_DEFAULT, RESOURCE_TYPE_KEY, PRODUCT_TYPE_CCI, AI_INSTANCE_PVC_MOUNT_PATH_DEFAULT, \
     APP_LABEL, AI_INSTANCE_CM_MOUNT_PATH_SSHKEY, AI_INSTANCE_CM_MOUNT_PATH_SSHKEY_SUB_PATH, \
-    CONFIGMAP_PREFIX, DEV_TOOL_JUPYTER, SAVE_TO_IMAGE_CCI_SUFFIX, GPU_CARD_MAPPING, SYSTEM_DISK_SIZE_DEFAULT
+    CONFIGMAP_PREFIX, DEV_TOOL_JUPYTER, SAVE_TO_IMAGE_CCI_SUFFIX, GPU_CARD_MAPPING, SYSTEM_DISK_SIZE_DEFAULT, \
+    GPU_POD_LABEL_KEY, GPU_POD_LABEL_VALUE
 from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client, get_k8s_networking_client
 from dingo_command.services.custom_exception import Fail
 
@@ -302,6 +304,7 @@ class AiInstanceService:
         # 存入redis，镜像推送完成标识
         redis_key = id + SAVE_TO_IMAGE_CCI_SUFFIX
         try:
+            print("进来了")
             redis_connection.set_redis_by_key_with_expire(redis_key, f"{image_name}:{image_tag}", 3600)
 
             # 1. Harbor登录
@@ -441,18 +444,18 @@ class AiInstanceService:
         temp["instance_name"] = r.instance_name
         temp['instance_real_name'] = r.instance_real_name
         temp["instance_status"] = r.instance_status
-        temp["instance_k8s_type"] = r.instance_k8s_type
+        # temp["instance_k8s_type"] = r.instance_k8s_type
         temp["instance_k8s_id"] = r.instance_k8s_id
-        temp["instance_k8s_name"] = r.instance_k8s_name
+        # temp["instance_k8s_name"] = r.instance_k8s_name
         # temp["instance_project_id"] = r.instance_project_id
         # temp["instance_project_name"] = r.instance_project_name
         temp["instance_user_id"] = r.instance_user_id
-        temp["instance_user_name"] = r.instance_user_name
+        # temp["instance_user_name"] = r.instance_user_name
         temp["is_root_account"] = r.is_root_account
         temp["instance_root_account_id"] = r.instance_root_account_id
-        temp["instance_root_account_name"] = r.instance_root_account_name
+        # temp["instance_root_account_name"] = r.instance_root_account_name
         temp["instance_image"] = r.instance_image
-        temp["image_type"] = r.image_type
+        # temp["image_type"] = r.image_type
         temp["stop_time"] = r.stop_time
         temp["auto_delete_time"] = r.auto_delete_time
         if r.instance_config:
@@ -462,7 +465,7 @@ class AiInstanceService:
         if r.instance_envs:
             temp["instance_envs"] = json.loads(r.instance_envs)
         temp["instance_start_time"] = r.instance_start_time
-        temp["instance_create_time"] = r.instance_create_time
+        # temp["instance_create_time"] = r.instance_create_time
         return temp
 
     def create_ai_instance(self, ai_instance):
@@ -524,16 +527,17 @@ class AiInstanceService:
         ai_instance_info_db = AiInstanceInfo(
             instance_name=ai_instance.name,
             instance_status="READY",  # 默认状态，表示准备创建
-            instance_k8s_type=ai_instance.k8s_type,
+            # instance_k8s_type=ai_instance.k8s_type,
             instance_k8s_id=ai_instance.k8s_id,
-            instance_k8s_name=ai_instance.k8s_name,
+            # region_id=ai_instance.region_id,
+            # instance_k8s_name=ai_instance.k8s_name,
             instance_user_id=ai_instance.user_id,
-            instance_user_name=ai_instance.user_name,
+            # instance_user_name=ai_instance.user_name,
             is_root_account=ai_instance.is_root_account,
             instance_root_account_id=ai_instance.root_account_id,
-            instance_root_account_name=ai_instance.root_account_name,
+            # instance_root_account_name=ai_instance.root_account_name,
             instance_image=ai_instance.image,
-            image_type=ai_instance.image_type,
+            # image_type=ai_instance.image_type,
             stop_time=datetime.fromtimestamp(ai_instance.stop_time) if ai_instance.stop_time else None,
             auto_delete_time=datetime.fromtimestamp(ai_instance.auto_delete_time) if ai_instance.auto_delete_time else None,
             instance_config=json.dumps(ai_instance.instance_config.dict()) if ai_instance.instance_config else None,
@@ -589,7 +593,6 @@ class AiInstanceService:
             'cpu': int(instance_config.compute_cpu),
             'memory': instance_config.compute_memory + "Gi",
             'ephemeral-storage': SYSTEM_DISK_SIZE_DEFAULT
-
         }
 
         node_selector_gpu = {}
@@ -601,7 +604,7 @@ class AiInstanceService:
                 raise Fail(f"GPU card mapping not found for model: {instance_config.gpu_model}")
             resource_limits[gpu_card_info['gpu_code']] = instance_config.gpu_count
             node_selector_gpu['nvidia.com/gpu.product'] = gpu_card_info['original_name']
-
+            # 容忍度
             toleration_gpus.append(V1Toleration(
                 key=gpu_card_info['original_name'],
                 operator="Exists",
@@ -743,6 +746,30 @@ class AiInstanceService:
             )
         )
 
+        # 定义 Pod 的亲和性配置
+        affinity = V1Affinity(
+            pod_affinity=V1PodAffinity(
+                preferred_during_scheduling_ignored_during_execution=[
+                    V1WeightedPodAffinityTerm(
+                        weight=100,
+                        pod_affinity_term=V1PodAffinityTerm(
+                            label_selector=V1LabelSelector(
+                                match_expressions=[
+                                    client.V1LabelSelectorRequirement(
+                                        key=GPU_POD_LABEL_KEY,
+                                        operator="In",
+                                        values=[GPU_POD_LABEL_VALUE]
+                                    )
+                                ]
+                            ),
+                            namespace_selector={},  # 空字典表示选择所有命名空间
+                            topology_key="kubernetes.io/hostname"
+                        )
+                    )
+                ]
+            )
+        )
+
         # 定义容器
         container = V1Container(
             name=ai_instance_db.instance_real_name,  # 使用实例的真实名称
@@ -768,10 +795,8 @@ class AiInstanceService:
             # 可以根据需要添加command、args等
         )
 
-        # 定义Pod模板
-        template = V1PodTemplateSpec(
-            metadata=V1ObjectMeta(
-                labels={
+
+        pod_template_labels = {
                     RESOURCE_TYPE_KEY: PRODUCT_TYPE_CCI,
                     APP_LABEL: ai_instance_db.instance_real_name,
                     "dc.com/tenant.instance-id": ai_instance_db.id,
@@ -780,12 +805,20 @@ class AiInstanceService:
                     "dc.com/tenant.source": "user",
                     "dc.com/tenant.user-id": ai_instance.user_id,
                 }
+        if any(key.startswith('nvidia.com/') for key in resource_limits):
+            pod_template_labels[GPU_POD_LABEL_KEY] = GPU_POD_LABEL_VALUE
+
+        # 定义Pod模板
+        template = V1PodTemplateSpec(
+            metadata=V1ObjectMeta(
+                labels=pod_template_labels
             ),
             spec=V1PodSpec(
                 containers=[container],
                 volumes=pod_volumes,
                 node_selector=node_selector_gpu,  # 使用传入的GPU节点选择器
-                tolerations=toleration_gpus  # 使用传入的GPU容忍度
+                tolerations=toleration_gpus,  # 使用传入的GPU容忍度
+                affinity=affinity
             )
         )
 
@@ -922,13 +955,13 @@ class AiInstanceService:
                 LOG.error(f"关机失败，实例ID: {id}, 错误: {e}")
                 raise e
             # 标记为 STOPPED
-            ai_instance_info_db.instance_status = AiInstanceStatus.STOPPED
+            ai_instance_info_db.instance_status = AiInstanceStatus.STOPPED.name
             ai_instance_info_db.instance_real_status = ""
             ai_instance_info_db.stop_time = datetime.now()
             AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
 
             # 释放pod 所在节点node资源
-            node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id(ai_instance_info_db.instance_k8s_id)
+            node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(ai_instance_info_db.instance_k8s_id, ai_instance_info_db.instance_node_name)
             if node_resource_db and ai_instance_info_db.instance_config:
                 instance_config_dict = json.loads(ai_instance_info_db.instance_config)
                 self.update_node_resources(node_resource_db, instance_config_dict, "release")
@@ -940,6 +973,32 @@ class AiInstanceService:
             import traceback
             traceback.print_exc()
             raise e
+
+    async def sava_ai_instance_to_image_backup(self, id, image_name, image_tag):
+        """
+        异步保存AI实例为镜像（立即返回，实际操作在后台执行）
+        """
+        try:
+            ai_instance_info_db = self._validate_and_get_instance_info(id, image_name, image_tag)
+            harbor_address, harbor_username, harbor_password  = self.get_harbor_info(ai_instance_info_db.instance_k8s_id)
+            core_k8s_client, sts_pod_info = self._get_k8s_sts_pod_info(ai_instance_info_db)
+            nerdctl_api_pod = self._get_nerdctl_api_pod(core_k8s_client, sts_pod_info['node_name'])
+            print("拉拉")
+            await self._async_save_operation(
+                id, core_k8s_client, nerdctl_api_pod,
+                sts_pod_info['container_id'], harbor_address, harbor_username, harbor_password,
+                image_name, image_tag
+            )
+
+            return {
+                "status": "accepted",
+                "message": "容器实例保存操作已开始异步执行",
+                "instance_id": id,
+                "image_name": f"{image_name}:{image_tag}"
+            }
+        except Exception as e:
+            print(f"Failed to start save operation for instance {id}: {str(e)}")
+            raise Fail(f"Failed to start save operation: {str(e)}")
 
     def set_auto_close_instance_by_id(self, id: str, auto_close_time: str, auto_close: bool):
         try:
@@ -1029,7 +1088,7 @@ class AiInstanceService:
                     if current_real_status != pod_real_status or current_node_name != pod_located_node_name:
                         pod_real_status = current_real_status
                         pod_located_node_name = current_node_name
-                        self.update_pod_status_and_node_name_in_db(id, pod_real_status, pod_located_node_name)
+                        self.update_pod_status_and_node_name_in_db(instance_id, pod_real_status, pod_located_node_name)
                         print(f"Pod {pod_name} 状态/node name更新为: {pod_real_status}_{pod_located_node_name}")
 
                     # 如果 Pod 处于 Running 状态，退出循环

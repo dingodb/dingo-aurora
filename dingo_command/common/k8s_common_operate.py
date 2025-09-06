@@ -215,7 +215,6 @@ class K8sCommonOperate:
 
         # 创建 Ingress
         try:
-            print(f"create_cci_ingress body:{ingress}")
             api_response = networking_v1.create_namespaced_ingress(
                 namespace=namespace,
                 body=ingress,

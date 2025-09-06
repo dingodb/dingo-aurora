@@ -26,6 +26,8 @@ APP_LABEL = "app"
 DEV_TOOL_JUPYTER = "jupyter"
 #CCI保存为镜像后缀
 SAVE_TO_IMAGE_CCI_SUFFIX = "_saving_to_image_cci"
+GPU_POD_LABEL_KEY = "cci_gpu_pod"
+GPU_POD_LABEL_VALUE = "true"
 
 # excel的目录文件
 EXCEL_TEMP_DIR = "/home/dingo_command/temp_excel/"
