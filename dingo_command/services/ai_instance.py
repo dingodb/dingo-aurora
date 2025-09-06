@@ -852,12 +852,12 @@ class AiInstanceService:
                 raise Fail(f"ai instance[{id}] is not found", error_message=f"容器实例[{id}找不到]")
 
             # 检查实例状态，只有 stopped 状态的实例才能开机
-            if ai_instance_info_db.instance_status != AiInstanceStatus.STOPPED:
+            if ai_instance_info_db.instance_status != AiInstanceStatus.STOPPED.name:
                 raise Fail(f"ai instance[{id}] status is {ai_instance_info_db.instance_status}, cannot start",
                           error_message=f" 容器实例[{id}]状态为{ai_instance_info_db.instance_status}，无法开机")
             # 更新开机时间和开机中状态
             ai_instance_info_db.instance_start_time = datetime.fromtimestamp(datetime.now().timestamp())
-            ai_instance_info_db.instance_status = AiInstanceStatus.STARTING
+            ai_instance_info_db.instance_status = AiInstanceStatus.STARTING.name
             AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
 
             # 获取k8s客户端
@@ -879,8 +879,8 @@ class AiInstanceService:
             except Exception as e:
                 LOG.error(f"开机失败, 实例ID: {id}, 错误: {e}")
                 ai_instance_info_db.instance_start_time = None
-                ai_instance_info_db.instance_status = AiInstanceStatus.RUNNING
-                ai_instance_info_db.instance_real_status = K8sStatus.RUNNING
+                ai_instance_info_db.instance_status = AiInstanceStatus.RUNNING.name
+                ai_instance_info_db.instance_real_status = K8sStatus.RUNNING.name
                 AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
                 raise e
 
@@ -920,27 +920,18 @@ class AiInstanceService:
             app_k8s_client = get_k8s_app_client(ai_instance_info_db.instance_k8s_id)
 
             # 在关机前尝试保存镜像
-            # try:
-            #     LOG.info(f"开始保存实例 {id} 的镜像")
-            #
-            #     # 构建默认的保存镜像请求
-            #     from dingo_command.api.model.aiinstance import AiInstanceSavaImageApiModel
-            #
-            #     # 使用默认配置保存镜像（可以根据需要调整）
-            #     default_save_request = AiInstanceSavaImageApiModel(
-            #         repo_name="dingo-aurora",  # 默认仓库名
-            #         image_label=f"instance-{id}",  # 使用实例ID作为标签
-            #         harbor_username="admin",  # 默认用户名
-            #         harbor_password="Harbor12345"  # 默认密码，实际应该从配置读取
-            #     )
-            #
-            #     # 调用现有的保存镜像方法
-            #     save_result = self.sava_ai_instance_to_image(id, default_save_request)
-            #     LOG.info(f"实例 {id} 镜像保存完成: {save_result}")
-            #
-            # except Exception as e:
-            #     LOG.error(f"保存镜像失败，实例ID: {id}, 错误: {e}")
-            # 镜像保存失败不影响关机流程
+            try:
+                LOG.info(f"开始保存实例 {id} 的镜像")
+
+                # 存储到备份仓库
+                image = f"bac"
+                image_tag = "latest"
+
+                # save_result = self.sava_ai_instance_to_image(id, image, image_tag)
+                # LOG.info(f"实例 {id} 镜像保存: {save_result}")
+            except Exception as e:
+                LOG.error(f"保存镜像失败，实例ID: {id}, 错误: {e}")
+                raise e
 
             # 直接 Patch StatefulSet 副本为 0（关机）
             body = {"spec": {"replicas": 0}}
@@ -1345,32 +1336,22 @@ class AiInstanceService:
 
             svc = core_k8s_client.read_namespaced_service(name=service_name, namespace=namespace_name)
             if not svc or not svc.spec:
-                return {"data": [], "total": 0, "currentPage": page, "pageSize": page_size, "totalPages": 0}
+                return {"status": "success", "data": []}
 
+            k8s_config = AiInstanceSQL.get_k8s_configs_info_by_k8s_id(ai_instance_info_db.instance_k8s_id)
             ports = []
             for p in (svc.spec.ports or []):
                 ports.append({
                     "port": int(p.port) if p.port is not None else None,
                     "targetPort": int(p.target_port) if isinstance(p.target_port, int) else p.target_port,
                     "nodePort": int(p.node_port) if getattr(p, 'node_port', None) is not None else None,
-                    "protocol": p.protocol
+                    "protocol": p.protocol,
+                    "ip": k8s_config.public_ip if k8s_config else None,
                 })
-            total = len(ports)
-            # 分页处理
-            if page and page_size:
-                start = (int(page) - 1) * int(page_size)
-                end = start + int(page_size)
-                paged_ports = ports[start:end]
-                total_pages = (total + int(page_size) - 1) // int(page_size)
-            else:
-                paged_ports = ports
-                total_pages = 1 if total > 0 else 0
+
             return {
-                "data": paged_ports,
-                "total": total,
-                "currentPage": page,
-                "pageSize": page_size,
-                "totalPages": total_pages
+                "status": "success",
+                "data": ports
             }
         except Fail:
             raise
