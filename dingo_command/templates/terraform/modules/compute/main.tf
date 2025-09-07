@@ -29,14 +29,12 @@ data "cloudinit_config" "master-cloudinit" {
 }
 
 data "openstack_networking_network_v2" "admin_network" {
-  count = var.use_existing_network && var.admin_network_id != "" ? 1 : 0
-  network_id  = var.admin_network_id
+  network_id = var.admin_network_id
 }
 
-data "openstack_networking_network_v2" "bus_network" {
-  count = var.use_existing_network && var.bus_network_id != "" ? 1 : 0
-  network_id  = var.bus_network_id
-}
+#data "openstack_networking_network_v2" "bus_network" {
+#  network_id = var.bus_network_id
+#}
 
 resource "random_integer" "master_port" {
   min   = 0
@@ -141,8 +139,8 @@ locals {
         "image_id"       = node.image_id != null ? node.image_id : local.image_to_use_node,
         "volume_size"    = node.volume_size,
         "volume_type"    = node.volume_type,
-        "admin_network_id"   = node.network_id != null ? node.network_id : (var.use_existing_network ? data.openstack_networking_network_v2.admin_network[0].id : var.admin_network_id)
-        "bus_network_id"     = node.network_id != null ? node.network_id : (var.use_existing_network && var.bus_network_id != "" ? data.openstack_networking_network_v2.bus_network[0].id : var.bus_network_id)
+        #"admin_network_id"   = node.network_id != null ? node.network_id : (var.use_existing_network ? data.openstack_networking_network_v2.admin_network[0].id : var.admin_network_id)
+        #"bus_network_id"     = node.network_id != null ? node.network_id : (var.use_existing_network && var.bus_network_id != "" ? data.openstack_networking_network_v2.bus_network[0].id : var.bus_network_id)
         #"server_group"   = node.server_group != null ? node.server_group : openstack_compute_servergroup_v2.secgroup[0].id
       }
   }
@@ -156,27 +154,27 @@ locals {
         "image_id"       = node.image_id != null ? node.image_id : local.image_to_use_master,
         "volume_size"    = node.root_volume_size_in_gb != null ? node.root_volume_size_in_gb : var.master_root_volume_size_in_gb,
         "volume_type"    = node.volume_type != null ? node.volume_type : var.master_volume_type,
-        "admin_network_id"     = node.network_id != null ? node.network_id : (var.use_existing_network  && var.admin_network_id != "" ? data.openstack_networking_network_v2.admin_network[0].id : var.admin_network_id)
-        "bus_network_id"     = node.network_id != null ? node.network_id : (var.use_existing_network && var.bus_network_id != "" ? data.openstack_networking_network_v2.bus_network[0].id : var.bus_network_id)
+        #"admin_network_id"     = node.network_id != null ? node.network_id : (var.use_existing_network  && var.admin_network_id != "" ? data.openstack_networking_network_v2.admin_network[0].id : var.admin_network_id)
+        #"bus_network_id"     = node.network_id != null ? node.network_id : (var.use_existing_network && var.bus_network_id != "" ? data.openstack_networking_network_v2.bus_network[0].id : var.bus_network_id)
         #"server_group"   = node.server_group != null ? node.server_group : openstack_compute_servergroup_v2.secgroup[0].id
       }
   }
 }
-locals {
-  # Only process segments if using existing network and bus_network_id is provided
-  segments_list = var.use_existing_network && var.bus_network_id != "" ? [for s in data.openstack_networking_network_v2.bus_network[0].segments : s] : []
-  # Get first segment (if exists)
-  first_segment = length(local.segments_list) > 0 ? local.segments_list[0] : null
-  # Provide default values to prevent null
-  segmentation_id = local.first_segment != null ? local.first_segment.segmentation_id : "1000"
-  network_type = local.first_segment != null ? local.first_segment.network_type : "vlan"
-  #protforward_external_port = 10000 + floor(random_integer.master_port.result)
-}
+#locals {
+#  # Only process segments if using existing network and bus_network_id is provided
+#  segments_list = var.use_existing_network && var.bus_network_id != "" ? [for s in data.openstack_networking_network_v2.bus_network.segments : s] : []
+#  # Get first segment (if exists)
+#  first_segment = length(local.segments_list) > 0 ? local.segments_list[0] : null
+#  # Provide default values to prevent null
+#  segmentation_id = local.first_segment != null ? local.first_segment.segmentation_id : "1000"
+#  network_type = local.first_segment != null ? local.first_segment.network_type : "vlan"
+#  #protforward_external_port = 10000 + floor(random_integer.master_port.result)
+#}
 
 resource "openstack_networking_port_v2" "admin_master_port" {
   count                 = var.number_of_k8s_masters
   name                  = "${var.cluster_name}-master-admin-${count.index + 1}"
-  network_id            = var.use_existing_network ? data.openstack_networking_network_v2.admin_network[0].id : var.admin_network_id
+  network_id            = data.openstack_networking_network_v2.admin_network.id
   admin_state_up        = "true"
   security_group_ids    = [openstack_networking_secgroup_v2.secgroup.id]
   dynamic "fixed_ip" {
@@ -198,7 +196,7 @@ resource "openstack_networking_port_v2" "admin_master_port" {
 #resource "openstack_networking_port_v2" "business_master_port" {
 #  count                 = var.number_of_k8s_masters
 #  name                  = "${var.cluster_name}-master-bus-${count.index + 1}"
-#  network_id            = var.use_existing_network ? data.openstack_networking_network_v2.bus_network[0].id : var.bus_network_id
+#  network_id            = var.use_existing_network ? data.openstack_networking_network_v2.bus_network.id : var.bus_network_id
 #  admin_state_up        = "true"
 #  port_security_enabled = false
 #  #no_fixed_ip           = true#
@@ -272,7 +270,7 @@ resource "openstack_compute_instance_v2" "k8s-master" {
 resource "openstack_networking_port_v2" "admin_master_no_float_port" {
   count                 = var.number_of_k8s_masters_no_floating_ip
   name                  = "${var.cluster_name}-master-admin-${count.index + var.number_of_k8s_masters}"
-  network_id            = var.use_existing_network ? data.openstack_networking_network_v2.admin_network[0].id : var.admin_network_id
+  network_id            = data.openstack_networking_network_v2.admin_network.id
   admin_state_up        = "true"
   dynamic "fixed_ip" {
     for_each = var.private_subnet_id == "" ? [] : [true]
@@ -294,7 +292,7 @@ resource "openstack_networking_port_v2" "admin_master_no_float_port" {
 #resource "openstack_networking_port_v2" "business_master_port" {
 #  count                 = var.number_of_k8s_masters
 #  name                  = "${var.cluster_name}-master-bus-${count.index + 1}"
-#  network_id            = var.use_existing_network ? data.openstack_networking_network_v2.bus_network[0].id : var.bus_network_id
+#  network_id            = var.use_existing_network ? data.openstack_networking_network_v2.bus_network.id : var.bus_network_id
 #  admin_state_up        = "true"
 #  port_security_enabled = false
 #  #no_fixed_ip           = true#
@@ -369,7 +367,7 @@ resource "openstack_compute_instance_v2" "k8s-master-no-floatip" {
 resource "openstack_networking_port_v2" "nodes_port" {
   for_each              = var.number_of_nodes == 0 && var.number_of_nodes_no_floating_ip == 0 ? var.nodes : {}
   name                  = "${var.cluster_name}-node-${each.key}"
-  network_id            = local.nodes_settings[each.key].admin_network_id
+  network_id            = data.openstack_networking_network_v2.admin_network.id
   admin_state_up        = "true"
   security_group_ids    = [openstack_networking_secgroup_v2.secgroup.id]
   #port_security_enabled = var.force_null_port_security ? null : var.port_security_enabled

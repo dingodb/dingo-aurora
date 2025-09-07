@@ -32,7 +32,8 @@ class IngressClient:
                         key, value = filter_str.split("=", 1)
                         if key in workload_types:
                             matched_services = self._k8s_client.list_resource("services", namespace=namespace, label_selector=labels, field_selector=None, search_terms=filters)
-                            
+            else:
+                return items
             matched_ingresses = []
             for ingress in items:
                 # 检查ingress是否关联到匹配的service

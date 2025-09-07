@@ -10,6 +10,7 @@ module "network" {
   external_net          = var.external_net
   admin_network_name    = var.admin_network_name
   admin_network_id      = var.admin_network_id
+  bus_network_id        = var.bus_network_id
   bus_network_name      = var.bus_network_name
   subnet_cidr           = var.subnet_cidr 
   cluster_name          = var.cluster_name

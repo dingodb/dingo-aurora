@@ -55,7 +55,7 @@ class ClusterService:
         """根据节点类型返回az值"""
         return "nova" if node_type == "vm" else ""
 
-    def generate_k8s_nodes(self, cluster: ClusterObject, k8s_masters, k8s_nodes):
+    def generate_k8s_nodes(self, cluster: ClusterObject, k8s_nodes):
         forward_float_ip_id = ""
         if cluster.forward_float_ip_id:
             forward_float_ip_id = cluster.forward_float_ip_id
@@ -73,12 +73,15 @@ class ClusterService:
         for idx, node in enumerate(cluster.node_config):
             if node.role == "master" and node.type == "vm":
                 for i in range(node.count):
-                    k8s_masters[f"master-{int(master_index)}"] = NodeGroup(
+                    k8s_nodes[f"master-{int(master_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
-                        flavor=master_flavor_id,
-                        floating_ip=True,
+                        flavor=node.flavor_id,
+                        floating_ip=False,
                         etcd=True,
-                        image_id=master_image_id
+                        image_id=node.image,
+                        use_local_disk = node.use_local_disk,
+                        volume_size=node.volume_size,
+                        volume_type=node.volume_type
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
@@ -541,7 +544,7 @@ class ClusterService:
             cluster.id = cluster_info_db.id
             k8s_masters = {}
             k8s_nodes = {}
-            node_list, instance_list = self.generate_k8s_nodes(cluster, k8s_masters, k8s_nodes)
+            node_list, instance_list = self.generate_k8s_nodes(cluster, k8s_nodes)
 
             # 保存instance信息到数据库
             instance_db_list, instance_bm_list = self.convert_instance_todb(cluster, k8s_nodes)
@@ -560,7 +563,7 @@ class ClusterService:
             if not cluster.forward_float_ip_id:
                 cluster.forward_float_ip_id = ""
             use_existing_network = False
-            if cluster.network_config.admin_network_id == "":
+            if cluster.network_config != None and cluster.network_config.admin_network_id != None and cluster.network_config.admin_network_id != "":
                 use_existing_network = True
             tfvars = ClusterTFVarsObject(
                 id = cluster_info_db.id,
@@ -576,17 +579,20 @@ class ClusterService:
                 use_existing_network=use_existing_network,
                 ssh_user=cluster.node_config[0].user,
                 k8s_master_loadbalancer_enabled=lb_enbale,
-                number_of_k8s_masters = 1,
-                number_of_k8s_masters_no_floating_ip = cluster.kube_info.number_master - 1,
+                number_of_k8s_masters = 0,
+                number_of_k8s_masters_no_floating_ip = 0,
                 token = token,
                 auth_url = auth_url,
                 tenant_id=cluster.project_id,
                 forward_float_ip_id = cluster.forward_float_ip_id,
-                image_master = master_image
+                image_master = master_image,
+                admin_subnet_id=cluster.network_config.admin_subnet_id
                 )
             if cluster.node_config[0].auth_type == "password":
                 tfvars.password = cluster.node_config[0].password
             elif cluster.node_config[0].auth_type == "keypair":
+                tfvars.password = ""
+            else:
                 tfvars.password = ""
             #组装cluster信息为ClusterTFVarsObject格式
             if cluster.type == "baremetal":
