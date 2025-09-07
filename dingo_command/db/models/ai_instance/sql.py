@@ -89,39 +89,33 @@ class AiInstanceSQL:
                                   AiInstanceInfo.instance_name.label("instance_name"),
                                   AiInstanceInfo.instance_real_name.label("instance_real_name"),
                                   AiInstanceInfo.instance_status.label("instance_status"),
-                                  AiInstanceInfo.instance_k8s_type.label("instance_k8s_type"),
                                   AiInstanceInfo.instance_k8s_id.label("instance_k8s_id"),
-                                  AiInstanceInfo.instance_k8s_name.label("instance_k8s_name"),
                                   # AiInstanceInfo.instance_project_id.label("instance_project_id"),
                                   # AiInstanceInfo.instance_project_name.label("instance_project_name"),
                                   AiInstanceInfo.instance_user_id.label("instance_user_id"),
-                                  AiInstanceInfo.instance_user_name.label("instance_user_name"),
-                                  AiInstanceInfo.is_root_account.label("is_root_account"),
                                   AiInstanceInfo.instance_root_account_id.label("instance_root_account_id"),
-                                  AiInstanceInfo.instance_root_account_name.label("instance_root_account_name"),
                                   AiInstanceInfo.instance_image.label("instance_image"),
-                                  AiInstanceInfo.image_type.label("image_type"),
                                   AiInstanceInfo.stop_time.label("stop_time"),
                                   AiInstanceInfo.auto_delete_time.label("auto_delete_time"),
                                   AiInstanceInfo.instance_config.label("instance_config"),
                                   AiInstanceInfo.instance_volumes.label("instance_volumes"),
                                   AiInstanceInfo.instance_envs.label("instance_envs"),
                                   AiInstanceInfo.instance_start_time.label("instance_start_time"),
-                                  AiInstanceInfo.instance_create_time.label("instance_create_time"))
+                                  )
 
             # 数据库查询参数
             if "instance_name" in query_params and query_params["instance_name"]:
                 query = query.filter(AiInstanceInfo.instance_name.like('%' + str(query_params["instance_name"]) + '%'))
-            if "uuid" in query_params and query_params["uuid"]:
-                query = query.filter(AiInstanceInfo.id == query_params["uuid"])
+            if "id" in query_params and query_params["id"]:
+                query = query.filter(AiInstanceInfo.id == query_params["id"])
             if "instance_status" in query_params and query_params["instance_status"]:
                 # 状态拆分
                 instance_status_arr = query_params["instance_status"].split(",")
                 query = query.filter(AiInstanceInfo.instance_status.in_(instance_status_arr))
-            if "is_root_account" in query_params and query_params["is_root_account"]:
-                query = query.filter(AiInstanceInfo.instance_root_account_id == query_params["user_id"])
-            elif "user_id" in query_params and query_params["user_id"]:
-                query = query.filter(AiInstanceInfo.instance_user_id == query_params["user_id"])
+            if "instance_root_account_id" in query_params and query_params["instance_root_account_id"]:
+                query = query.filter(AiInstanceInfo.instance_root_account_id == query_params["instance_root_account_id"])
+            elif "instance_user_id" in query_params and query_params["instance_user_id"]:
+                query = query.filter(AiInstanceInfo.instance_user_id == query_params["instance_user_id"])
 
             # 总数
             count = query.count()
@@ -132,7 +126,7 @@ class AiInstanceSQL:
                 elif sort_dirs == "descend":
                     query = query.order_by(ai_instance_dir_dic[sort_keys].desc())
             else:
-                query = query.order_by(AiInstanceInfo.instance_create_time.desc())
+                query = query.order_by(AiInstanceInfo.create_time.desc())
             # 分页条件
             page_size = int(page_size)
             page_num = int(page)

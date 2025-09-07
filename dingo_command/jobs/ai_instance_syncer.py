@@ -56,17 +56,17 @@ def fetch_ai_instance_info():
 
         for k8s_kubeconfig_db in k8s_kubeconfig_configs_db:
             if not k8s_kubeconfig_db.k8s_id:
-                print(f"k8s 集群[{k8s_kubeconfig_db.k8s_name}], k8s type:{k8s_kubeconfig_db.k8s_type} id empty")
+                print(f"k8s cluster id empty")
                 continue
 
-            print(f"处理K8s集群: ID={k8s_kubeconfig_db.k8s_id}, Name={k8s_kubeconfig_db.k8s_name}, Type={k8s_kubeconfig_db.k8s_type}")
+            print(f"处理K8s集群: ID={k8s_kubeconfig_db.k8s_id}, Type={k8s_kubeconfig_db.k8s_type}")
             try:
                 # 获取client
                 core_k8s_client = get_k8s_core_client(k8s_kubeconfig_db.k8s_id)
                 app_k8s_client = get_k8s_app_client(k8s_kubeconfig_db.k8s_id)
                 networking_k8s_client = get_k8s_app_client(k8s_kubeconfig_db.k8s_id)
             except Exception as e:
-                LOG.error(f"获取k8s[{k8s_kubeconfig_db.k8s_id}_{k8s_kubeconfig_configs_db.k8s_name}] client失败: {e}")
+                LOG.error(f"获取k8s[{k8s_kubeconfig_db.k8s_id}] client失败: {e}")
                 continue
 
             # 同步处理单个K8s集群
@@ -107,7 +107,7 @@ def sync_single_k8s_cluster(k8s_id: str, core_client, apps_client, networking_cl
                     instances=instances,
                     core_client=core_client,
                     apps_client=apps_client,
-
+                    networking_client=networking_client
                 )
             except Exception as e:
                 LOG.error(f"处理namespace[{namespace}]失败: {str(e)}", exc_info=True)
