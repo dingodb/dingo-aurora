@@ -161,12 +161,13 @@ class K8sCommonOperate:
         except Exception as e:
             print(f"创建Service时发生系统异常: {e}")
 
-    def create_cci_ingress_rule(self, networking_v1: client.NetworkingV1Api, instance_id: str, namespace: str, service_name: str, k8s_id: str):
+    def create_cci_ingress_rule(self, networking_v1: client.NetworkingV1Api, instance_id: str, namespace: str, service_name: str, k8s_id: str, region_id: str):
         """创建Ingress Service"""
         # 定义变量
         ingress_name = f"cci-{service_name}-ingress"
         user_cci_pod_service_name = service_name + "-" + DEV_TOOL_JUPYTER  # 替换为实际 jupter Service 名称
-        region_id = "hd-00"  # 替换为实际 region_id
+        if not region_id:  # 替换为实际 region_id, 云上会传过来
+            region_id = "default"
         zone_id = k8s_id  # 替换为实际 zone_id
         cci_pod_name = service_name + '-0'  # 替换为实际 Pod 名称
 
@@ -454,7 +455,7 @@ class K8sCommonOperate:
             print(f"Exception when calling NetworkingV1Api->delete_namespaced_ingress {ingress_name}: {e}")
             raise e
 
-    def list_node(self, core_v1: client.CoreV1Api):
+    def list_node(self, core_v1: client.CoreV1Api, label_selector="kubernetes.io/role"):
         """
        查询所有node基础信息
 
@@ -462,7 +463,10 @@ class K8sCommonOperate:
        :return: 对象，查询失败返回 e
        """
         try:
-            return core_v1.list_node()
+            kwargs = {
+                "label_selector": label_selector
+            }
+            return core_v1.list_node(**kwargs).items
         except ApiException as e:
             print(f"查询Node失败: {e.reason} (状态码: {e.status})")
             raise e.reason

@@ -74,6 +74,8 @@ class AiInstanceService:
             except Exception as e:
                 LOG.error(f"删除ingress资源[{namespace_name}/{real_name}-jupyter]失败: {str(e)}")
 
+            # TODO: 删除关机保存镜像
+            
             try:
                 k8s_common_operate.delete_sts_by_name(app_k8s_client, real_name, namespace_name)
             except Exception as e:
@@ -87,7 +89,7 @@ class AiInstanceService:
         AiInstanceSQL.delete_ai_instance_info_by_id(id)
 
         # 移除pod在ops_ai_k8s_node_resource表中的资源占用
-        node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id(ai_instance_info_db.instance_k8s_id)
+        node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(ai_instance_info_db.instance_k8s_id, ai_instance_info_db.instance_node_name)
         if node_resource_db and ai_instance_info_db.instance_config:
             instance_config_dict = json.loads(ai_instance_info_db.instance_config)
             self.update_node_resources(node_resource_db, instance_config_dict, "release")
@@ -304,7 +306,6 @@ class AiInstanceService:
         # 存入redis，镜像推送完成标识
         redis_key = id + SAVE_TO_IMAGE_CCI_SUFFIX
         try:
-            print("进来了")
             redis_connection.set_redis_by_key_with_expire(redis_key, f"{image_name}:{image_tag}", 3600)
 
             # 1. Harbor登录
@@ -444,18 +445,10 @@ class AiInstanceService:
         temp["instance_name"] = r.instance_name
         temp['instance_real_name'] = r.instance_real_name
         temp["instance_status"] = r.instance_status
-        # temp["instance_k8s_type"] = r.instance_k8s_type
         temp["instance_k8s_id"] = r.instance_k8s_id
-        # temp["instance_k8s_name"] = r.instance_k8s_name
-        # temp["instance_project_id"] = r.instance_project_id
-        # temp["instance_project_name"] = r.instance_project_name
         temp["instance_user_id"] = r.instance_user_id
-        # temp["instance_user_name"] = r.instance_user_name
-        temp["is_root_account"] = r.is_root_account
         temp["instance_root_account_id"] = r.instance_root_account_id
-        # temp["instance_root_account_name"] = r.instance_root_account_name
         temp["instance_image"] = r.instance_image
-        # temp["image_type"] = r.image_type
         temp["stop_time"] = r.stop_time
         temp["auto_delete_time"] = r.auto_delete_time
         if r.instance_config:
@@ -465,7 +458,6 @@ class AiInstanceService:
         if r.instance_envs:
             temp["instance_envs"] = json.loads(r.instance_envs)
         temp["instance_start_time"] = r.instance_start_time
-        # temp["instance_create_time"] = r.instance_create_time
         return temp
 
     def create_ai_instance(self, ai_instance):
@@ -527,17 +519,10 @@ class AiInstanceService:
         ai_instance_info_db = AiInstanceInfo(
             instance_name=ai_instance.name,
             instance_status="READY",  # 默认状态，表示准备创建
-            # instance_k8s_type=ai_instance.k8s_type,
             instance_k8s_id=ai_instance.k8s_id,
-            # region_id=ai_instance.region_id,
-            # instance_k8s_name=ai_instance.k8s_name,
             instance_user_id=ai_instance.user_id,
-            # instance_user_name=ai_instance.user_name,
-            is_root_account=ai_instance.is_root_account,
             instance_root_account_id=ai_instance.root_account_id,
-            # instance_root_account_name=ai_instance.root_account_name,
             instance_image=ai_instance.image,
-            # image_type=ai_instance.image_type,
             stop_time=datetime.fromtimestamp(ai_instance.stop_time) if ai_instance.stop_time else None,
             auto_delete_time=datetime.fromtimestamp(ai_instance.auto_delete_time) if ai_instance.auto_delete_time else None,
             instance_config=json.dumps(ai_instance.instance_config.dict()) if ai_instance.instance_config else None,
@@ -647,7 +632,7 @@ class AiInstanceService:
         # 3、创建ingress 规则，端口是8888
         k8s_common_operate.create_cci_ingress_rule(
             self.networking_k8s_client, ai_instance_db.id, namespace_name,
-            ai_instance_db.instance_real_name, ai_instance_db.instance_k8s_id
+            ai_instance_db.instance_real_name, ai_instance_db.instance_k8s_id, ai_instance.region_id
         )
 
         # 4、创建sshkey的configmap（如果有就跳过，没有就创建）
@@ -658,10 +643,9 @@ class AiInstanceService:
 
         # 5、创建StatefulSet
         sts_data = self._assemble_sts_data(ai_instance, ai_instance_db, namespace_name, resource_config)
-        created_sts = k8s_common_operate.create_sts_pod(self.app_k8s_client, namespace_name, sts_data)
+        k8s_common_operate.create_sts_pod(self.app_k8s_client, namespace_name, sts_data)
 
-        # 更新数据库信息
-        ai_instance_db.instance_create_time = created_sts.metadata.creation_timestamp
+        # 保存数据库信息
         AiInstanceSQL.update_ai_instance_info(ai_instance_db)
 
     def _get_service_ip(self, ai_instance_db):
@@ -704,18 +688,20 @@ class AiInstanceService:
 
 
         # 准备Volume和VolumeMount
-        volume_mounts = [
-            V1VolumeMount(name=SYSTEM_DISK_NAME_DEFAULT, mount_path=AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT)
-        ]
-
-        pod_volumes = [
-            V1Volume(
-                name=SYSTEM_DISK_NAME_DEFAULT,
-                empty_dir=V1EmptyDirVolumeSource(
-                    size_limit=resource_limits.get('ephemeral-storage', '50Gi')  # 从资源限制中获取或使用默认值
-                )
-            )
-        ]
+        volume_mounts = []
+        pod_volumes = []
+        # volume_mounts = [
+        #     V1VolumeMount(name=SYSTEM_DISK_NAME_DEFAULT, mount_path=AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT)
+        # ]
+        #
+        # pod_volumes = [
+        #     V1Volume(
+        #         name=SYSTEM_DISK_NAME_DEFAULT,
+        #         empty_dir=V1EmptyDirVolumeSource(
+        #             size_limit=resource_limits.get('ephemeral-storage', '50Gi')  # 从资源限制中获取或使用默认值
+        #         )
+        #     )
+        # ]
 
         # 处理PVC (从ai_instance.volumes中获取信息)
         pvc_template = None
@@ -781,17 +767,17 @@ class AiInstanceService:
                 limits=resource_limits
             ),
             volume_mounts=volume_mounts,
-            lifecycle=V1Lifecycle(
-                post_start=V1LifecycleHandler(
-                    _exec=V1ExecAction(
-                        command=[
-                            "/bin/sh",
-                            "-c",
-                            f"mkdir -p {AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT} && chmod 755 {AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT}"
-                        ]
-                    )
-                )
-            )
+            # lifecycle=V1Lifecycle(
+            #     post_start=V1LifecycleHandler(
+            #         _exec=V1ExecAction(
+            #             command=[
+            #                 "/bin/sh",
+            #                 "-c",
+            #                 f"mkdir -p {AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT} && chmod 755 {AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT}"
+            #             ]
+            #         )
+            #     )
+            # )
             # 可以根据需要添加command、args等
         )
 
@@ -858,17 +844,34 @@ class AiInstanceService:
             # 更新开机时间和开机中状态
             ai_instance_info_db.instance_start_time = datetime.fromtimestamp(datetime.now().timestamp())
             ai_instance_info_db.instance_status = AiInstanceStatus.STARTING.name
+            ai_instance_info_db.instance_real_status = K8sStatus.PENDING.value
             AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
 
             # 获取k8s客户端
             app_k8s_client = get_k8s_app_client(ai_instance_info_db.instance_k8s_id)
+            core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
 
             # 命名空间名称与实例名
             namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
             real_name = ai_instance_info_db.instance_real_name
-
+            # image_name = id + "_" + self.extract_image_name(ai_instance_info_db.instance_image)
+            image_name = id + "_" + "test"
             # 直接 Patch StatefulSet 副本为 1（开机）
-            body = {"spec": {"replicas": 1}}
+            body = {
+                "spec": {
+                    "replicas": 1,  # 修改副本数
+                    "template": {
+                        "spec": {
+                            "containers": [  # 这是一个列表，需要指定容器标识
+                                {
+                                    "name": real_name,  # 关键：通过名称标识要修改的容器
+                                    "image": f"10.220.50.116:9090/anc-public/{image_name}:latest"  # 然后更新它的镜像
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
             try:
                 app_k8s_client.patch_namespaced_stateful_set(
                     name=real_name,
@@ -879,14 +882,14 @@ class AiInstanceService:
             except Exception as e:
                 LOG.error(f"开机失败, 实例ID: {id}, 错误: {e}")
                 ai_instance_info_db.instance_start_time = None
-                ai_instance_info_db.instance_status = AiInstanceStatus.RUNNING.name
-                ai_instance_info_db.instance_real_status = K8sStatus.RUNNING.name
+                ai_instance_info_db.instance_status = AiInstanceStatus.STOPPED.name
+                ai_instance_info_db.instance_real_status = None
                 AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
                 raise e
 
             # 后台检查pod状态
             self._start_async_check_task(
-                self.core_k8s_client,
+                core_k8s_client,
                 ai_instance_info_db.instance_k8s_id,
                 ai_instance_info_db.id,
                 f"{ai_instance_info_db.instance_real_name}-0",
@@ -899,8 +902,8 @@ class AiInstanceService:
             # 回滚数据
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             ai_instance_info_db.instance_start_time = None
-            ai_instance_info_db.instance_status = AiInstanceStatus.RUNNING
-            ai_instance_info_db.instance_real_status = K8sStatus.RUNNING
+            ai_instance_info_db.instance_status = AiInstanceStatus.STOPPED.name
+            ai_instance_info_db.instance_real_status = None
             AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
             raise e
 
@@ -912,52 +915,16 @@ class AiInstanceService:
             if not ai_instance_info_db:
                 raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
 
-            # 命名空间名称与实例名
-            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
-            real_name = ai_instance_info_db.instance_real_name
+            # 异步保存镜像
+            asyncio.create_task(
+                self.sava_ai_instance_to_image_backup(id)
+            )
 
-            # 获取k8s客户端
-            app_k8s_client = get_k8s_app_client(ai_instance_info_db.instance_k8s_id)
-
-            # 在关机前尝试保存镜像
-            try:
-                LOG.info(f"开始保存实例 {id} 的镜像")
-
-                # 存储到备份仓库
-                image = f"bac"
-                image_tag = "latest"
-
-                # save_result = self.sava_ai_instance_to_image(id, image, image_tag)
-                # LOG.info(f"实例 {id} 镜像保存: {save_result}")
-            except Exception as e:
-                LOG.error(f"保存镜像失败，实例ID: {id}, 错误: {e}")
-                raise e
-
-            # 直接 Patch StatefulSet 副本为 0（关机）
-            body = {"spec": {"replicas": 0}}
-            try:
-                app_k8s_client.patch_namespaced_stateful_set(
-                    name=real_name,
-                    namespace=namespace_name,
-                    body=body,
-                    _preload_content=False
-                )
-            except Exception as e:
-                LOG.error(f"关机失败，实例ID: {id}, 错误: {e}")
-                raise e
             # 标记为 STOPPED
-            ai_instance_info_db.instance_status = AiInstanceStatus.STOPPED.name
-            ai_instance_info_db.instance_real_status = ""
-            ai_instance_info_db.stop_time = datetime.now()
+            ai_instance_info_db.instance_status = AiInstanceStatus.STOPPING.name
             AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
 
-            # 释放pod 所在节点node资源
-            node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(ai_instance_info_db.instance_k8s_id, ai_instance_info_db.instance_node_name)
-            if node_resource_db and ai_instance_info_db.instance_config:
-                instance_config_dict = json.loads(ai_instance_info_db.instance_config)
-                self.update_node_resources(node_resource_db, instance_config_dict, "release")
-
-            return {"id": id, "status": ai_instance_info_db.instance_status}
+            return {"id": id, "status": AiInstanceStatus.STOPPING.name}
         except Fail:
             raise
         except Exception as e:
@@ -965,31 +932,75 @@ class AiInstanceService:
             traceback.print_exc()
             raise e
 
-    async def sava_ai_instance_to_image_backup(self, id, image_name, image_tag):
+    async def sava_ai_instance_to_image_backup(self, id, image_tag = "latest"):
         """
         异步保存AI实例为镜像（立即返回，实际操作在后台执行）
         """
         try:
-            ai_instance_info_db = self._validate_and_get_instance_info(id, image_name, image_tag)
-            harbor_address, harbor_username, harbor_password  = self.get_harbor_info(ai_instance_info_db.instance_k8s_id)
-            core_k8s_client, sts_pod_info = self._get_k8s_sts_pod_info(ai_instance_info_db)
-            nerdctl_api_pod = self._get_nerdctl_api_pod(core_k8s_client, sts_pod_info['node_name'])
-            print("拉拉")
-            await self._async_save_operation(
-                id, core_k8s_client, nerdctl_api_pod,
-                sts_pod_info['container_id'], harbor_address, harbor_username, harbor_password,
-                image_name, image_tag
-            )
+            ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
+            if ai_instance_info_db:
+                # image_name = id + "_" + self.extract_image_name(ai_instance_info_db.instance_image)
+                image_name = id + "_" + "test"
+                harbor_address, harbor_username, harbor_password  = self.get_harbor_info(ai_instance_info_db.instance_k8s_id)
+                core_k8s_client, sts_pod_info = self._get_k8s_sts_pod_info(ai_instance_info_db)
+                nerdctl_api_pod = self._get_nerdctl_api_pod(core_k8s_client, sts_pod_info['node_name'])
 
-            return {
-                "status": "accepted",
-                "message": "容器实例保存操作已开始异步执行",
-                "instance_id": id,
-                "image_name": f"{image_name}:{image_tag}"
-            }
+                await self._async_save_operation(
+                    id, core_k8s_client, nerdctl_api_pod,
+                    sts_pod_info['container_id'], harbor_address, harbor_username, harbor_password,
+                    image_name, image_tag
+                )
+
+                app_client = get_k8s_app_client(ai_instance_info_db.instance_k8s_id)
+                body = {"spec": {"replicas": 0}}
+                try:
+                    app_client.patch_namespaced_stateful_set(
+                        name=ai_instance_info_db.instance_real_name,
+                        namespace=NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id,
+                        body=body,
+                        _preload_content=False
+                    )
+                except Exception as e:
+                    LOG.error(f"关机失败，实例ID: {id}, 错误: {e}")
+                    ai_instance_info_db.instance_status = AiInstanceStatus.RUNNING.name
+                    ai_instance_info_db.instance_real_status = K8sStatus.RUNNING.value
+                    AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+                    raise e
+
+                # 标记为 STOPPED
+                ai_instance_info_db.instance_status = AiInstanceStatus.STOPPED.name
+                ai_instance_info_db.instance_real_status = None
+                ai_instance_info_db.stop_time = datetime.now()
+                AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+
+                # 释放pod 所在节点node资源
+                node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(
+                    ai_instance_info_db.instance_k8s_id, ai_instance_info_db.instance_node_name)
+                if node_resource_db and ai_instance_info_db.instance_config:
+                    instance_config_dict = json.loads(ai_instance_info_db.instance_config)
+                    self.update_node_resources(node_resource_db, instance_config_dict, "release")
+
         except Exception as e:
             print(f"Failed to start save operation for instance {id}: {str(e)}")
             raise Fail(f"Failed to start save operation: {str(e)}")
+
+    def extract_image_name(self, full_image_address):
+        """
+        从完整的镜像地址中提取出镜像名称（不含仓库地址和标签）。
+
+        参数:
+        full_image_address (str): 完整的镜像地址，例如 "xxxx/anc-public/general/tensorflow:2.16.1-gpu-jupyter"
+
+        返回:
+        str: 提取出的镜像名称，例如 "tensorflow"
+        """
+        # 先分割标签（如果有的话）
+        parts_without_tag = full_image_address.split(':')[0]
+        # 按 '/' 分割路径
+        path_parts = parts_without_tag.split('/')
+        # 镜像名称通常是最后一部分
+        image_name = path_parts[-1]
+        return image_name
 
     def set_auto_close_instance_by_id(self, id: str, auto_close_time: str, auto_close: bool):
         try:
@@ -1120,18 +1131,21 @@ class AiInstanceService:
 
                                 # 处理GPU使用卡数
                                 instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(instance_id)
-                                compute_resource_dict = json.loads(instance_info_db.instance_config)
-                                if ('gpu_model' in compute_resource_dict and
-                                        'gpu_count' in compute_resource_dict and
-                                        compute_resource_dict['gpu_model'] and
-                                        node_resource_db.gpu_model and
-                                        compute_resource_dict['gpu_model'] in node_resource_db.gpu_model):
-                                    current_gpu = self.safe_float(node_resource_db.gpu_used or '0')
-                                    resource_gpu = self.safe_float(compute_resource_dict['gpu_count'])
-                                    node_resource_db.gpu_used = str(max(0, current_gpu - resource_gpu))
+                                compute_resource_dict = json.loads(instance_info_db.instance_config) if instance_info_db else {}
+                                if ('gpu_model' in compute_resource_dict and 'gpu_count' in compute_resource_dict and
+                                        compute_resource_dict['gpu_model'] and node_resource_db.gpu_model):
+                                    if node_resource_db.gpu_used:
+                                        total_gpu = int(node_resource_db.gpu_used) + int(compute_resource_dict['gpu_count'])
+                                        node_resource_db.gpu_used = str(total_gpu)
+                                    else:
+                                        node_resource_db.gpu_used = int(compute_resource_dict['gpu_count'])
+
+                                    node_resource_db.gpu_pod_count += 1
+                                else:
+                                    node_resource_db.less_gpu_pod_count += 1
 
                                 AiInstanceSQL.update_k8s_node_resource(node_resource_db)
-                                LOG.error(f"k8s[{k8s_id}] node[{node_name}] resource update success")
+                                LOG.info(f"k8s[{k8s_id}] node[{node_name}] resource update success")
                             except Exception as e:
                                 LOG.error(f"save k8s node resource fail:{e}")
                                 import traceback
@@ -1148,10 +1162,6 @@ class AiInstanceService:
                 except Exception as e:
                     import traceback
                     traceback.print_exc()
-                    # 检查是否为 NotFound 错误
-                    if "Not Found" in str(e):
-                        print(f"Pod {pod_name} 不存在")
-                        # return  # 直接结束整个函数
 
                     await asyncio.sleep(3)
 
@@ -1584,11 +1594,8 @@ class AiInstanceService:
             operation_factor = 1 if operation == 'allocate' else -1
             print(f"============compute_resource_dict :{compute_resource_dict}")
             # 处理GPU资源（需要型号匹配）
-            if ('gpu_model' in compute_resource_dict and
-                    'gpu_count' in compute_resource_dict and
-                    compute_resource_dict['gpu_model'] and
-                    node_resource_db.gpu_model and
-                    compute_resource_dict['gpu_model'] in node_resource_db.gpu_model):
+            if ('gpu_model' in compute_resource_dict and 'gpu_count' in compute_resource_dict and
+                    compute_resource_dict['gpu_model'] and node_resource_db.gpu_model):
                 current_node_gpu = self.safe_float(node_resource_db.gpu_used or '0')
                 pod_resource_gpu = self.safe_float(compute_resource_dict['gpu_count'])
                 node_resource_db.gpu_used = str(max(0, current_node_gpu + operation_factor * pod_resource_gpu))

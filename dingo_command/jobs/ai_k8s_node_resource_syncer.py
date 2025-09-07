@@ -34,14 +34,14 @@ def fetch_ai_k8s_node_resource():
 
         for k8s_kubeconfig_db in k8s_configs:
             if not k8s_kubeconfig_db.k8s_id:
-                print(f"k8s cluster [{k8s_kubeconfig_db.k8s_name}], k8s type:{k8s_kubeconfig_db.k8s_type} id empty")
+                print(f"k8s cluster id empty")
                 continue
 
-            print(f"handle K8s cluster: ID={k8s_kubeconfig_db.k8s_id}, Name={k8s_kubeconfig_db.k8s_name}, Type={k8s_kubeconfig_db.k8s_type}")
+            print(f"handle K8s cluster: ID={k8s_kubeconfig_db.k8s_id}, Type={k8s_kubeconfig_db.k8s_type}")
             try:
                 # 获取client
                 core_client  = get_k8s_core_client(k8s_kubeconfig_db.k8s_id)
-                k8s_nodes = k8s_common_operate.list_node(core_client).items
+                k8s_nodes = k8s_common_operate.list_node(core_client)
                 if not k8s_nodes:
                     LOG.info(f"k8s cluster {k8s_kubeconfig_db.k8s_id} no available node, clear old data")
                     AiInstanceSQL.delete_k8s_node_resource_by_k8s_id(k8s_kubeconfig_db.k8s_id)
@@ -54,7 +54,7 @@ def fetch_ai_k8s_node_resource():
                             AiInstanceSQL.get_k8s_node_resource_by_k8s_id(k8s_kubeconfig_db.k8s_id)}
                 # 移除node 名称
                 removed_node_names = set(db_node_map.keys()) - set(k8s_node_map.keys())
-                print(f"fetch_ai_k8s_node_resource k8s_node_name:{json.dumps(k8s_node_map.keys())}, db_node_map:{json.dumps(db_node_map.keys())}, removed_node_names:{json.dumps(removed_node_names)}")
+                # print(f"fetch_ai_k8s_node_resource k8s_node_name:{json.dumps(k8s_node_map.keys())}, db_node_map:{json.dumps(db_node_map.keys())}, removed_node_names:{json.dumps(removed_node_names)}")
 
                 # 处理节点删除场景
                 handle_removed_nodes(k8s_kubeconfig_db.k8s_id, removed_node_names)
@@ -68,10 +68,14 @@ def fetch_ai_k8s_node_resource():
                     )
 
             except Exception as e:
-                LOG.error(f"get k8s[{k8s_kubeconfig_db.k8s_id}_{k8s_kubeconfig_db.k8s_name}] client fail: {e}")
+                import traceback
+                traceback.print_exc()
+                LOG.error(f"get k8s[{k8s_kubeconfig_db.k8s_id}] client fail: {e}")
                 continue
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         LOG.error(f"sync k8s node resource fail: {e}")
     finally:
         end_time = datetime.now()
@@ -174,6 +178,7 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
         if not pods:
             node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(k8s_id, node_name)
             if node_resource_db:
+                print(f"sync_pod_resource_usage node_name:{node_name} pod is empty")
                 node_resource_db.less_gpu_pod_count = 0
                 node_resource_db.gpu_pod_count = 0
                 node_resource_db.cpu_used = "0"
@@ -181,7 +186,7 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
                 node_resource_db.gpu_used = "0"
                 node_resource_db.storage_used = "0"
                 AiInstanceSQL.update_k8s_node_resource(node_resource_db)
-                return True
+            return True
 
 
         # 初始化资源使用总量
@@ -209,20 +214,19 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
                         container.resources.limits['memory'])
                     )
 
+                # 内存
+                if container.resources.limits and 'ephemeral-storage' in container.resources.limits:
+                    total_usage['ephemeral-storage'] += float(ai_instance_service.convert_storage_to_gb(
+                        container.resources.limits['ephemeral-storage'])
+                    )
+
                 # GPU
                 if container.resources.limits:
                     for key, value in container.resources.limits.items():
-                        if 'gpu' in key.lower():
+                        if 'nvidia.com/' in key.lower():
                             total_usage['gpu'] += int(value)
                             gpu_model = key
-                            total_usage['gpu_pod_count'] += total_usage['gpu_pod_count']
-
-            # 存储
-            for volume in pod.spec.volumes:
-                if volume.name == "system-disk" and hasattr(volume, "empty_dir"):
-                    empty_dir = volume.empty_dir
-                    if hasattr(empty_dir, "size_limit"):
-                        total_usage['ephemeral-storage'] += float(ai_instance_service.convert_storage_to_gb(empty_dir.size_limit))
+                            total_usage['gpu_pod_count'] += 1
 
         # 更新数据库中的已使用量
         node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(k8s_id, node_name)
