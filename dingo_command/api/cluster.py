@@ -24,13 +24,13 @@ async def get_token(x_auth_token: str = Header(None, alias="X-Auth-Token")):
 async def create_cluster(cluster_object:ClusterObject, token: str = Depends(get_token)):
     try:
         NovaClient(token)
-        if cluster_object.type == "kubernetes":
-            master_config = {}
-            master_config["count"] = cluster_object.kube_info.number_master
-            master_config["role"] = "master"
-            master_config["type"] = "vm"
-            master_config["flavor_id"] = master_flvaor
-            cluster_object.node_config.append(NodeConfigObject(**master_config))
+        # if cluster_object.type == "kubernetes":
+        #     master_config = {}
+        #     master_config["count"] = cluster_object.kube_info.number_master
+        #     master_config["role"] = "master"
+        #     master_config["type"] = "vm"
+        #     master_config["flavor_id"] = master_flvaor
+        #     cluster_object.node_config.append(NodeConfigObject(**master_config))
         cluster_id = cluster_service.create_cluster(cluster_object,token)
         # 操作日志
         #SystemService.create_system_log(OperateLogApiModel(operate_type="create", resource_type="flow", resource_id=cluster_id, resource_name=cluster_object.name, operate_flag=True))
