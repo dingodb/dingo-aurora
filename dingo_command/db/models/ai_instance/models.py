@@ -40,6 +40,7 @@ class AiInstanceInfo(Base):
     instance_config = Column(Text, nullable=True)
     instance_volumes = Column(Text, nullable=True)
     instance_envs = Column(Text, nullable=True)
+    ssh_root_password = Column(String(length=128), nullable=True)
     instance_description = Column(Text, nullable=True)
     # data_set = Column(Text)
     instance_start_time = Column(DateTime, nullable=True)
@@ -68,7 +69,7 @@ class AiK8sNodeResourceInfo(Base):
     update_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"))
 
 class AccountInfo(Base):
-    __tablename__ = "ops_account_info"
+    __tablename__ = "ops_account_vip_info"
 
     id = Column(String(length=128), primary_key=True, nullable=False, index=True, unique=True)
     account = Column(String(length=128), nullable=True, comment="账户账号")

@@ -28,6 +28,8 @@ DEV_TOOL_JUPYTER = "jupyter"
 SAVE_TO_IMAGE_CCI_SUFFIX = "_saving_to_image_cci"
 GPU_POD_LABEL_KEY = "cci_gpu_pod"
 GPU_POD_LABEL_VALUE = "true"
+# 关机保存镜像前缀
+STOP_SAVE_IMAGE_PREFIX = "stop_save_image-"
 
 # excel的目录文件
 EXCEL_TEMP_DIR = "/home/dingo_command/temp_excel/"

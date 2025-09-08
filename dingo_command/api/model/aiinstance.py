@@ -30,7 +30,7 @@ class AiInstanceApiModel(BaseModel):
     name: Optional[str] = Field(None, description="实例名称")
     stop_time: Optional[int] = Field(None, description="实例自动关机时间")
     auto_delete_time: Optional[int] = Field(None, description="实例自动释放时间")
-    instance_config: Optional[InstanceConfigObj] = Field(None, description="实例的计算资源配置（个数、cpu、内存、存储等）")
+    instance_config: Optional[InstanceConfigObj] = Field(None, description="实例的计算资源配置（副本个数、cpu、内存、gpu型号、gpu卡数）")
     instance_envs: Optional[Dict[str, str]] = Field(None, description="实例的环境变量")
     image: Optional[str] = Field(None, description="实例的镜像")
     volumes: Optional[StorageObj] = Field(None, description="实例的卷配置（卷类型、大小、挂载点）")
@@ -38,6 +38,7 @@ class AiInstanceApiModel(BaseModel):
     # data_set: Optional[DataSetObj] = Field(None, description="数据集信息")
 
 class AiInstanceSavaImageApiModel(BaseModel):
+    image_registry: Optional[str] = Field(None, description="Habor仓库地址")
     image_name: Optional[str] = Field(None, description="镜像名称")
     image_tag: Optional[str] = Field(None, description="镜像Tag")
 
@@ -74,8 +75,8 @@ class AccountUpdateRequest(BaseModel):
 
 # 开机请求参数
 class StartInstanceModel(BaseModel):
-    image_type: Optional[str] = Field(None, description="镜像仓库")
-    image: Optional[str] = Field(None, description="镜像名称")
+    image: Optional[str] = Field(None, description="镜像")
+    instance_config: Optional[InstanceConfigObj] = Field(None, description="实例的计算资源配置（副本个数、cpu、内存、gpu型号、gpu卡数）")
 
 class AddPortModel(BaseModel):
     port: int = Field(None, description="服务端口号")

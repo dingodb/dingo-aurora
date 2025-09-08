@@ -238,8 +238,8 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
 
         # 确定实例状态
         k8s_status = determine_instance_real_status(sts, pod)
-        # 实例使用镜像
-        k8s_image = extract_image_info(sts)
+        # # 实例使用镜像
+        # k8s_image = extract_image_info(sts)
         # 环境变量、错误信息等
         pod_details = extract_pod_details(pod)
 
@@ -249,7 +249,7 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
             update_data = {
                 'instance_real_status': k8s_status,
                 'instance_status': AiInstanceService.map_k8s_to_db_status(k8s_status, instance_db.instance_status),
-                'instance_image': k8s_image,
+                # 'instance_image': k8s_image,
                 'instance_node_name': pod.spec.node_name
             }
 
