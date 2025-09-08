@@ -26,7 +26,7 @@ async def create_key(key: CreateKeyObject):
         raise HTTPException(status_code=400, detail=f"create key error: {str(e)}")
 
 
-@router.get("/sshkey/list", summary="helm的repo仓库列表", description="显示helm的repo仓库列表")
+@router.get("/sshkey/list", summary="sshkey列表", description="显示sshkey列表")
 async def list_keys(status: str = Query(None, description="status状态"),
                      name: str = Query(None, description="名称"),
                      id: str = Query(None, description="id"),
@@ -67,7 +67,7 @@ async def list_keys(status: str = Query(None, description="status状态"),
         raise HTTPException(status_code=400, detail=f"list keys error: {str(e)}")
 
 
-@router.delete("/sshkey/{sshkey_id}", summary="删除某个repo的仓库", description="删除某个repo的仓库")
+@router.delete("/sshkey/{sshkey_id}", summary="删除某个sshkey", description="删除某个sshkey")
 async def delete_key(sshkey_id: str):
     try:
         # 删除某个key以及它的数据信息
@@ -80,7 +80,7 @@ async def delete_key(sshkey_id: str):
         raise HTTPException(status_code=400, detail=f"delete key error: {str(e)}")
 
 
-@router.get("/sshkey/{sshkey_id}", summary="获取某个repo的仓库", description="获取某个repo的仓库")
+@router.get("/sshkey/{sshkey_id}", summary="获取某个sshkey", description="获取某个sshkey")
 async def get_key(sshkey_id: str):
     try:
         # 获取某个key以及它的数据信息

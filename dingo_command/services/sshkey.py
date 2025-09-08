@@ -74,7 +74,6 @@ class KeyService:
                     if original_key_count == new_key_count:
                         KeySQL.delete_key(key_info)
                         Log.info("Specified public key not found in ConfigMap.")
-                        return {"success": True, "message": "delete key success"}
                     # 6. 将剩余的公钥重新组合成字符串
                     new_keys_content = '\n'.join(new_key_lines)
                     # 确保以换行符结尾（如果还有内容）
@@ -91,7 +90,6 @@ class KeyService:
                     KeySQL.delete_key(key_info)
                     Log.info(f"Successfully removed SSH public key from ConfigMap.")
                     # 执行删除的操作
-                    return {"success": True, "message": "delete key success"}
 
                 except ApiException as e:
                     if e.status == 404:
@@ -103,6 +101,7 @@ class KeyService:
                 except Exception as e:
                     Log.error(f"Unexpected error occurred: {e}")
                     raise e
+            return {"success": True, "message": "delete key success"}
         else:
             raise ValueError("key not found")
 
@@ -143,6 +142,7 @@ class KeyService:
         k8s_configs = AiInstanceSQL.list_k8s_configs()
         if not k8s_configs:
             raise ValueError("k8s configs not found")
+        key_infos = []
         for k8s_config in k8s_configs:
             k8s_id = k8s_config.k8s_id
             # 2、根据k8s_id获取k8s的client
@@ -227,8 +227,8 @@ class KeyService:
                         )
                         key_info.status = util.key_status_success
                         KeySQL.update_key(key_info)
+                        key_infos.append(key_info)
                         Log.info(f"Successfully created new ConfigMap '{configmap_name}' with the SSH public key.")
-                        return {"success": True, "message": "create key success"}
                     else:
                         # 其他 API 错误
                         key_info.status = util.key_status_failed
@@ -240,10 +240,11 @@ class KeyService:
                 key_info.status = util.key_status_success
                 KeySQL.update_key(key_info)
                 Log.info(f"create key success, key info {key_info}")
-                return {"data": key_info}
+                key_infos.append(key_info)
             except Exception as e:
                 key_info.status = util.key_status_failed
                 key_info.status_msg = str(e)
                 KeySQL.update_key(key_info)
+                key_infos.append(key_info)
                 Log.error(f"Error in create_key: {str(e)}")
-                raise e
+        return {"data": key_infos}
