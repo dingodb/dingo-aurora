@@ -90,10 +90,8 @@ class AiInstanceSQL:
                                   AiInstanceInfo.instance_real_name.label("instance_real_name"),
                                   AiInstanceInfo.instance_status.label("instance_status"),
                                   AiInstanceInfo.instance_k8s_id.label("instance_k8s_id"),
-                                  # AiInstanceInfo.instance_project_id.label("instance_project_id"),
-                                  # AiInstanceInfo.instance_project_name.label("instance_project_name"),
+                                  AiInstanceInfo.instance_tenant_id.label("instance_tenant_id"),
                                   AiInstanceInfo.instance_user_id.label("instance_user_id"),
-                                  AiInstanceInfo.instance_root_account_id.label("instance_root_account_id"),
                                   AiInstanceInfo.instance_image.label("instance_image"),
                                   AiInstanceInfo.stop_time.label("stop_time"),
                                   AiInstanceInfo.auto_delete_time.label("auto_delete_time"),
@@ -112,8 +110,8 @@ class AiInstanceSQL:
                 # 状态拆分
                 instance_status_arr = query_params["instance_status"].split(",")
                 query = query.filter(AiInstanceInfo.instance_status.in_(instance_status_arr))
-            if "instance_root_account_id" in query_params and query_params["instance_root_account_id"]:
-                query = query.filter(AiInstanceInfo.instance_root_account_id == query_params["instance_root_account_id"])
+            if "instance_tenant_id" in query_params and query_params["instance_tenant_id"]:
+                query = query.filter(AiInstanceInfo.instance_tenant_id == query_params["instance_tenant_id"])
             elif "instance_user_id" in query_params and query_params["instance_user_id"]:
                 query = query.filter(AiInstanceInfo.instance_user_id == query_params["instance_user_id"])
 

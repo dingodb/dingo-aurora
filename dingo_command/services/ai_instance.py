@@ -55,7 +55,7 @@ class AiInstanceService:
             core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
             app_k8s_client = get_k8s_app_client(ai_instance_info_db.instance_k8s_id)
             networking_k8s_client = get_k8s_networking_client(ai_instance_info_db.instance_k8s_id)
-            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
+            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id
             real_name = ai_instance_info_db.instance_real_name or ai_instance_info_db.instance_name
 
             try:
@@ -266,7 +266,7 @@ class AiInstanceService:
         pod = k8s_common_operate.get_pod_info(
             core_k8s_client,
             ai_instance_info_db.instance_real_name + "-0",
-            NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
+            NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id
         )
 
         container_id = pod.status.container_statuses[0].container_id
@@ -444,10 +444,13 @@ class AiInstanceService:
         temp["id"] = r.id
         temp["instance_name"] = r.instance_name
         temp['instance_real_name'] = r.instance_real_name
+        temp['pod_name'] = r.instance_real_name + "-0"
         temp["instance_status"] = r.instance_status
         temp["instance_k8s_id"] = r.instance_k8s_id
         temp["instance_user_id"] = r.instance_user_id
-        temp["instance_root_account_id"] = r.instance_root_account_id
+        temp["instance_tenant_id"] = r.instance_tenant_id
+        if r.instance_tenant_id: 
+            temp["namespace"] = "ns-" + r.instance_tenant_id
         temp["instance_image"] = r.instance_image
         temp["stop_time"] = r.stop_time
         temp["auto_delete_time"] = r.auto_delete_time
@@ -491,7 +494,7 @@ class AiInstanceService:
             raise Fail("k8s id is empty", error_message="k8s集群ID为空")
         if not ai_instance.name:
             raise Fail("ai instance name is empty", error_message="容器实例名称为空")
-        if not ai_instance.root_account_id:
+        if not ai_instance.tenant_id:
             raise Fail("ai instance root account is empty", error_message="容器实例所属用户主账号为空")
         if not ai_instance.user_id:
             raise Fail("ai instance user_id is empty", error_message="容器实例所属用户ID为空")
@@ -507,7 +510,7 @@ class AiInstanceService:
 
     def _prepare_namespace(self, ai_instance):
         """准备命名空间"""
-        namespace_name = NAMESPACE_PREFIX + ai_instance.root_account_id
+        namespace_name = NAMESPACE_PREFIX + ai_instance.tenant_id
 
         if not k8s_common_operate.check_ai_instance_ns_exists(self.core_k8s_client, namespace_name):
             k8s_common_operate.create_ai_instance_ns(self.core_k8s_client, namespace_name)
@@ -521,7 +524,7 @@ class AiInstanceService:
             instance_status="READY",  # 默认状态，表示准备创建
             instance_k8s_id=ai_instance.k8s_id,
             instance_user_id=ai_instance.user_id,
-            instance_root_account_id=ai_instance.root_account_id,
+            instance_tenant_id=ai_instance.tenant_id,
             instance_image=ai_instance.image,
             stop_time=datetime.fromtimestamp(ai_instance.stop_time) if ai_instance.stop_time else None,
             auto_delete_time=datetime.fromtimestamp(ai_instance.auto_delete_time) if ai_instance.auto_delete_time else None,
@@ -544,7 +547,7 @@ class AiInstanceService:
             ai_instance_db.instance_k8s_id,
             instance_result.id,
             f"{instance_result.instance_real_name}-0",
-            NAMESPACE_PREFIX + ai_instance_db.instance_root_account_id
+            NAMESPACE_PREFIX + ai_instance_db.instance_tenant_id
         )
 
         return [self.assemble_ai_instance_return_result(instance_result)]
@@ -565,7 +568,7 @@ class AiInstanceService:
                 ai_instance_db.instance_k8s_id,
                 instance_result.id,
                 f"{instance_result.instance_real_name}-0",
-                NAMESPACE_PREFIX + ai_instance_db.instance_root_account_id
+                NAMESPACE_PREFIX + ai_instance_db.instance_tenant_id
             )
 
             results.append(self.assemble_ai_instance_return_result(instance_result))
@@ -650,7 +653,7 @@ class AiInstanceService:
 
     def _get_service_ip(self, ai_instance_db):
         """获取服务IP地址"""
-        account_vip_db = AiInstanceSQL.get_account_info_by_account(ai_instance_db.instance_root_account_id)
+        account_vip_db = AiInstanceSQL.get_account_info_by_account(ai_instance_db.instance_tenant_id)
         if account_vip_db:
             return account_vip_db.vip
 
@@ -756,6 +759,9 @@ class AiInstanceService:
             )
         )
 
+        # USERNAME = "root"
+        # PASSWORD = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+
         # 定义容器
         container = V1Container(
             name=ai_instance_db.instance_real_name,  # 使用实例的真实名称
@@ -778,7 +784,20 @@ class AiInstanceService:
             #         )
             #     )
             # )
-            # 可以根据需要添加command、args等
+
+            # lifecycle=client.V1Lifecycle(
+            #     post_start=client.V1LifecycleHandler(
+            #         _exec=client.V1ExecAction(
+            #             command=[
+            #                 "/bin/bash", "-c",
+            #                 f"""
+            #                 useradd -m -s /bin/bash -u 1000 ${{USERNAME}}
+            #                 echo ${{USERNAME}}:${{PASSWORD}} | chpasswd
+            #                 """
+            #             ]
+            #         )
+            #     )
+            # ),
         )
 
 
@@ -852,7 +871,7 @@ class AiInstanceService:
             core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
 
             # 命名空间名称与实例名
-            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
+            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id
             real_name = ai_instance_info_db.instance_real_name
             # image_name = id + "_" + self.extract_image_name(ai_instance_info_db.instance_image)
             image_name = id + "_" + "test"
@@ -893,7 +912,7 @@ class AiInstanceService:
                 ai_instance_info_db.instance_k8s_id,
                 ai_instance_info_db.id,
                 f"{ai_instance_info_db.instance_real_name}-0",
-                NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
+                NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id
             )
             return {"id": id, "status": ai_instance_info_db.instance_status}
         except Exception as e:
@@ -956,7 +975,7 @@ class AiInstanceService:
                 try:
                     app_client.patch_namespaced_stateful_set(
                         name=ai_instance_info_db.instance_real_name,
-                        namespace=NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id,
+                        namespace=NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id,
                         body=body,
                         _preload_content=False
                     )
@@ -1248,7 +1267,7 @@ class AiInstanceService:
                 raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
 
             core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
-            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
+            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id
             service_name = ai_instance_info_db.instance_real_name
 
             port = int(model.port)
@@ -1297,7 +1316,7 @@ class AiInstanceService:
                 raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
 
             core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
-            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
+            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id
             service_name = ai_instance_info_db.instance_real_name
 
             svc = core_k8s_client.read_namespaced_service(name=service_name, namespace=namespace_name)
@@ -1341,7 +1360,7 @@ class AiInstanceService:
                 raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
 
             core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
-            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
+            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id
             service_name = ai_instance_info_db.instance_real_name or ai_instance_info_db.instance_name
 
             svc = core_k8s_client.read_namespaced_service(name=service_name, namespace=namespace_name)
@@ -1377,7 +1396,7 @@ class AiInstanceService:
                 raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
 
             core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
-            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_root_account_id
+            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id
             service_name = ai_instance_info_db.instance_real_name
 
             # 确保 Service 暴露了 jupyter 端口，如没有则自动新增，并让 k8s 自动分配 nodePort

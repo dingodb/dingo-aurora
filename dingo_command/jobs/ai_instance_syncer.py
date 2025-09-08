@@ -94,7 +94,7 @@ def sync_single_k8s_cluster(k8s_id: str, core_client, apps_client, networking_cl
         # 2. 按namespace分组处理
         namespace_instance_map = {}
         for instance in db_instances:
-            namespace = NAMESPACE_PREFIX + instance.instance_root_account_id
+            namespace = NAMESPACE_PREFIX + instance.instance_tenant_id
             if namespace not in namespace_instance_map:
                 namespace_instance_map[namespace] = []
             namespace_instance_map[namespace].append(instance)
