@@ -23,6 +23,8 @@ class KeySQL:
                 query = query.filter(KeyInfo.id == query_params["id"])
             if "name" in query_params and query_params["name"]:
                 query = query.filter(KeyInfo.name == query_params["name"])
+            if "owner" in query_params and query_params["owner"]:
+                query = query.filter(KeyInfo.owner == query_params["owner"])
             if "status" in query_params and query_params["status"]:
                 query = query.filter(KeyInfo.status == query_params["status"])
             if "tenant_id" in query_params and query_params["tenant_id"]:
