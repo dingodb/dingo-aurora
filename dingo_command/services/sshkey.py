@@ -43,68 +43,74 @@ class KeyService:
         data = self.list_keys(query_params, 1, -1, None, None)
         if data.get("total") > 0:
             key_info = data.get("data")[0]
-            key_info.status = util.key_status_delete
-            KeySQL.update_key(key_info)
-            namespace = key_info.namespace
-            configmap_name = key_info.configmap_name
-            key_content = key_info.key_content
-            k8s_configs = AiInstanceSQL.list_k8s_configs()
-            if not k8s_configs:
-                raise ValueError("k8s configs not found")
-            for k8s_config in k8s_configs:
-                k8s_id = k8s_config.k8s_id
-                try:
-                    core_k8s_client = get_k8s_core_client(k8s_id)
-                    # 2. 获取现有的 ConfigMap
-                    configmap = core_k8s_client.read_namespaced_config_map(name=configmap_name, namespace=namespace)
-                    # 3. 获取当前的 authorized_keys 内容
-                    current_keys = configmap.data.get("authorized_keys", "")
-                    if not current_keys:
-                        KeySQL.delete_key(key_info)
-                        Log.info("No authorized_keys found in ConfigMap.")
-                        return {"success": True, "message": "delete key success"}
-                    # 4. 将内容分割成单独的公钥行
-                    key_lines = current_keys.split('\n')
-                    # 5. 查找并移除指定的公钥
-                    original_key_count = len(key_lines)
-                    # 使用列表推导式移除匹配的行（完全匹配）
-                    new_key_lines = [line for line in key_lines if line.strip() != key_content.strip()]
-                    new_key_count = len(new_key_lines)
-                    # 检查是否实际移除了公钥
-                    if original_key_count == new_key_count:
-                        KeySQL.delete_key(key_info)
-                        Log.info("Specified public key not found in ConfigMap.")
-                    # 6. 将剩余的公钥重新组合成字符串
-                    new_keys_content = '\n'.join(new_key_lines)
-                    # 确保以换行符结尾（如果还有内容）
-                    if new_keys_content and not new_keys_content.endswith('\n'):
-                        new_keys_content += '\n'
-                    # 7. 更新 ConfigMap 数据
-                    configmap.data["authorized_keys"] = new_keys_content
-                    # 8. 应用更新到集群
-                    core_k8s_client.patch_namespaced_config_map(
-                        name=configmap_name,
-                        namespace=namespace,
-                        body=configmap
-                    )
-                    KeySQL.delete_key(key_info)
-                    Log.info(f"Successfully removed SSH public key from ConfigMap.")
-                    # 执行删除的操作
+            query_params = {}
+            query_params['owner'] = key_info.owner
+            data = self.list_keys(query_params, 1, -1, None, None)
+            flag = False
+            for key_info in data.get("data"):
+                key_info.status = util.key_status_delete
+                KeySQL.update_key(key_info)
+                namespace = key_info.namespace
+                configmap_name = key_info.configmap_name
+                key_content = key_info.key_content
+                k8s_configs = AiInstanceSQL.list_k8s_configs()
+                if not k8s_configs:
+                    raise ValueError("k8s configs not found")
+                if not flag:
+                    for k8s_config in k8s_configs:
+                        k8s_id = k8s_config.k8s_id
+                        try:
+                            core_k8s_client = get_k8s_core_client(k8s_id)
+                            # 2. 获取现有的 ConfigMap
+                            configmap = core_k8s_client.read_namespaced_config_map(name=configmap_name, namespace=namespace)
+                            # 3. 获取当前的 authorized_keys 内容
+                            current_keys = configmap.data.get("authorized_keys", "")
+                            if not current_keys:
+                                Log.info("No authorized_keys found in ConfigMap.")
+                                continue
+                            # 4. 将内容分割成单独的公钥行
+                            key_lines = current_keys.split('\n')
+                            # 5. 查找并移除指定的公钥
+                            original_key_count = len(key_lines)
+                            # 使用列表推导式移除匹配的行（完全匹配）
+                            new_key_lines = [line for line in key_lines if line.strip() != key_content.strip()]
+                            new_key_count = len(new_key_lines)
+                            # 检查是否实际移除了公钥
+                            if original_key_count == new_key_count:
+                                Log.info("Specified public key not found in ConfigMap.")
+                                continue
+                            # 6. 将剩余的公钥重新组合成字符串
+                            new_keys_content = '\n'.join(new_key_lines)
+                            # 确保以换行符结尾（如果还有内容）
+                            if new_keys_content and not new_keys_content.endswith('\n'):
+                                new_keys_content += '\n'
+                            # 7. 更新 ConfigMap 数据
+                            configmap.data["authorized_keys"] = new_keys_content
+                            # 8. 应用更新到集群
+                            core_k8s_client.patch_namespaced_config_map(
+                                name=configmap_name,
+                                namespace=namespace,
+                                body=configmap
+                            )
 
-                except ApiException as e:
-                    if e.status == 404:
-                        Log.error(f"ConfigMap '{configmap_name}' not found in namespace '{namespace}'.")
-                        raise ValueError(f"ConfigMap '{configmap_name}' not found in namespace '{namespace}'.") from e
-                    else:
-                        Log.error(f"Failed to access ConfigMap: {e}")
-                        raise e
-                except Exception as e:
-                    Log.error(f"Unexpected error occurred: {e}")
-                    raise e
+
+                        except ApiException as e:
+                            if e.status == 404:
+                                Log.error(f"ConfigMap '{configmap_name}' not found in namespace '{namespace}'.")
+                                raise ValueError(f"ConfigMap '{configmap_name}' not found in namespace '{namespace}'.") from e
+                            else:
+                                Log.error(f"Failed to access ConfigMap: {e}")
+                                raise e
+                        except Exception as e:
+                            Log.error(f"Unexpected error occurred: {e}")
+                            raise e
+                flag = True
+                KeySQL.delete_key(key_info)
+                Log.info(f"Successfully removed SSH public key from ConfigMap.")
+                # 执行删除的操作
             return {"success": True, "message": "delete key success"}
         else:
             raise ValueError("key not found")
-
 
     def create_key(self, create_key_object: CreateKeyObject):
         # 创建key
@@ -143,6 +149,7 @@ class KeyService:
         if not k8s_configs:
             raise ValueError("k8s configs not found")
         key_infos = []
+        owner_id = str(uuid.uuid4())
         for k8s_config in k8s_configs:
             k8s_id = k8s_config.k8s_id
             # 2、根据k8s_id获取k8s的client
@@ -161,7 +168,8 @@ class KeyService:
                 create_time=datetime.now(),
                 namespace=namespace,
                 configmap_name=configmap_name,
-                k8s_id=k8s_id
+                k8s_id=k8s_id,
+                owner=owner_id
             )
             KeySQL.create_key(key_info)
             try:
@@ -229,6 +237,7 @@ class KeyService:
                         KeySQL.update_key(key_info)
                         key_infos.append(key_info)
                         Log.info(f"Successfully created new ConfigMap '{configmap_name}' with the SSH public key.")
+                        continue
                     else:
                         # 其他 API 错误
                         key_info.status = util.key_status_failed

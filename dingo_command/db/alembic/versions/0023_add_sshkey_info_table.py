@@ -24,6 +24,7 @@ def upgrade() -> None:
     op.create_table('ops_sshkey_info',
     sa.Column("id", sa.String(length=256), primary_key=True, nullable=False, index=True),
     sa.Column('name', sa.String(length=256), nullable=False),
+    sa.Column('owner', sa.String(length=256), nullable=True),
     sa.Column('tenant_id', sa.String(length=256), nullable=True),
     sa.Column('description', sa.String(length=256), nullable=True),
     sa.Column('status', sa.String(length=256), nullable=True),
