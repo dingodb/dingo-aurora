@@ -29,7 +29,7 @@ from dingo_command.utils.constant import NAMESPACE_PREFIX, AI_INSTANCE_SYSTEM_MO
     SYSTEM_DISK_NAME_DEFAULT, RESOURCE_TYPE_KEY, PRODUCT_TYPE_CCI, AI_INSTANCE_PVC_MOUNT_PATH_DEFAULT, \
     APP_LABEL, AI_INSTANCE_CM_MOUNT_PATH_SSHKEY, AI_INSTANCE_CM_MOUNT_PATH_SSHKEY_SUB_PATH, \
     CONFIGMAP_PREFIX, DEV_TOOL_JUPYTER, SAVE_TO_IMAGE_CCI_SUFFIX, GPU_CARD_MAPPING, SYSTEM_DISK_SIZE_DEFAULT, \
-    GPU_POD_LABEL_KEY, GPU_POD_LABEL_VALUE
+    GPU_POD_LABEL_KEY, GPU_POD_LABEL_VALUE, STOP_SAVE_IMAGE_PREFIX
 from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client, get_k8s_networking_client
 from dingo_command.services.custom_exception import Fail
 
@@ -169,7 +169,7 @@ class AiInstanceService:
             traceback.print_exc()
             raise e
 
-    def sava_ai_instance_to_image(self, id, image_name, image_tag):
+    def sava_ai_instance_to_image(self, id, image_registry, image_name, image_tag):
         """
         异步保存AI实例为镜像（立即返回，实际操作在后台执行）
         """
@@ -177,10 +177,10 @@ class AiInstanceService:
             with RedisLock(redis_connection.redis_connection, f"ai-instance-image-{id}", expire_time=3600) as lock:
                 if lock:
                     # 参数验证和基本信息获取
-                    ai_instance_info_db = self._validate_and_get_instance_info(id, image_name, image_tag)
+                    ai_instance_info_db = self._validate_and_get_instance_info(id, image_registry, image_name, image_tag)
 
                     # 获取harbor信息
-                    harbor_address, harbor_username, harbor_password  = self.get_harbor_info(ai_instance_info_db.instance_k8s_id)
+                    _, harbor_username, harbor_password  = self.get_harbor_info(ai_instance_info_db.instance_k8s_id)
 
                     # 获取k8s客户端和Pod信息
                     core_k8s_client, sts_pod_info = self._get_k8s_sts_pod_info(ai_instance_info_db)
@@ -192,7 +192,7 @@ class AiInstanceService:
                     asyncio.create_task(
                         self._async_save_operation(
                             id, core_k8s_client, nerdctl_api_pod,
-                            sts_pod_info['container_id'], harbor_address, harbor_username, harbor_password,
+                            sts_pod_info['container_id'], image_registry, harbor_username, harbor_password,
                             image_name, image_tag
                         )
                     )
@@ -236,7 +236,7 @@ class AiInstanceService:
             raise Fail(f"ai instance[{id}] k8s kube configs is not found", error_message=f"容器实例[{id} k8s配置找不到]")
         return  k8s_configs.harbor_address,  k8s_configs.harbor_username,  k8s_configs.harbor_password
 
-    def _validate_and_get_instance_info(self, id, image_name, image_tag):
+    def _validate_and_get_instance_info(self, id, image_registry, image_name, image_tag):
         """验证参数并获取实例信息"""
         ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
         if not ai_instance_info_db:
@@ -244,6 +244,12 @@ class AiInstanceService:
 
         if ai_instance_info_db.instance_status != "RUNNING":
             raise Fail(f"only ai instance[{id}] status is not RUNNING, can to operate", error_message=f"容器实例[{id}仅RUNNING状态支持操作]")
+
+        if not image_registry:
+            raise Fail(
+                f"image name for saving the ai instance to image - [{id}] - is empty.",
+                error_message=f"容器实例[{id}]保存的Harbor仓库地址为空"
+            )
 
         if not image_name:
             raise Fail(
@@ -495,7 +501,7 @@ class AiInstanceService:
         if not ai_instance.name:
             raise Fail("ai instance name is empty", error_message="容器实例名称为空")
         if not ai_instance.tenant_id:
-            raise Fail("ai instance root account is empty", error_message="容器实例所属用户主账号为空")
+            raise Fail("ai instance root account is empty", error_message="容器实例所属租户ID为空")
         if not ai_instance.user_id:
             raise Fail("ai instance user_id is empty", error_message="容器实例所属用户ID为空")
         if ai_instance.instance_config.replica_count <= 0:
@@ -735,37 +741,39 @@ class AiInstanceService:
             )
         )
 
-        # 定义 Pod 的亲和性配置
-        affinity = V1Affinity(
-            pod_affinity=V1PodAffinity(
-                preferred_during_scheduling_ignored_during_execution=[
-                    V1WeightedPodAffinityTerm(
-                        weight=100,
-                        pod_affinity_term=V1PodAffinityTerm(
-                            label_selector=V1LabelSelector(
-                                match_expressions=[
-                                    client.V1LabelSelectorRequirement(
-                                        key=GPU_POD_LABEL_KEY,
-                                        operator="In",
-                                        values=[GPU_POD_LABEL_VALUE]
-                                    )
-                                ]
-                            ),
-                            namespace_selector={},  # 空字典表示选择所有命名空间
-                            topology_key="kubernetes.io/hostname"
+        affinity = {}
+        if node_selector_gpu:
+            # 定义 Pod 的亲和性配置
+            affinity = V1Affinity(
+                pod_affinity=V1PodAffinity(
+                    preferred_during_scheduling_ignored_during_execution=[
+                        V1WeightedPodAffinityTerm(
+                            weight=100,
+                            pod_affinity_term=V1PodAffinityTerm(
+                                label_selector=V1LabelSelector(
+                                    match_expressions=[
+                                        client.V1LabelSelectorRequirement(
+                                            key=GPU_POD_LABEL_KEY,
+                                            operator="In",
+                                            values=[GPU_POD_LABEL_VALUE]
+                                        )
+                                    ]
+                                ),
+                                namespace_selector={},  # 空字典表示选择所有命名空间
+                                topology_key="kubernetes.io/hostname"
+                            )
                         )
-                    )
-                ]
+                    ]
+                )
             )
-        )
 
         # USERNAME = "root"
         # PASSWORD = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-
         # 定义容器
         container = V1Container(
             name=ai_instance_db.instance_real_name,  # 使用实例的真实名称
             image=ai_instance.image,
+            image_pull_policy="Always",
             env=env_list,
             ports=[V1ContainerPort(container_port=22), V1ContainerPort(container_port=8888), V1ContainerPort(container_port=9001), V1ContainerPort(container_port=9002)],  # 固定端口
             resources=V1ResourceRequirements(
@@ -791,13 +799,14 @@ class AiInstanceService:
             #             command=[
             #                 "/bin/bash", "-c",
             #                 f"""
-            #                 useradd -m -s /bin/bash -u 1000 ${{USERNAME}}
-            #                 echo ${{USERNAME}}:${{PASSWORD}} | chpasswd
+            #                 useradd -m -s /bin/bash -u 1000 root
+            #                 echo root:${PASSWORD} | chpasswd
             #                 """
             #             ]
             #         )
             #     )
             # ),
+            # security_context=client.V1SecurityContext(run_as_user=0, run_as_group=0)
         )
 
 
@@ -809,6 +818,10 @@ class AiInstanceService:
                     "dc.com/product.item": "CCI",
                     "dc.com/tenant.source": "user",
                     "dc.com/tenant.user-id": ai_instance.user_id,
+                    # "dc.com/params.productType":  ai_instance.instance_config if ai_instance.instance_config else "",
+                    "dc.com/params.cciId": ai_instance_db.id,
+                    "dc.com/params.regionId": ai_instance.region_id,
+                    "dc.com/params.zoneId": ai_instance.k8s_id,
                 }
         if any(key.startswith('nvidia.com/') for key in resource_limits):
             pod_template_labels[GPU_POD_LABEL_KEY] = GPU_POD_LABEL_VALUE
@@ -850,7 +863,7 @@ class AiInstanceService:
 
         return sts_data
 
-    def start_ai_instance_by_id(self, id):
+    def start_ai_instance_by_id(self, id, request):
         try:
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if not ai_instance_info_db:
@@ -873,8 +886,11 @@ class AiInstanceService:
             # 命名空间名称与实例名
             namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id
             real_name = ai_instance_info_db.instance_real_name
-            # image_name = id + "_" + self.extract_image_name(ai_instance_info_db.instance_image)
-            image_name = id + "_" + "test"
+            if request and request.image:
+                image_name = request.image
+            else:
+                harbor_address, harbor_username, harbor_password = self.get_harbor_info(ai_instance_info_db.instance_k8s_id)
+                image_name = harbor_address + "/" + STOP_SAVE_IMAGE_PREFIX + id + ":latest"
             # 直接 Patch StatefulSet 副本为 1（开机）
             body = {
                 "spec": {
@@ -884,7 +900,7 @@ class AiInstanceService:
                             "containers": [  # 这是一个列表，需要指定容器标识
                                 {
                                     "name": real_name,  # 关键：通过名称标识要修改的容器
-                                    "image": f"10.220.50.116:9090/anc-public/{image_name}:latest"  # 然后更新它的镜像
+                                    "image": image_name  # 然后更新它的镜像
                                 }
                             ]
                         }
@@ -958,8 +974,7 @@ class AiInstanceService:
         try:
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if ai_instance_info_db:
-                # image_name = id + "_" + self.extract_image_name(ai_instance_info_db.instance_image)
-                image_name = id + "_" + "test"
+                image_name = STOP_SAVE_IMAGE_PREFIX + id
                 harbor_address, harbor_username, harbor_password  = self.get_harbor_info(ai_instance_info_db.instance_k8s_id)
                 core_k8s_client, sts_pod_info = self._get_k8s_sts_pod_info(ai_instance_info_db)
                 nerdctl_api_pod = self._get_nerdctl_api_pod(core_k8s_client, sts_pod_info['node_name'])
@@ -1002,24 +1017,6 @@ class AiInstanceService:
         except Exception as e:
             print(f"Failed to start save operation for instance {id}: {str(e)}")
             raise Fail(f"Failed to start save operation: {str(e)}")
-
-    def extract_image_name(self, full_image_address):
-        """
-        从完整的镜像地址中提取出镜像名称（不含仓库地址和标签）。
-
-        参数:
-        full_image_address (str): 完整的镜像地址，例如 "xxxx/anc-public/general/tensorflow:2.16.1-gpu-jupyter"
-
-        返回:
-        str: 提取出的镜像名称，例如 "tensorflow"
-        """
-        # 先分割标签（如果有的话）
-        parts_without_tag = full_image_address.split(':')[0]
-        # 按 '/' 分割路径
-        path_parts = parts_without_tag.split('/')
-        # 镜像名称通常是最后一部分
-        image_name = path_parts[-1]
-        return image_name
 
     def set_auto_close_instance_by_id(self, id: str, auto_close_time: str, auto_close: bool):
         try:
@@ -1565,7 +1562,7 @@ class AiInstanceService:
             node_stats = {
                 'node_name': node_resource_db.node_name,
                 'less_gpu_pod_count': node_resource_db.less_gpu_pod_count,
-                'gpu_model': None if not node_resource_db.gpu_model else node_resource_db.gpu_model.split("/", 1)[-1],
+                'gpu_model': None if not node_resource_db.gpu_model else self.find_key_by_gpu_code(node_resource_db.gpu_model),
                 # GPU资源（整数）
                 'gpu_total': int(gpu_total) if gpu_total else 0,
                 'gpu_used': int(gpu_used) if gpu_used else 0,
@@ -1587,6 +1584,10 @@ class AiInstanceService:
 
         # 返回所有node资源
         return  node_resources
+
+    def find_key_by_gpu_code(self, gpu_code_value):
+        reverse_mapping = {details["gpu_code"]: key for key, details in GPU_CARD_MAPPING.items()}
+        return reverse_mapping.get(gpu_code_value)
 
     """计算单个节点的资源统计"""
     def safe_convert(self, value, convert_type=float):

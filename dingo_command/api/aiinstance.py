@@ -3,14 +3,10 @@ import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
-from kubernetes.stream import stream
-from kubernetes import client
-
 from dingo_command.api.model.aiinstance import AiInstanceApiModel, AiInstanceSavaImageApiModel, AccountCreateRequest, \
     AccountUpdateRequest, AutoDeleteRequest, AutoCloseRequest, StartInstanceModel, AddPortModel
 from dingo_command.services.ai_instance import AiInstanceService
 from dingo_command.services.custom_exception import Fail
-from dingo_command.utils.k8s_client import get_k8s_client
 
 router = APIRouter()
 ai_instance_service = AiInstanceService()
@@ -29,12 +25,12 @@ async def create_ai_instance(ai_instance:AiInstanceApiModel):
         raise HTTPException(status_code=400, detail=f"创建容器实例[{ai_instance.name}]失败:{e}")
 
 
-@router.post("/ai-instances/{id}/save-image", summary="容器实例保存为镜像", description="容器实例保存为镜像")
+@router.post("/ai-instance/{id}/save-image", summary="容器实例保存为镜像", description="容器实例保存为镜像")
 async def sava_ai_instance_to_image(id: str, request: AiInstanceSavaImageApiModel):
     # 容器实例保存为镜像
     try:
         # 容器实例保存为镜像
-        return ai_instance_service.sava_ai_instance_to_image(id, request.image_name, request.image_tag)
+        return ai_instance_service.sava_ai_instance_to_image(id, request.image_registry, request.image_name, request.image_tag)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
@@ -42,7 +38,7 @@ async def sava_ai_instance_to_image(id: str, request: AiInstanceSavaImageApiMode
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"容器实例[{id}]保存为镜像失败:{e}")
 
-@router.get("/ai-instances/{id}/save-image/process_status", summary="容器实例保存为镜像的进度状态", description="容器实例保存为镜像的进度状态")
+@router.get("/ai-instance/{id}/save-image/process_status", summary="容器实例保存为镜像的进度状态", description="容器实例保存为镜像的进度状态")
 async def get_sava_ai_instance_to_image_process_status(id: str):
     try:
         # 容器实例保存为镜像
@@ -114,8 +110,8 @@ async def delete_instance_by_id(id:str):
         raise HTTPException(status_code=400, detail=f"删除容器实[{id}]例失败:{e}")
 
 # 所有的websocket的连接的统一入口
-@router.websocket("/ai-instance/{id}/ssh-web}")
-async def pod_console(
+@router.websocket("/ai-instance/{id}/ssh-web")
+async def ai_instance_ssh_web(
         websocket: WebSocket,
         id: str
 ):
@@ -168,7 +164,7 @@ async def pod_console(
 @router.post("/ai-instance/{id}/start", summary="开机容器实例", description="根据实例id开机容器实例")
 async def start_instance_by_id(id: str, request: Optional[StartInstanceModel] = None):
     try:
-        return ai_instance_service.start_ai_instance_by_id(id)
+        return ai_instance_service.start_ai_instance_by_id(id, request)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
