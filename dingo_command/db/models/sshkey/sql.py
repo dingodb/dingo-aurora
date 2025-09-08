@@ -25,14 +25,12 @@ class KeySQL:
                 query = query.filter(KeyInfo.name == query_params["name"])
             if "status" in query_params and query_params["status"]:
                 query = query.filter(KeyInfo.status == query_params["status"])
-            if "k8s_id" in query_params and query_params["k8s_id"]:
-                query = query.filter(KeyInfo.k8s_id == query_params["k8s_id"])
-            if "account_id" in query_params and query_params["account_id"]:
-                query = query.filter(KeyInfo.account_id == query_params["account_id"])
+            if "tenant_id" in query_params and query_params["tenant_id"]:
+                query = query.filter(KeyInfo.tenant_id == query_params["tenant_id"])
             if "user_id" in query_params and query_params["user_id"]:
                 query = query.filter(KeyInfo.user_id == query_params["user_id"])
-            if "user_name" in query_params and query_params["account_id"]:
-                query = query.filter(KeyInfo.user_name == query_params["user_name"])
+            if "k8s_id" in query_params and query_params["k8s_id"]:
+                query = query.filter(KeyInfo.k8s_id == query_params["k8s_id"])
             # 总数
             count = query.count()
             # 排序
