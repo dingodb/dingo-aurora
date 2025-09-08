@@ -383,7 +383,7 @@ variable "router_internal_port_id" {
   default     = null
 }
 
-variable "k8s_masters" {
+variable "masters" {
   default = {}
 }
 

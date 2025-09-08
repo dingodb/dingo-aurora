@@ -128,6 +128,7 @@ class ClusterTFVarsObject(BaseModel):
     cluster_name: Optional[str] = Field(None, description="集群id")
     image_uuid: Optional[str] = Field(None, description="用户id")
     nodes: Optional[Dict[str, NodeGroup]] = Field(None, description="集群状态")
+    masters: Optional[Dict[str, NodeGroup]] = Field(None, description="集群状态")
     admin_subnet_id: Optional[str] = Field(None, description="管理子网id")
     bus_network_id: Optional[str] = Field(None, description="业务网络id")
     admin_network_id: Optional[str] = Field(None, description="管理网id")
