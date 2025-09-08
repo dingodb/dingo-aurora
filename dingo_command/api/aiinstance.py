@@ -59,7 +59,7 @@ async def list_ai_instance_infos(
         id:str = Query(None, description="容器实例主键ID"),
         instance_name:str = Query(None, description="容器实例名称"),
         instance_status:str = Query(None, description="容器实例状态"),
-        root_account_id:str = Query(None, description="主账号ID"),
+        tenant_id:str = Query(None, description="租户ID"),
         user_id:str = Query(None, description="当前用户ID"),
         page: int = Query(1, description="页码"),
         page_size: int = Query(10, description="页数量大小"),
@@ -78,8 +78,8 @@ async def list_ai_instance_infos(
             query_params['instance_status'] = instance_status
         if user_id:
             query_params['instance_user_id'] = user_id
-        if root_account_id:
-            query_params['instance_root_account_id'] = root_account_id
+        if tenant_id:
+            query_params['instance_tenant_id'] = tenant_id
         return ai_instance_service.list_ai_instance_info(query_params, page, page_size, sort_keys, sort_dirs)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)

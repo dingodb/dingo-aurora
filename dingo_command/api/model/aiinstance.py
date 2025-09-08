@@ -22,11 +22,9 @@ class StorageObj(BaseModel):
 
 # 容器实例信息
 class AiInstanceApiModel(BaseModel):
-    # project_id: Optional[str] = Field(None, description="租户id")
-    # project_name: Optional[str] = Field(None, description="租户名称")
     instance_id: Optional[str] = Field(None, description="容器实例ID，由云上服务bs传下来")
     user_id: Optional[str] = Field(None, description="用户id")
-    root_account_id: Optional[str] = Field(None, description="主账号ID")
+    tenant_id: Optional[str] = Field(None, description="租户ID")
     region_id: Optional[str] = Field(None, description="region id")
     k8s_id: Optional[str] = Field(None, description="K8S id")
     name: Optional[str] = Field(None, description="实例名称")
