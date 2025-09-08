@@ -115,11 +115,12 @@ variable "k8s_allowed_egress_ipv6_ips" {
   type = list
 }
 
-variable "k8s_masters" {
+variable "masters" {
   type = map(object({
     az                     = string
     flavor                 = string
     etcd                   = bool
+    use_local_disk         = bool
     floating_ip            = bool
     reserved_floating_ip   = optional(string)
     image_id               = optional(string)

@@ -1,4 +1,5 @@
 import os
+import traceback
 from fastapi import FastAPI, Depends, HTTPException, Query, Path
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
@@ -31,21 +32,25 @@ class ListResourcesResponse(BaseModel):
 
 def get_k8s_client_by_cluster(cluster_id: str) -> K8sClient:
     """根据cluster_id获取对应的kubeconfig，然后获取kubeclient"""
+    print("get_k8s_client_by_cluster:", cluster_id)
     try:
         # 1. 通过cluster_id查询集群信息
         cluster_service = ClusterService()
         cluster = cluster_service.get_cluster(cluster_id)
         
         if not cluster:
+            print("Cluster not found:", cluster_id)
             raise HTTPException(status_code=404, detail=f"集群 {cluster_id} 不存在")
         
         if cluster.status != "running":
+            print("Cluster is not running:", cluster_id)
             raise HTTPException(status_code=400, detail=f"集群 {cluster_id} 状态不是运行中，当前状态: {cluster.status}")
         
         # 2. 获取kubeconfig内容
         # 假设kubeconfig存储在cluster.kubeconfig字段中
 
         if not hasattr(cluster.kube_info, 'kube_config') or not cluster.kube_info:
+            print("kube_config is None:", cluster_id)
             raise HTTPException(status_code=400, detail=f"集群 {cluster_id} 的kubeconfig不存在")
 
         kubeconfig_content = cluster.kube_info.kube_config
@@ -55,11 +60,8 @@ def get_k8s_client_by_cluster(cluster_id: str) -> K8sClient:
 
         return k8s_client
             
-
-            
-    except HTTPException:
-        raise
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"获取K8s客户端失败: {str(e)}")
     
 def get_k8s_client() -> K8sClient:

@@ -55,7 +55,7 @@ class ClusterService:
         """根据节点类型返回az值"""
         return "nova" if node_type == "vm" else ""
 
-    def generate_k8s_nodes(self, cluster: ClusterObject, k8s_nodes):
+    def generate_k8s_nodes(self, cluster: ClusterObject, k8s_masters, k8s_nodes):
         forward_float_ip_id = ""
         if cluster.forward_float_ip_id:
             forward_float_ip_id = cluster.forward_float_ip_id
@@ -73,7 +73,7 @@ class ClusterService:
         for idx, node in enumerate(cluster.node_config):
             if node.role == "master" and node.type == "vm":
                 for i in range(node.count):
-                    k8s_nodes[f"master-{int(master_index)}"] = NodeGroup(
+                    k8s_masters[f"master-{int(master_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
                         flavor=node.flavor_id,
                         floating_ip=False,
@@ -544,7 +544,7 @@ class ClusterService:
             cluster.id = cluster_info_db.id
             k8s_masters = {}
             k8s_nodes = {}
-            node_list, instance_list = self.generate_k8s_nodes(cluster, k8s_nodes)
+            node_list, instance_list = self.generate_k8s_nodes(cluster, k8s_masters, k8s_nodes)
 
             # 保存instance信息到数据库
             instance_db_list, instance_bm_list = self.convert_instance_todb(cluster, k8s_nodes)
@@ -570,6 +570,7 @@ class ClusterService:
                 cluster_name=cluster.name,
                 image_uuid=cluster.node_config[0].image,
                 nodes=k8s_nodes,
+                masters=k8s_masters,
                 subnet_cidr=subnet_cidr,
                 floatingip_pool=floatingip_pool,
                 public_floatingip_pool=public_floatingip_pool,
