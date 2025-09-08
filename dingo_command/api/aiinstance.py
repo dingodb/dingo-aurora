@@ -114,36 +114,15 @@ async def delete_instance_by_id(id:str):
         raise HTTPException(status_code=400, detail=f"删除容器实[{id}]例失败:{e}")
 
 # 所有的websocket的连接的统一入口
-@router.websocket("/ws-ai/pod/{namespace}/{pod_name}")
+@router.websocket("/ai-instance/{id}/ssh-web}")
 async def pod_console(
         websocket: WebSocket,
-        namespace: str,
-        pod_name: str,
-        container: str = None
+        id: str
 ):
     await websocket.accept()
 
     try:
-        k8s_client = get_k8s_client("test-176", client.CoreV1Api)
-        # 创建k8s exec连接
-        exec_command = [
-            '/bin/sh',
-            '-c',
-            'TERM=xterm-256color; export TERM; [ -x /bin/bash ] && ([ -x /usr/bin/script ] && /usr/bin/script -q -c "/bin/bash" /dev/null || exec /bin/bash) || exec /bin/sh'
-        ]
-        print(k8s_client.list_node())
-        resp = stream(
-            k8s_client.connect_get_namespaced_pod_exec,
-            name=pod_name,
-            namespace=namespace,
-            container=container,
-            command=exec_command,
-            stderr=True, stdin=True,
-            stdout=True, tty=True,
-            _preload_content=False
-        )
-
-        # resp = ai_instance_service.ai_instance_web_ssh(id)
+        resp = ai_instance_service.ai_instance_web_ssh(id)
         # 创建异步任务处理双向数据流
         async def receive_from_ws():
             buffer = ""

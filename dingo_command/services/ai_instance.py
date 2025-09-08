@@ -1653,3 +1653,33 @@ class AiInstanceService:
             return float(value)
         except (ValueError, TypeError):
             return default
+
+    def ai_instance_web_ssh(self, instance_id: str):
+        ai_instance_db = AiInstanceSQL.get_ai_instance_info_by_id(instance_id)
+        if not ai_instance_db:
+            raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
+
+        try:
+            core_client = get_k8s_core_client(ai_instance_db.instance_k8s_id)
+            # 创建k8s exec连接
+            exec_command = [
+                '/bin/sh',
+                '-c',
+                'TERM=xterm-256color; export TERM; [ -x /bin/bash ] && ([ -x /usr/bin/script ] && /usr/bin/script -q -c "/bin/bash" /dev/null || exec /bin/bash) || exec /bin/sh'
+            ]
+            resp = stream(
+                core_client.connect_get_namespaced_pod_exec,
+                name=ai_instance_db.instance_real_name+"-0",
+                namespace=NAMESPACE_PREFIX + ai_instance_db.instance_tenant_id,
+                container=None,
+                command=exec_command,
+                stderr=True, stdin=True,
+                stdout=True, tty=True,
+                _preload_content=False
+            )
+            return resp
+        except Exception as e:
+            LOG.error(f"ai_instance_web_ssh instance_id:{instance_id} fail")
+            import traceback
+            traceback.print_exc()
+            raise e
