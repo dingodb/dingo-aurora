@@ -51,13 +51,6 @@ async def list_keys(status: str = Query(None, description="status状态"),
         if user_id:
             query_params['user_id'] = user_id
 
-        k8s_configs = AiInstanceSQL.list_k8s_configs()
-        if not k8s_configs:
-            raise ValueError("k8s configs not found")
-        if k8s_configs[0].k8s_id:
-            query_params['k8s_id'] = k8s_configs[0].k8s_id
-
-        # 显示repo列表的逻辑
         data = key_service.list_keys(query_params, page, page_size, sort_keys, sort_dirs)
         return data
     except Exception as e:

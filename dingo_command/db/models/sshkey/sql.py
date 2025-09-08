@@ -31,8 +31,6 @@ class KeySQL:
                 query = query.filter(KeyInfo.tenant_id == query_params["tenant_id"])
             if "user_id" in query_params and query_params["user_id"]:
                 query = query.filter(KeyInfo.user_id == query_params["user_id"])
-            if "k8s_id" in query_params and query_params["k8s_id"]:
-                query = query.filter(KeyInfo.k8s_id == query_params["k8s_id"])
             # 总数
             count = query.count()
             # 排序
