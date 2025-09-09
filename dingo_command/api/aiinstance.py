@@ -251,6 +251,17 @@ async def get_jupyter_by_id(id: str):
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"获取Jupyter访问地址失败:{id}")
 
+@router.get("/ai-instance/{id}/ssh-info", summary="获取ssh访问信息", description="根据实例id返回ssh访问信息")
+async def get_ssh_info_by_id(id: str):
+    try:
+        return ai_instance_service.get_ssh_info_by_id(id)
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"获取ssh访问信息失败:{id}")
+
 # ================= 账户相关接口 =================
 @router.post("/ai-account/create", summary="创建账户", description="创建账户")
 async def create_ai_account(request: AccountCreateRequest):
