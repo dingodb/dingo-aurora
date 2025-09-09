@@ -2,6 +2,8 @@ from kubernetes import client, config, dynamic
 from kubernetes.client.rest import ApiException
 from typing import List, Dict, Any, Optional, Union
 
+from dingo_command.common.k8s.resource import ResourceClientFactory
+
 class K8sClient:
     """
     一个统一的 Kubernetes API 客户端，支持查询、创建内置资源和自定义资源。
@@ -682,19 +684,23 @@ class K8sClient:
             for item in items:
                items_dict.append(self._convert_k8s_object_to_dict(item))
                
-            
-           # 应用多个自定义过滤器
-            if search_terms:
-                for term in search_terms:
-                    # 这里假设 term 是一个简单的字符串，可以是字段名或值
-                    if '=' in term:
-                        key, value = term.split('=', 1)
-                        items_dict = self._filter_by_key_value(items, key.strip(), value.strip())
-                    else:
-                        # 如果没有 '=', 则默认按 name 过滤
-                        items_dict = self._filter_by_key_value(items, 'name', term.strip())
+            # 创建资源工厂
+            factory = ResourceClientFactory(self)
+            items_dict = factory.list(items_dict, resource_type = resource_type, namespace=namespace, label_selector=label_selector, field_selector=field_selector, filters=search_terms)
+        #    # 应用多个自定义过滤器
+        #     if search_terms:
+        #         for term in search_terms:
+        #             # 这里假设 term 是一个简单的字符串，可以是字段名或值
+        #             if '=' in term:
+        #                 key, value = term.split('=', 1)
+        #                 items_dict = self._filter_by_key_value(items, key.strip(), value.strip())
+        #             else:
+        #                 # 如果没有 '=', 则默认按 name 过滤
+        #                 items_dict = self._filter_by_key_value(items, 'name', term.strip())
+                    
+                        
                 #result['total_count'] = len(result['items'])
-
+            
             # 应用排序
             if sort_by:
                 items_dict = self._sort_resources(items_dict, sort_by, sort_order)

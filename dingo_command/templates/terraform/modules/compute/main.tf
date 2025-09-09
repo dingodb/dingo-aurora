@@ -11,7 +11,8 @@ data "openstack_images_image_v2" "image_master" {
   name = var.image_master
 }
 
-data "cloudinit_config" "master-cloudinit" {
+data "cloudinit_config" "masters-cloudinit" {
+  for_each = var.masters
   part {
     content_type =  "text/cloud-config"
     content = templatefile("${path.module}/templates/cloudinit-master.yaml.tmpl", {
@@ -29,14 +30,12 @@ data "cloudinit_config" "master-cloudinit" {
 }
 
 data "openstack_networking_network_v2" "admin_network" {
-  count = var.use_existing_network && var.admin_network_id != "" ? 1 : 0
-  network_id  = var.admin_network_id
+  network_id = var.admin_network_id
 }
 
-data "openstack_networking_network_v2" "bus_network" {
-  count = var.use_existing_network && var.bus_network_id != "" ? 1 : 0
-  network_id  = var.bus_network_id
-}
+#data "openstack_networking_network_v2" "bus_network" {
+#  network_id = var.bus_network_id
+#}
 
 resource "random_integer" "master_port" {
   min   = 0
@@ -141,44 +140,36 @@ locals {
         "image_id"       = node.image_id != null ? node.image_id : local.image_to_use_node,
         "volume_size"    = node.volume_size,
         "volume_type"    = node.volume_type,
-        "admin_network_id"   = node.network_id != null ? node.network_id : (var.use_existing_network ? data.openstack_networking_network_v2.admin_network[0].id : var.admin_network_id)
-        "bus_network_id"     = node.network_id != null ? node.network_id : (var.use_existing_network && var.bus_network_id != "" ? data.openstack_networking_network_v2.bus_network[0].id : var.bus_network_id)
+        #"admin_network_id"   = node.network_id != null ? node.network_id : (var.use_existing_network ? data.openstack_networking_network_v2.admin_network[0].id : var.admin_network_id)
+        #"bus_network_id"     = node.network_id != null ? node.network_id : (var.use_existing_network && var.bus_network_id != "" ? data.openstack_networking_network_v2.bus_network[0].id : var.bus_network_id)
         #"server_group"   = node.server_group != null ? node.server_group : openstack_compute_servergroup_v2.secgroup[0].id
       }
   }
 
   masters_settings = {
-    for name, node in var.k8s_masters :
+    for name, node in var.masters :
       name => {
         "key_pair"       = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : "",
         "password"       = var.password,
-        "use_local_disk" = (node.root_volume_size_in_gb != null ? node.root_volume_size_in_gb : var.master_root_volume_size_in_gb) == 0,
+        "use_local_disk" = node.use_local_disk,
         "image_id"       = node.image_id != null ? node.image_id : local.image_to_use_master,
         "volume_size"    = node.root_volume_size_in_gb != null ? node.root_volume_size_in_gb : var.master_root_volume_size_in_gb,
         "volume_type"    = node.volume_type != null ? node.volume_type : var.master_volume_type,
-        "admin_network_id"     = node.network_id != null ? node.network_id : (var.use_existing_network  && var.admin_network_id != "" ? data.openstack_networking_network_v2.admin_network[0].id : var.admin_network_id)
-        "bus_network_id"     = node.network_id != null ? node.network_id : (var.use_existing_network && var.bus_network_id != "" ? data.openstack_networking_network_v2.bus_network[0].id : var.bus_network_id)
+        #"admin_network_id"     = node.network_id != null ? node.network_id : (var.use_existing_network  && var.admin_network_id != "" ? data.openstack_networking_network_v2.admin_network[0].id : var.admin_network_id)
+        #"bus_network_id"     = node.network_id != null ? node.network_id : (var.use_existing_network && var.bus_network_id != "" ? data.openstack_networking_network_v2.bus_network[0].id : var.bus_network_id)
         #"server_group"   = node.server_group != null ? node.server_group : openstack_compute_servergroup_v2.secgroup[0].id
       }
   }
 }
-locals {
-  # Only process segments if using existing network and bus_network_id is provided
-  segments_list = var.use_existing_network && var.bus_network_id != "" ? [for s in data.openstack_networking_network_v2.bus_network[0].segments : s] : []
-  # Get first segment (if exists)
-  first_segment = length(local.segments_list) > 0 ? local.segments_list[0] : null
-  # Provide default values to prevent null
-  segmentation_id = local.first_segment != null ? local.first_segment.segmentation_id : "1000"
-  network_type = local.first_segment != null ? local.first_segment.network_type : "vlan"
-  #protforward_external_port = 10000 + floor(random_integer.master_port.result)
-}
 
-resource "openstack_networking_port_v2" "admin_master_port" {
-  count                 = var.number_of_k8s_masters
-  name                  = "${var.cluster_name}-master-admin-${count.index + 1}"
-  network_id            = var.use_existing_network ? data.openstack_networking_network_v2.admin_network[0].id : var.admin_network_id
+resource "openstack_networking_port_v2" "masters_port" {
+  for_each              = var.masters
+  name                  = "${var.cluster_name}-master-${each.key}"
+  network_id            = data.openstack_networking_network_v2.admin_network.id
   admin_state_up        = "true"
   security_group_ids    = [openstack_networking_secgroup_v2.secgroup.id]
+  #port_security_enabled = var.force_null_port_security ? null : var.port_security_enabled
+  #no_security_groups    = var.port_security_enabled ? null : false
   dynamic "fixed_ip" {
     for_each = var.private_subnet_id == "" ? [] : [true]
     content {
@@ -195,164 +186,32 @@ resource "openstack_networking_port_v2" "admin_master_port" {
   ]
 }
 
-#resource "openstack_networking_port_v2" "business_master_port" {
-#  count                 = var.number_of_k8s_masters
-#  name                  = "${var.cluster_name}-master-bus-${count.index + 1}"
-#  network_id            = var.use_existing_network ? data.openstack_networking_network_v2.bus_network[0].id : var.bus_network_id
-#  admin_state_up        = "true"
-#  port_security_enabled = false
-#  #no_fixed_ip           = true#
-
-# lifecycle {
-#    ignore_changes = [ allowed_address_pairs ]
-#  }
-#
-#  depends_on = [
-#    var.network_router_id
-#  ]
-#}
-
-# resource "openstack_networking_trunk_v2" "trunk_master" {
-#   name           = "${var.cluster_name}-${count.index + 1}"
-#   count          = var.number_of_k8s_masters
-#   admin_state_up = "true"
-#   port_id        = element(openstack_networking_port_v2.business_master_port.*.id, count.index)
-# }
-
-resource "openstack_compute_instance_v2" "k8s-master" {
-  name              = "${var.cluster_name}-k8s-master-${count.index + 1}"
-  count             = var.number_of_k8s_masters
-  availability_zone = "nova"
-  image_id          = var.etcd_volume_type == "" ? local.image_to_use_master : null
-  flavor_id         = local.master_flavor
+resource "openstack_compute_instance_v2" "masters" {
+  for_each          = var.masters
+  name              = "${var.cluster_name}-${each.key}"
+  availability_zone = each.value.az
+  config_drive      = true             # 启用 config_drive
+  image_id          = local.masters_settings[each.key].use_local_disk == true ? null: local.masters_settings[each.key].image_id
+  flavor_id         = each.value.flavor
   key_pair          = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : ""
-  user_data         = data.cloudinit_config.master-cloudinit.rendered
-  security_groups   = [openstack_networking_secgroup_v2.secgroup.name]
-
+  user_data         = data.cloudinit_config.masters-cloudinit[each.key].rendered
   dynamic "block_device" {
-    for_each = var.etcd_volume_type != "" ? [1] : []
+    for_each = local.masters_settings[each.key].use_local_disk == true ? [local.masters_settings[each.key].image_id] : []
     content {
-      uuid                  = local.image_to_use_master
+      uuid                  = block_device.value
       source_type           = "image"
-      volume_size           = 110
+      volume_size           = local.masters_settings[each.key].volume_size
+      volume_type           = local.masters_settings[each.key].volume_type
       boot_index            = 0
       destination_type      = "volume"
       delete_on_termination = true
     }
   }
-
-  dynamic "block_device" {
-    for_each = var.etcd_volume_type != "" ? [1] : []
-    content {
-      source_type           = "blank"
-      destination_type      = "volume"
-      volume_size           = 20
-      volume_type           = var.etcd_volume_type
-      boot_index            = -1
-      delete_on_termination = true
-      guest_format          = "xfs"
-    }
-  }
   tags = ["kubernetes control"]
+  security_groups        = [openstack_networking_secgroup_v2.secgroup.name]
   network {
-    port = element(openstack_networking_port_v2.admin_master_port.*.id, count.index)
+    port = openstack_networking_port_v2.masters_port[each.key].id
   }
-
-  metadata = {
-    ssh_user         = var.ssh_user
-    kubespray_groups = "etcd,kube_control_plane,${var.supplementary_master_groups},cluster"
-    depends_on       = var.network_router_id
-    use_access_ip    = var.use_access_ip
-  }
-  depends_on = [
-    openstack_networking_secgroup_v2.secgroup
-  ]
-}
-##########################################################################################################
-resource "openstack_networking_port_v2" "admin_master_no_float_port" {
-  count                 = var.number_of_k8s_masters_no_floating_ip
-  name                  = "${var.cluster_name}-master-admin-${count.index + var.number_of_k8s_masters}"
-  network_id            = var.use_existing_network ? data.openstack_networking_network_v2.admin_network[0].id : var.admin_network_id
-  admin_state_up        = "true"
-  dynamic "fixed_ip" {
-    for_each = var.private_subnet_id == "" ? [] : [true]
-    content {
-      subnet_id = var.private_subnet_id
-    }
-  }
-
-  lifecycle {
-    ignore_changes = [ allowed_address_pairs ]
-  }
-
-  depends_on = [
-    var.network_router_id
-  ]
-  
-}
-
-#resource "openstack_networking_port_v2" "business_master_port" {
-#  count                 = var.number_of_k8s_masters
-#  name                  = "${var.cluster_name}-master-bus-${count.index + 1}"
-#  network_id            = var.use_existing_network ? data.openstack_networking_network_v2.bus_network[0].id : var.bus_network_id
-#  admin_state_up        = "true"
-#  port_security_enabled = false
-#  #no_fixed_ip           = true#
-
-# lifecycle {
-#    ignore_changes = [ allowed_address_pairs ]
-#  }
-#
-#  depends_on = [
-#    var.network_router_id
-#  ]
-#}
-
-# resource "openstack_networking_trunk_v2" "trunk_master" {
-#   name           = "${var.cluster_name}-${count.index + 1}"
-#   count          = var.number_of_k8s_masters
-#   admin_state_up = "true"
-#   port_id        = element(openstack_networking_port_v2.business_master_port.*.id, count.index)
-# }
-
-resource "openstack_compute_instance_v2" "k8s-master-no-floatip" {
-  name              = "${var.cluster_name}-k8s-master-${count.index + var.number_of_k8s_masters+1}"
-  count             = var.number_of_k8s_masters_no_floating_ip
-  availability_zone = "nova"
-  image_id          = var.etcd_volume_type == "" ? local.image_to_use_master : null
-  flavor_id         = local.master_flavor
-  key_pair          = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : ""
-  user_data         = data.cloudinit_config.master-cloudinit.rendered
-  security_groups = [openstack_networking_secgroup_v2.secgroup.name]
-  dynamic "block_device" {
-    for_each = var.etcd_volume_type != "" ? [1] : []
-    content {
-      uuid                  = local.image_to_use_master
-      source_type           = "image"
-      volume_size           = 110
-      boot_index            = 0
-      destination_type      = "volume"
-      delete_on_termination = true
-    }
-  }
-
-  dynamic "block_device" {
-    for_each = var.etcd_volume_type != "" ? [1] : []
-    content {
-      source_type           = "blank"
-      destination_type      = "volume"
-      volume_size           = 20
-      volume_type           = var.etcd_volume_type
-      boot_index            = -1
-      delete_on_termination = true
-      guest_format          = "xfs"
-    }
-  }
-  tags = ["kubernetes control"]
-  network {
-    port = element(openstack_networking_port_v2.admin_master_no_float_port.*.id, count.index)
-  }
-
   metadata = {
     ssh_user         = var.ssh_user
     password         = var.password
@@ -364,12 +223,14 @@ resource "openstack_compute_instance_v2" "k8s-master-no-floatip" {
     openstack_networking_secgroup_v2.secgroup
   ]
 }
+
+
 ###############################################worker node################################################
 ###############################################worker node################################################
 resource "openstack_networking_port_v2" "nodes_port" {
   for_each              = var.number_of_nodes == 0 && var.number_of_nodes_no_floating_ip == 0 ? var.nodes : {}
   name                  = "${var.cluster_name}-node-${each.key}"
-  network_id            = local.nodes_settings[each.key].admin_network_id
+  network_id            = data.openstack_networking_network_v2.admin_network.id
   admin_state_up        = "true"
   security_group_ids    = [openstack_networking_secgroup_v2.secgroup.id]
   #port_security_enabled = var.force_null_port_security ? null : var.port_security_enabled

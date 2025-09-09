@@ -3,7 +3,7 @@ import tempfile
 from typing import List
 from fastapi import Query
 from fastapi.responses import FileResponse
-from dingo_command.api.model.cluster import ClusterObject, NodeConfigObject
+from dingo_command.api.model.cluster import ClusterObject, NodeConfigObject, ExistingNodeObject
 from dingo_command.common.nova_client import NovaClient
 from dingo_command.services.cluster import ClusterService,TaskService, master_flvaor
 from dingo_command.services.custom_exception import Fail
@@ -24,13 +24,13 @@ async def get_token(x_auth_token: str = Header(None, alias="X-Auth-Token")):
 async def create_cluster(cluster_object:ClusterObject, token: str = Depends(get_token)):
     try:
         NovaClient(token)
-        if cluster_object.type == "kubernetes":
-            master_config = {}
-            master_config["count"] = cluster_object.kube_info.number_master
-            master_config["role"] = "master"
-            master_config["type"] = "vm"
-            master_config["flavor_id"] = master_flvaor
-            cluster_object.node_config.append(NodeConfigObject(**master_config))
+        # if cluster_object.type == "kubernetes":
+        #     master_config = {}
+        #     master_config["count"] = cluster_object.kube_info.number_master
+        #     master_config["role"] = "master"
+        #     master_config["type"] = "vm"
+        #     master_config["flavor_id"] = master_flvaor
+        #     cluster_object.node_config.append(NodeConfigObject(**master_config))
         cluster_id = cluster_service.create_cluster(cluster_object,token)
         # 操作日志
         #SystemService.create_system_log(OperateLogApiModel(operate_type="create", resource_type="flow", resource_id=cluster_id, resource_name=cluster_object.name, operate_flag=True))
@@ -209,7 +209,7 @@ async def delete_cluster(cluster_id:str, token: str = Depends(get_token)):
     
     
 @router.post("/cluster/{cluster_id}/node", summary="增加已有节点", description="增加已有节点")
-async def add_node(cluster_id:str, server_ids: List[str], token: str = Depends(get_token)):
+async def add_node(cluster_id:str, servers: List[ExistingNodeObject], token: str = Depends(get_token)):
     try:
             
         # 集群信息存入数据库
@@ -228,27 +228,27 @@ async def add_node(cluster_id:str, server_ids: List[str], token: str = Depends(g
         
         # 通过server_ids查询虚拟机信息
         server_details = []
-        for server_id in server_ids:
+        for server in servers:
             try:
                 nova_client = NovaClient()
-                server_detail = nova_client.nova_get_server_detail(server_id)
+                server_detail = nova_client.nova_get_server_detail(server.id)
                 #根据server_detail对应的网络信息，是否与集群的网络信息匹配
                 if not server_detail:
-                    raise HTTPException(status_code=400, detail=f"Server {server_id} not found")
+                    raise HTTPException(status_code=400, detail=f"Server {server.id} not found")
                 if not server_detail.get("addresses"):
-                    raise HTTPException(status_code=400, detail=f"Server {server_id} has no networks")
+                    raise HTTPException(status_code=400, detail=f"Server {server.id} has no networks")
                 # 检查网络是否匹配
                 # 获取第一个网络的地址信息
                 first_network = list(server_detail["addresses"].keys())
                 if not any(net == result.network_config.admin_network_name for net in first_network):
-                    raise HTTPException(status_code=400, detail=f"Server {server_id} network does not match the cluster network")
+                    raise HTTPException(status_code=400, detail=f"Server {server.id} network does not match the cluster network")
                 server_details.append(server_detail)
             except Exception as e:
-                raise HTTPException(status_code=400, detail=f"Failed to get server {server_id} details: {str(e)}")
+                raise HTTPException(status_code=400, detail=f"Failed to get server {server.id} details: {str(e)}")
         
         # 调用添加节点的服务方法
-        result = cluster_service.add_existing_nodes_to_cluster(cluster_id, server_details, token)
-        
+        result = cluster_service.add_existing_nodes_to_cluster(cluster_id, server_details, token, private_key=server.private_key, user=server.user, password=server.password)
+
         return result
         
     except Fail as e:
