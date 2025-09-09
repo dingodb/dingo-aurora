@@ -53,8 +53,14 @@ resource "openstack_networking_subnet_v2" "bussiness" {
   dns_nameservers = var.dns_nameservers
 }
 
+
 resource "openstack_networking_router_interface_v2" "cluster" {
-  count     = var.use_neutron
-  router_id = "%{if length(data.openstack_networking_router_v2.cluster) == 0}${openstack_networking_router_v2.cluster[count.index].id}%{else}${data.openstack_networking_router_v2.cluster[count.index].id}%{endif}"
-  subnet_id = var.use_existing_network && var.admin_network_id != "" ? var.admin_network_id : openstack_networking_subnet_v2.cluster[count.index].id
+  count     = var.use_neutron == 1 && (
+                var.use_existing_network == false ||
+                var.admin_subnet_id == "" ||
+                length(data.openstack_networking_router_v2.cluster) == 0
+              ) ? 1 : 0
+  router_id = length(data.openstack_networking_router_v2.cluster) == 0 ? openstack_networking_router_v2.cluster[0].id : data.openstack_networking_router_v2.cluster[0].id
+  subnet_id = var.use_existing_network && var.admin_subnet_id != "" ? var.admin_subnet_id : openstack_networking_subnet_v2.cluster[0].id
 }
+

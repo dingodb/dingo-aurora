@@ -587,6 +587,7 @@ class ClusterService:
                 tenant_id=cluster.project_id,
                 forward_float_ip_id = cluster.forward_float_ip_id,
                 image_master = master_image,
+                admin_network_id=cluster.network_config.admin_network_id,
                 admin_subnet_id=cluster.network_config.admin_subnet_id
                 )
             if cluster.node_config[0].auth_type == "password":
