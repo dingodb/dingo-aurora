@@ -31,6 +31,7 @@ def upgrade() -> None:
     sa.Column('key_content', mysql.LONGTEXT(), nullable=True),
     sa.Column('namespace', sa.String(length=256), nullable=True),
     sa.Column('user_id', sa.String(length=256), nullable=True),
+    sa.Column('user_name', sa.String(length=256), nullable=True),
     sa.Column('configmap_name', sa.String(length=256), nullable=True),
     sa.Column('create_time', sa.DateTime(), nullable=True),
     sa.Column('update_time', sa.DateTime(), nullable=True),

@@ -32,6 +32,7 @@ async def list_keys(status: str = Query(None, description="status状态"),
                      id: str = Query(None, description="id"),
                      tenant_id: str = Query(None, description="account_id"),
                      user_id: str = Query(None, description="user_id"),
+                     user_name: str = Query(None, description="user_name"),
                      page: int = Query(1, description="页码"),
                      page_size: int = Query(10, description="页数量大小"),
                      sort_dirs:str = Query(None, description="排序方式"),
@@ -50,6 +51,8 @@ async def list_keys(status: str = Query(None, description="status状态"),
             query_params['tenant_id'] = tenant_id
         if user_id:
             query_params['user_id'] = user_id
+        if user_name:
+            query_params['user_name'] = user_name
 
         data = key_service.list_keys(query_params, page, page_size, sort_keys, sort_dirs)
         return data

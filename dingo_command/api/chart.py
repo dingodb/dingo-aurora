@@ -241,14 +241,13 @@ async def sync_repo(repo_id: Union[str, int], background_tasks: BackgroundTasks)
             raise ValueError("repo not found")
         repo_data = data.get("data")
         # 先删除原来的repo的charts应用
-        data = chart_service.get_repo_from_name(repo_id)
-        repo = data.get("data")[0]
-        if repo.status == util.repo_status_create:
+        if repo_data.status == util.repo_status_create:
             raise ValueError("repo is creating, please wait")
-        if repo.status == util.repo_status_update:
+        if repo_data.status == util.repo_status_update:
             raise ValueError("repo is updating, please wait")
-        if repo.status == util.repo_status_sync:
+        if repo_data.status == util.repo_status_sync:
             raise ValueError("repo is syncing, please wait")
+        data = chart_service.get_repo_from_name(repo_id)
         if data.get("data"):
             chart_service.delete_charts_repo_id(data.get("data"))
         # 再添加新的repo的charts应用

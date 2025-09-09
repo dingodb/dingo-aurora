@@ -122,11 +122,14 @@ class KeyService:
         # 2、校验参数是否合法，哪些参数要校验，哪些参数不需要校验
         name = create_key_object.name
         user_id = create_key_object.user_id
+        user_name = create_key_object.user_name
         tenant_id = create_key_object.tenant_id
         key_content = create_key_object.key_content
         description = create_key_object.description or ""
         if not user_id:
             raise ValueError("user_id not found")
+        if not user_name:
+            raise ValueError("user_name not found")
         if not tenant_id:
             raise ValueError("tenant_id not found")
         if not key_content:
@@ -158,6 +161,7 @@ class KeyService:
             id=str(uuid.uuid4()),
             name=name,
             user_id=user_id,
+            user_name=user_name,
             tenant_id=tenant_id,
             key_content=key_content,
             description=description,
@@ -247,7 +251,7 @@ class KeyService:
                 # 5、返回结果
                 key_info.status = util.key_status_success
                 KeySQL.update_key(key_info)
-                Log.info(f"create key success, key info {key_info}")
+                Log.info(f"create key success, key info {key_info.id}")
             except Exception as e:
                 key_info.status = util.key_status_failed
                 key_info.status_msg = str(e)
