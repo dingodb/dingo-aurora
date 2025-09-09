@@ -1467,6 +1467,46 @@ class AiInstanceService:
             traceback.print_exc()
             raise e
 
+    def get_ssh_info_by_id(self, id: str):
+        try:
+            # id空
+            if not id:
+                raise Fail("ai instance id can not be empty")
+            # 查库
+            ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
+            # 空
+            if not ai_instance_info_db:
+                raise Fail(f"ai instance[{id}] is not found", error_message=f"容器实例[{id}找不到]")
+            # 连接k8s
+            core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
+            namespace_name = NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id
+            service_name = ai_instance_info_db.instance_real_name
+
+            # 查询 Service 暴露 22 端口
+            svc = core_k8s_client.read_namespaced_service(name=service_name, namespace=namespace_name)
+            # 无效service
+            if not svc or not svc.spec or not svc.spec.ports:
+                raise Fail("service invalid", error_message="Service 无效")
+            # 匹配 Service 的 22 端口
+            node_port_assigned = None
+            for p in svc.spec.ports:
+                # 匹配到 22 的端口
+                if (int(p.port) == 22):
+                    node_port_assigned = getattr(p, 'node_port', None)
+                    break
+            # 查询实例对应的vip
+            vip = self._get_service_ip(ai_instance_info_db)
+            # 组装返回参数
+            if not vip or not ai_instance_info_db.ssh_root_password or not node_port_assigned:
+                raise Fail("ssh service invalid", error_message="SSH Service 无效")
+            return {"data": {"password": ai_instance_info_db.ssh_root_password, "target_port": 22, "url": f"ssh root@{vip} -p {node_port_assigned}"}}
+        except Fail:
+            raise
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+
     def _start_async_check_task(self, core_k8s_client, k8s_id, instance_id, pod_name, namespace):
         """启动后台检查任务"""
         def _run_task():
