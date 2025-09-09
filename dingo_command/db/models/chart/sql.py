@@ -34,7 +34,7 @@ class RepoSQL:
             if "status" in query_params and query_params["status"]:
                 query = query.filter(RepoInfo.status == query_params["status"])
             if "name" in query_params and query_params["name"]:
-                query = query.filter(RepoInfo.name == query_params["name"])
+                query = query.filter(RepoInfo.name.like(f"%{query_params['name']}%"))
             # 总数
             count = query.count()
             # 排序
@@ -132,7 +132,7 @@ class ChartSQL:
                 cluster_ids = [query_params["cluster_id"], "all"]
                 query = query.filter(ChartInfo.cluster_id.in_(cluster_ids))
             if "name" in query_params and query_params["name"]:
-                query = query.filter(ChartInfo.name == query_params["name"])
+                query = query.filter(ChartInfo.name.like(f"%{query_params['name']}%"))
             if "status" in query_params and query_params["status"]:
                 query = query.filter(ChartInfo.status == query_params["status"])
             if "repo_name" in query_params and query_params["repo_name"]:
@@ -251,7 +251,7 @@ class AppSQL:
             if "repo_name" in query_params and query_params["repo_name"]:
                 query = query.filter(AppInfo.repo_name == query_params["repo_name"])
             if "name" in query_params and query_params["name"]:
-                query = query.filter(AppInfo.name == query_params["name"])
+                query = query.filter(AppInfo.name.like(f"%{query_params['name']}%"))
             if "cluster_id" in query_params and query_params["cluster_id"]:
                 query = query.filter(AppInfo.cluster_id == query_params["cluster_id"])
             if "tag_id" in query_params and query_params["tag_id"]:
@@ -351,7 +351,7 @@ class TagSQL:
             if "id" in query_params and query_params["id"]:
                 query = query.filter(TagInfo.id == query_params["id"])
             if "name" in query_params and query_params["name"]:
-                query = query.filter(TagInfo.name == query_params["name"])
+                query = query.filter(TagInfo.name.like(f"%{query_params['name']}%"))
             if "chinese_name" in query_params and query_params["chinese_name"]:
                 query = query.filter(TagInfo.chinese_name == query_params["chinese_name"])
             # 总数
