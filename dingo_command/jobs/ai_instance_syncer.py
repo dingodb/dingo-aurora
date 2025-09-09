@@ -4,9 +4,10 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from dingo_command.common.k8s_common_operate import K8sCommonOperate
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
-from dingo_command.utils.constant import NAMESPACE_PREFIX, PRODUCT_TYPE_CCI, RESOURCE_TYPE_KEY, DEV_TOOL_JUPYTER
+from dingo_command.utils.constant import CCI_NAMESPACE_PREFIX, PRODUCT_TYPE_CCI, RESOURCE_TYPE_KEY, DEV_TOOL_JUPYTER, \
+    SAVE_TO_IMAGE_CCI_PREFIX
 from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client
-from dingo_command.services.ai_instance import AiInstanceService
+from dingo_command.services.ai_instance import AiInstanceService, harbor_service
 from dingo_command.utils import datetime as datatime_util
 from datetime import datetime
 from oslo_log import log
@@ -94,7 +95,7 @@ def sync_single_k8s_cluster(k8s_id: str, core_client, apps_client, networking_cl
         # 2. 按namespace分组处理
         namespace_instance_map = {}
         for instance in db_instances:
-            namespace = NAMESPACE_PREFIX + instance.instance_tenant_id
+            namespace = CCI_NAMESPACE_PREFIX + instance.instance_tenant_id
             if namespace not in namespace_instance_map:
                 namespace_instance_map[namespace] = []
             namespace_instance_map[namespace].append(instance)
@@ -139,7 +140,7 @@ def process_namespace_resources(namespace: str, instances: list, core_client, ap
     # 3. 处理孤儿资源: K8s中存在但数据库不存在的资源
     handle_orphan_resources(
         sts_names=sts_map.keys(),
-        db_instance_names=db_instance_map.keys(),
+        db_instance_map=db_instance_map,
         namespace=namespace,
         core_client=core_client,
         apps_client=apps_client,
@@ -160,16 +161,29 @@ def process_namespace_resources(namespace: str, instances: list, core_client, ap
     )
 
 
-def handle_orphan_resources(sts_names, db_instance_names, namespace, core_client, apps_client, networking_client):
+def handle_orphan_resources(sts_names, db_instance_map, namespace, core_client, apps_client, networking_client):
+    db_instance_names = db_instance_map.keys()
     """处理K8s中存在但数据库不存在的资源"""
     orphans = set(sts_names) - set(db_instance_names)
     LOG.info(f"======handle_orphan_resources======orphans:{orphans}")
     for name in orphans:
         LOG.info(f"清理孤儿资源: {namespace}/{name}")
-        cleanup_cci_resources(apps_client, core_client, networking_client, name, namespace,)
+        cleanup_cci_resources(apps_client, core_client, networking_client, name, namespace)
+        try:
+           # 清理关机镜像
+           ai_instance_db = AiInstanceSQL.get_ai_instance_info_by_real_name(name)
+           # 删除镜像库中保存的关机镜像
+           k8s_configs_db = AiInstanceSQL.get_k8s_configs_info_by_k8s_id(ai_instance_db.instance_k8s_id)
+           harbor_address = k8s_configs_db.harbor_address
+           image_name = SAVE_TO_IMAGE_CCI_PREFIX + ai_instance_db.id
+           project_name = ai_instance_service.extract_project_and_image_name(harbor_address)
+           print(f"ai instance [{id}] project_name:{project_name}, image_name:{image_name}")
+           harbor_service.delete_custom_projects_images(project_name, image_name)
+        except Exception as e:
+             LOG.error(f"删除容器实例[{id}]的关机镜像失败: {e}")
 
 
-def cleanup_cci_resources(apps_client, core_client, networking_client, name, namespace,):
+def cleanup_cci_resources(apps_client, core_client, networking_client, name, namespace):
     try:
         # 删除StatefulSet
         k8s_common_operate.delete_sts_by_name(

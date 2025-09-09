@@ -4,7 +4,9 @@ import uuid
 # k8s kubeconfig指定存放目录
 KUBECONFIG_DIR_DEFAULT = "/home/dingo-command/kubeconfig/"
 #容器实例命名空间前缀
-NAMESPACE_PREFIX = "ns-"
+CCI_NAMESPACE_PREFIX = "ns-"
+CCI_STS_PREFIX = "cci-"
+CCI_STS_POD_SUFFIX = "-0"
 #用户公钥存放configmap的前缀
 CONFIGMAP_PREFIX = "cm-ssh-key-"
 #容器实例系统盘默认挂载路径
@@ -24,12 +26,11 @@ PRODUCT_TYPE_CCI = "CCI"
 APP_LABEL = "app"
 #jupyter开发工具
 DEV_TOOL_JUPYTER = "jupyter"
+INGRESS_SUFFIX = "ingress"
 #CCI保存为镜像后缀
-SAVE_TO_IMAGE_CCI_SUFFIX = "_saving_to_image_cci"
+SAVE_TO_IMAGE_CCI_PREFIX = "cci_saving_to_image-"
 GPU_POD_LABEL_KEY = "cci_gpu_pod"
 GPU_POD_LABEL_VALUE = "true"
-# 关机保存镜像前缀
-STOP_SAVE_IMAGE_PREFIX = "stop_save_image-"
 
 # excel的目录文件
 EXCEL_TEMP_DIR = "/home/dingo_command/temp_excel/"

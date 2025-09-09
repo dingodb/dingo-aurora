@@ -9,7 +9,7 @@ from dingo_command.api.model.sshkey import CreateKeyObject
 from dingo_command.utils.helm import util
 from dingo_command.utils.helm.util import SshLOG as Log
 from dingo_command.utils.k8s_client import get_k8s_core_client
-from dingo_command.utils.constant import CONFIGMAP_PREFIX, NAMESPACE_PREFIX
+from dingo_command.utils.constant import CONFIGMAP_PREFIX, CCI_NAMESPACE_PREFIX
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
 from sshpubkeys import SSHKey
 
@@ -155,7 +155,7 @@ class KeyService:
         if not k8s_configs:
             raise ValueError("k8s configs not found")
         # 3、调用数据库接口，存入数据库中
-        namespace = NAMESPACE_PREFIX + tenant_id
+        namespace = CCI_NAMESPACE_PREFIX + tenant_id
         configmap_name = CONFIGMAP_PREFIX + user_id
         key_info = KeyInfo(
             id=str(uuid.uuid4()),
