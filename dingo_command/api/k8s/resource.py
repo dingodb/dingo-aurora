@@ -1,4 +1,6 @@
+import json
 import os
+import re
 import traceback
 from fastapi import FastAPI, Depends, HTTPException, Query, Path
 from fastapi.responses import JSONResponse
@@ -292,18 +294,31 @@ async def update_resources(
     """
     根据提供的参数查询 Kubernetes 资源。
     """
-    k8sclient = get_k8s_client_by_cluster(resource.cluster_id)
-    resources = k8sclient.update_resource(
-        resource_body=resource.template,
-        resource_type=resource_type,
-        name=name
-    )
-    if resources is None:
-        raise HTTPException(status_code=500, detail=f"查询资源 '{name}' 失败。")
+    try:
+        k8sclient = get_k8s_client_by_cluster(resource.cluster_id)
+        resources = k8sclient.update_resource(
+            resource_body=resource.template,
+            resource_type=resource_type,
+            name=name
+        )
+    except Exception as e:
+        traceback.print_exc()
+        response_body = getattr(getattr(e, 'response', None), 'body', str(e))
+        match = re.search(r"HTTP response body: b?['\"]?(.*?)[\"']?\\n", response_body, re.DOTALL)
+        if match:
+            body_str = match.group(1)
+            # 处理转义字符
+            body_str = body_str.encode('utf-8').decode('unicode_escape')
+            # 解析 JSON
+            body_json = json.loads(body_str)
+            raise HTTPException(status_code=500, detail=f"{body_json}")
+        raise HTTPException(status_code=500, detail=f"{response_body}")
+    
     return JSONResponse(content=jsonable_encoder(resources)) # 确保复杂对象可以被序列化
 
 @router.put("/k8s/namespace/{namespace}/{resource_type}/{name}", summary="更新资源", description="更新资源")
 async def update_resources(
+
     resource: CreateResourceRequest,
     namespace: str = Path(..., description="Kubernetes 命名空间"),
     resource_type: str = Path(..., description="Kubernetes 资源类型"),
@@ -315,13 +330,25 @@ async def update_resources(
     """
     根据提供的参数查询 Kubernetes 资源。
     """
-    k8sclient = get_k8s_client_by_cluster(resource.cluster_id)
-    resources = k8sclient.update_resource(
-        resource_body=resource.template,
-        resource_type=resource_type,
-        namespace=namespace,
-        name=name
-    )
-    if resources is None:
-        raise HTTPException(status_code=500, detail=f"查询资源 '{resource_type}' 失败。")
+    try:
+        k8sclient = get_k8s_client_by_cluster(resource.cluster_id)
+        resources = k8sclient.update_resource(
+            resource_body=resource.template,
+            resource_type=resource_type,
+            namespace=namespace,
+            name=name
+        )
+    except Exception as e:
+        traceback.print_exc()
+        response_body = getattr(getattr(e, 'response', None), 'body', str(e))
+        match = re.search(r"HTTP response body: b?['\"]?(.*?)[\"']?\\n", response_body, re.DOTALL)
+        if match:
+            body_str = match.group(1)
+            # 处理转义字符
+            body_str = body_str.encode('utf-8').decode('unicode_escape')
+            # 解析 JSON
+            body_json = json.loads(body_str)
+            raise HTTPException(status_code=500, detail=f"{body_json}")
+        raise HTTPException(status_code=500, detail=f"{response_body}")
+
     return JSONResponse(content=jsonable_encoder(resources)) # 确保复杂对象可以被序列化
