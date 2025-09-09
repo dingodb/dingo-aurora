@@ -74,6 +74,12 @@ class AiInstanceSQL:
             return session.query(AiInstanceInfo).filter(AiInstanceInfo.id == id).first()
 
     @classmethod
+    def get_ai_instance_info_by_real_name(cls, real_name):
+        session = get_session()
+        with (session.begin()):
+            return session.query(AiInstanceInfo).filter(AiInstanceInfo.instance_real_name == real_name).first()
+
+    @classmethod
     def list_ai_instance_info_by_k8s_id(cls, k8s_id):
         session = get_session()
         with session.begin():
@@ -89,6 +95,7 @@ class AiInstanceSQL:
                                   AiInstanceInfo.instance_name.label("instance_name"),
                                   AiInstanceInfo.instance_real_name.label("instance_real_name"),
                                   AiInstanceInfo.instance_status.label("instance_status"),
+                                  AiInstanceInfo.instance_region_id.label("instance_region_id"),
                                   AiInstanceInfo.instance_k8s_id.label("instance_k8s_id"),
                                   AiInstanceInfo.instance_tenant_id.label("instance_tenant_id"),
                                   AiInstanceInfo.instance_user_id.label("instance_user_id"),
@@ -99,6 +106,9 @@ class AiInstanceSQL:
                                   AiInstanceInfo.instance_volumes.label("instance_volumes"),
                                   AiInstanceInfo.instance_envs.label("instance_envs"),
                                   AiInstanceInfo.instance_start_time.label("instance_start_time"),
+                                  AiInstanceInfo.instance_description.label("instance_description"),
+                                  AiInstanceInfo.ssh_root_password.label("ssh_root_password"),
+                                  AiInstanceInfo.product_code.label("product_code"),
                                   )
 
             # 数据库查询参数

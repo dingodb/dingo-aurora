@@ -8,7 +8,8 @@ from kubernetes.client import V1StatefulSet, ApiException, V1Ingress, V1ObjectMe
 from kubernetes import client
 from oslo_log import log
 
-from dingo_command.utils.constant import RESOURCE_TYPE_KEY, PRODUCT_TYPE_CCI, DEV_TOOL_JUPYTER
+from dingo_command.utils.constant import RESOURCE_TYPE_KEY, PRODUCT_TYPE_CCI, DEV_TOOL_JUPYTER, CCI_STS_PREFIX, \
+    CCI_STS_POD_SUFFIX, INGRESS_SUFFIX
 
 LOG = log.getLogger(__name__)
 
@@ -164,12 +165,11 @@ class K8sCommonOperate:
     def create_cci_ingress_rule(self, networking_v1: client.NetworkingV1Api, instance_id: str, namespace: str, service_name: str, k8s_id: str, region_id: str):
         """创建Ingress Service"""
         # 定义变量
-        ingress_name = f"cci-{service_name}-ingress"
+        ingress_name = f"{service_name}-{INGRESS_SUFFIX}"
         user_cci_pod_service_name = service_name + "-" + DEV_TOOL_JUPYTER  # 替换为实际 jupter Service 名称
-        if not region_id:  # 替换为实际 region_id, 云上会传过来
-            region_id = "default"
+        region_id = "default" if not region_id else region_id  # 替换为实际 region_id, 云上会传过来
         zone_id = k8s_id  # 替换为实际 zone_id
-        cci_pod_name = service_name + '-0'  # 替换为实际 Pod 名称
+        cci_pod_name = service_name + CCI_STS_POD_SUFFIX  # 替换为实际 Pod 名称
 
         # 构建 Ingress 主机名和路径
         host = f"{region_id}-{zone_id}.alayanew.com"
@@ -274,6 +274,58 @@ class K8sCommonOperate:
             return core_v1.read_namespaced_pod(name, namespace)
         except Exception as e:
             print(f"查询 Pod {namespace}/{name} 失败: {e}")
+            raise e
+
+
+
+    def read_sts_info(self, app_v1: client.AppsV1Api, name: str, namespace: str):
+        """
+        查询单个 sts 的基础信息
+
+        :param app_v1: AppsV1Api 客户端实例
+        :param name: Pod 名称
+        :param namespace: 命名空间，默认为 default
+        :return: V1StatefulSet 对象，查询失败返回 e
+        """
+        try:
+            return app_v1.read_namespaced_stateful_set(name, namespace)
+        except Exception as e:
+            print(f"查询 Pod {namespace}/{name} 失败: {e}")
+            raise e
+
+
+    def replace_statefulset(self, apps_v1: client.AppsV1Api, real_name, namespace_name, modified_sts_data):
+        """
+        替换 StatefulSet：删除旧的并创建新的。
+
+        参数:
+            apps_v1: app client。
+            real_name: StatefulSet 的名称。
+            namespace_name: 命名空间。
+            modified_sts_data: 修改后的 V1StatefulSet 对象。
+        """
+        try:
+            # 1. 删除 StatefulSet (非级联删除，保留 Pods 和 PVCs)
+            delete_options = client.V1DeleteOptions(grace_period_seconds=0)
+            apps_v1.delete_namespaced_stateful_set(
+                name=real_name,
+                namespace=namespace_name,
+                body=delete_options
+            )
+            print(f"StatefulSet '{namespace_name}/{real_name}' 已删除 (cascade=false).")
+
+            # 2. 创建新的 StatefulSet
+            created_sts = apps_v1.create_namespaced_stateful_set(
+                namespace=namespace_name,
+                body=modified_sts_data
+            )
+            print(f"StatefulSet '{namespace_name}/{real_name}' 已重新创建.")
+            return created_sts
+
+        except Exception as e:
+            print(f"替换 StatefulSet 时发生错误: {e}")
+            import traceback
+            traceback.print_exc()
             raise e
 
     def list_pods_by_label_and_node(self, core_v1: client.CoreV1Api,
@@ -443,7 +495,7 @@ class K8sCommonOperate:
         try:
             # 删除Ingress
             api_response = networking_v1.delete_namespaced_ingress(
-                name=f"cci-{ingress_name}-ingress",
+                name=f"{ingress_name}-{INGRESS_SUFFIX}",
                 namespace=namespace,
                 body=client.V1DeleteOptions(  # 可选删除参数
                     propagation_policy='Foreground',  # 删除策略：'Foreground', 'Background', 'Orphan'

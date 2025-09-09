@@ -23,6 +23,7 @@ class StorageObj(BaseModel):
 # 容器实例信息
 class AiInstanceApiModel(BaseModel):
     instance_id: Optional[str] = Field(None, description="容器实例ID，由云上服务bs传下来")
+    product_code: Optional[str] = Field(None, description="产品Code")
     user_id: Optional[str] = Field(None, description="用户id")
     tenant_id: Optional[str] = Field(None, description="租户ID")
     region_id: Optional[str] = Field(None, description="region id")
@@ -77,6 +78,7 @@ class AccountUpdateRequest(BaseModel):
 class StartInstanceModel(BaseModel):
     image: Optional[str] = Field(None, description="镜像")
     instance_config: Optional[InstanceConfigObj] = Field(None, description="实例的计算资源配置（副本个数、cpu、内存、gpu型号、gpu卡数）")
+    product_code: Optional[str] = Field(None, description="产品Code")
 
 class AddPortModel(BaseModel):
     port: int = Field(None, description="服务端口号")
