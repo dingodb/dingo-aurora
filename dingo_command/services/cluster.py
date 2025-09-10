@@ -66,12 +66,14 @@ class ClusterService:
         node_index = 1
         master_index = 1
         cluster_new = copy.deepcopy(cluster)
-        (master_cpu, master_gpu, master_mem, master_disk,
-         master_flavor_id) = self.get_master_flavor_info(master_flvaor)
-        master_operation_system, master_image_id = self.get_master_image_info(master_image)
+        # (master_cpu, master_gpu, master_mem, master_disk,
+        #  master_flavor_id) = self.get_master_flavor_info(master_flvaor)
+        # master_operation_system, master_image_id = self.get_master_image_info(master_image)
         worker_node = []
         for idx, node in enumerate(cluster.node_config):
             if node.role == "master" and node.type == "vm":
+                cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
+                operation_system = self.get_image_info(node.image)
                 for i in range(node.count):
                     k8s_masters[f"master-{int(master_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
@@ -92,8 +94,8 @@ class ClusterService:
                     instance_db.user = node.user
                     instance_db.password = node.password
                     instance_db.security_group = cluster.name
-                    instance_db.flavor_id = master_flavor_id
-                    instance_db.image_id = master_image_id
+                    instance_db.flavor_id = cpu
+                    instance_db.image_id = node.flavor_id
                     instance_db.status = "creating"
                     instance_db.status_msg = ""
                     instance_db.floating_forward_ip = ""
@@ -101,11 +103,11 @@ class ClusterService:
                     instance_db.project_id = ""
                     instance_db.server_id = ""
                     instance_db.openstack_id = ""
-                    instance_db.operation_system = master_operation_system
-                    instance_db.cpu = master_cpu
-                    instance_db.gpu = master_gpu
-                    instance_db.mem = master_mem
-                    instance_db.disk = master_disk
+                    instance_db.operation_system = operation_system
+                    instance_db.cpu = cpu
+                    instance_db.gpu = gpu
+                    instance_db.mem = mem
+                    instance_db.disk = disk
                     instance_db.ip_address = ""
                     instance_db.name = cluster.name + f"-k8s-master-{int(master_index)}"
                     instance_db.create_time = datetime.now()
@@ -120,17 +122,17 @@ class ClusterService:
                     node_db.role = node.role
                     node_db.user = node.user
                     node_db.password = node.password
-                    node_db.image = master_image_id
+                    node_db.image = node.image
                     node_db.instance_id = instance_db.id
                     node_db.project_id = cluster.project_id
                     node_db.auth_type = node.auth_type
                     node_db.security_group = cluster.name
-                    node_db.flavor_id = master_flavor_id
-                    node_db.operation_system = master_operation_system
-                    node_db.cpu = master_cpu
-                    node_db.gpu = master_gpu
-                    node_db.mem = master_mem
-                    node_db.disk = master_disk
+                    node_db.flavor_id = node.flavor_id
+                    node_db.operation_system = operation_system
+                    node_db.cpu = cpu
+                    node_db.gpu = gpu
+                    node_db.mem = mem
+                    node_db.disk = disk
                     node_db.status = "creating"
                     node_db.floating_forward_ip = ""
                     node_db.ip_forward_rule = []

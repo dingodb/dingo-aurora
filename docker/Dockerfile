@@ -24,6 +24,9 @@ COPY . /opt/dingo-aurora
 
 #ENV https_proxy=172.20.3.88:1088
 #ENV http_proxy=172.20.3.88:1088
+ENV LANG="en_US.UTF-8"
+ENV LC_ALL="en_US.UTF-8"
+ENV PYTHONIOENCODING="utf-8"
 
 RUN pip install -r /opt/dingo-aurora/requirements.txt
 

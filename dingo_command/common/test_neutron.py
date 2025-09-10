@@ -13,9 +13,9 @@ class TestNeutron(unittest.TestCase):
         测试 init_cluster_network 方法
         """
         # 假设有一个测试 project_id
-        test_project_id = "2ef792461415449796e25ab9c438ca6f"
+        test_project_id = "9caa8f93152f46e6bae66c9b25f0f74f"
         try:
-            init_cluster_network(test_project_id, "7a9b1050-b638-4273-9e9d-e42ef14c1b52")
+            init_cluster_network(test_project_id, "0e724c10-8575-4bf4-a8b2-b333c4f14fd1")
             print("init_cluster_network 测试通过")
         except Exception as e:
             print(f"init_cluster_network 测试失败: {e}")

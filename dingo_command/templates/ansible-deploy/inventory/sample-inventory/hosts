@@ -23,6 +23,16 @@ from functools import wraps
 import json
 import os
 import re
+import sys
+
+from dingo_command.common.nova_client import NovaClient
+from dingo_command.db.engines.mysql import get_session
+from dingo_command.db.models.node.models import NodeInfo
+from dingo_command.db.models.instance.models import Instance
+from dingo_command.common import CONF
+
+# 添加项目路径到 Python 路径
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 
 VERSION = '0.4.0pre'
 
@@ -46,6 +56,173 @@ def parse_outputs(resources):
                     outputs[key] = output_data.get('value')
     
     return outputs
+
+def convert_server_to_network_format(server_detail):
+    """
+    Convert server detail network information to the required network format
+    
+    Args:
+        server_detail: Server detail dict containing addresses information
+        
+    Returns:
+        list: Network information in the required format
+    """
+    network_list = []
+    
+    # Extract addresses from server detail
+    addresses = server_detail.get('addresses', {})
+    
+    for network_name, network_interfaces in addresses.items():
+        for interface in network_interfaces:
+            network_info = {
+                "access_network": False,  # Default value, adjust as needed
+                "fixed_ip_v4": interface.get('addr', ''),
+                "fixed_ip_v6": interface.get('addr') if interface.get('version') == 6 else '',
+                "floating_ip": interface.get('addr') if interface.get('OS-EXT-IPS:type') == 'floating' else '',
+                "mac": interface.get('OS-EXT-IPS-MAC:mac_addr', ''),
+                "name": network_name,
+                "port": interface.get('OS-EXT-IPS:port_id', ''),
+                "uuid": ""  # This might need to be extracted from elsewhere or set separately
+            }
+            
+            # Adjust IP assignment based on type
+            if interface.get('OS-EXT-IPS:type') == 'floating':
+                network_info["floating_ip"] = interface.get('addr', '')
+                network_info["fixed_ip_v4"] = ""  # Clear fixed IP if it's floating
+            elif interface.get('version') == 4:
+                network_info["fixed_ip_v4"] = interface.get('addr', '')
+            elif interface.get('version') == 6:
+                network_info["fixed_ip_v6"] = interface.get('addr', '')
+                network_info["fixed_ip_v4"] = ""
+            
+            network_list.append(network_info)
+    
+    return network_list
+
+def query_database_nodes(args):
+    """从数据库查询所有节点信息"""
+    try:
+        #print(f" querying database nodes: {args.cluster}")
+        cluster_dir = args.root
+        # 解析目录cluster_dir，以/分隔，获取路径最后一个值
+        cluster_name = os.path.basename(cluster_dir.rstrip('/'))
+        #print(f"cluster_name from dir: {cluster_name}")
+
+        session = get_session()
+        with session.begin():
+            # 查询所有状态为 running 的节点
+            nodes = session.query(NodeInfo).filter(
+                NodeInfo.status == 'joining',
+                NodeInfo.cluster_id == cluster_name # 只查询虚拟机类型的节点
+            ).all()
+            #print(f" querying database nodes: {nodes[0].admin_address}")
+            # 查询相关的实例信息
+            db_nodes = []
+            nova_client = NovaClient()
+            for node in nodes:
+                #print(f" aaaaaaaaaaaaaaaaaaaa")
+                # 构造节点信息，格式与 openstack_host 函数返回的格式一致
+                name = node.name
+                # 使用novaclient根据server_id查询实例信息
+                instance = nova_client.nova_get_server_detail(node.server_id) if node.server_id else None
+                #从instance中获取网络信息组装成network
+                network = []
+                if instance:
+                    network = convert_server_to_network_format(instance)
+                attrs = {
+                    'id': node.server_id if node else node.id,
+                    'cluster_id': node.cluster_id,
+                    'cluster_name': node.cluster_name,
+                    'role': node.role,
+                    'status': node.status,
+                    'cpu': node.cpu,
+                    'mem': node.mem,
+                    'disk': node.disk,
+                    'gpu': node.gpu,
+                    'region': node.region,
+                    'node_type': node.node_type,
+                    'flavor_id': node.flavor_id if node else '',
+                    'image_id': node.image if node else '',
+                    'ansible_host': node.admin_address if node and node.admin_address else '',
+                    'ansible_user': node.user if node and node.user else 'root',
+                    "ansible_ssh_pass": node.password,
+                    'provider': 'database',
+                    # 默认值
+                    
+                    'metadata': {
+                        'role': node.role,
+                        'cluster_id': node.cluster_id,
+                        'cluster_name': node.cluster_name,
+                        'ansible_user': node.user,
+                        'password': node.password,
+                        'kubespray_groups': 'kube_node,cluster',
+                    },
+                    #从instance中获取network信息
+                    'network': network,
+                    'security_groups': [],
+                    'port_id': '',
+                    'subnet_id': '',
+                    'bussubnet_id': '',
+                    'lb_ip': '',
+                    'flavor': {
+                        'name': f"{node.cpu}c{node.mem}g{node.disk}d",
+                        'vcpus': node.cpu,
+                        'ram': node.mem * 1024,  # GB转MB
+                        'disk': node.disk
+                    },
+                    'image': {
+                        'id': node.image if node else '',
+                        'name': 'database-managed'
+                    }
+                }
+                
+                # 生成组信息
+                groups = [
+                    f'cluster_{node.cluster_name}',
+                    f'role_{node.role}' if node.role else 'role_unknown',
+                    f'status_{node.status}',
+                    f'region_{node.region}' if node.region else 'region_unknown',
+                    f'node_type_{node.node_type}' if node else 'node_type_unknown',
+                    'database_nodes',
+                    f'os_metadata_role={node.role}' if node.role else 'os_metadata_role=unknown'
+                ]
+                
+                # 添加kubespray相关的组
+                if node.role:
+                    groups.append(node.role)
+                for group in attrs['metadata'].get('kubespray_groups', "").split(","):
+                    groups.append(group)
+                db_nodes.append((name, attrs, groups))
+            
+            return db_nodes
+            
+    except Exception as e:
+        #print(f"Error querying database nodes: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        return []
+
+
+def merge_hosts_with_db_nodes(terraform_hosts, db_nodes):
+    """将数据库中的节点与 Terraform 生成的主机列表合并"""
+    # 获取 Terraform hosts 中的主机名列表
+    terraform_hostnames = set()
+    terraform_hosts_list = list(terraform_hosts)
+    
+    for name, attrs, groups in terraform_hosts_list:
+        terraform_hostnames.add(name)
+    
+    # 添加数据库中不存在于 Terraform hosts 的节点
+    merged_hosts = terraform_hosts_list.copy()
+    for name, attrs, groups in db_nodes:
+        if name not in terraform_hostnames:
+            merged_hosts.append((name, attrs, groups))
+            #print(f"Added database node to inventory: {name}", file=sys.stderr)
+        else:
+            #print(f"Skipped duplicate node from database: {name}", file=sys.stderr)
+            pass
+    
+    return merged_hosts
 
 
 
@@ -514,6 +691,9 @@ def main():
     parser.add_argument('--root',
                         default=default_root,
                         help='custom root to search for `.tfstate`s in')
+    parser.add_argument('--cluster',
+                    default="",
+                    help='custom root to search for `.tfstate`s in')
 
     args = parser.parse_args()
 
@@ -539,6 +719,12 @@ def main():
         hosts = iter_host_ips(hosts, ips, lb_ip, adminsubnet, bussububnet, float_ip)
     else:
         hosts = iter_host_network(hosts, lb_ip, adminsubnet, bussububnet)
+
+    # 查询数据库中的节点并合并到hosts中
+    db_nodes = query_database_nodes(args)
+    if db_nodes:
+        hosts = merge_hosts_with_db_nodes(hosts, db_nodes)
+    
     if args.list:
         output = query_list(hosts)
         if args.nometa:
