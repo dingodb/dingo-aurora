@@ -122,6 +122,7 @@ harbor_opts = [
         help="harbor robot token",
     ),
     cfg.BoolOpt("verify_ssl", default=False, help="whether to verify ssl certificate"),
+    cfg.IntOpt("storage_limit", default=100, help="harbor storage limit"),
 ]
 # 注册harbor配置
 CONF.register_group(harbor_group)

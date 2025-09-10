@@ -5,7 +5,7 @@ from dingo_command.common import CONF
 
 base_url = CONF.harbor.base_url
 clean_url = base_url.split("://", 1)[-1]
-
+private_project_storage_limit = CONF.harbor.storage_limit
 
 # 获取公共基础镜像
 class HarborService:
@@ -471,6 +471,14 @@ class HarborService:
             - 如果项目名称已存在，操作将失败
             - 建议在生产环境中使用有意义的项目名称
         """
+        # 检查仓库配额限制，是否超出限制100GB
+        all_quota = private_project_storage_limit * 1024 * 1024 * 1024
+        storage_limit = storage_limit * 1024 * 1024 * 1024
+        get_custom_projects_response = self.get_custom_projects(user_name)
+        total_hard = sum(project['quota_info']['hard'] for project in get_custom_projects_response["data"])
+        if total_hard + storage_limit > all_quota:
+            return self.return_response(False, 400, "仓库配额超出限制100GB")
+        
         # 创建自定义镜像仓库项目
         add_custom_projects_response = self.harbor.add_custom_projects(
             project_name, public, storage_limit
@@ -495,7 +503,7 @@ class HarborService:
 
     # 更新自定义镜像仓库
     def update_custom_projects(
-        self, project_name: str, public: str, storage_limit: int
+        self, project_name: str, public: str, storage_limit: int, user_name: str
     ) -> dict:
         """
         更新自定义镜像仓库项目的配置信息
@@ -519,6 +527,11 @@ class HarborService:
                 - 范围：通常为1-1000 GB
                 - 必须大于当前已使用的存储空间
                 - 示例：50 表示50GB存储限制
+            
+            user_name (str): 要更新项目的用户名
+                - 必须是Harbor中已存在的用户名
+                - 用户名区分大小写
+                - 示例：'developer001', 'user_rkvu5rmv'
 
         Returns:
             dict: 包含更新结果的字典
@@ -535,7 +548,8 @@ class HarborService:
             result = harbor_service.update_custom_projects(
                 project_name="my-project",
                 public="false",
-                storage_limit=50
+                storage_limit=50,
+                user_name="developer001"
             )
 
             if result["status"]:
@@ -549,6 +563,22 @@ class HarborService:
             - 建议在更新前检查当前存储使用情况
             - 存储限制不能小于已使用的存储空间
         """
+        # 检查仓库配额限制，是否超出限制100GB
+        all_quota = private_project_storage_limit * 1024 * 1024 * 1024
+        get_custom_projects_response = self.get_custom_projects(user_name)
+        total_hard = 0
+        project_name_list = []
+        for i in get_custom_projects_response["data"]:
+            if i['name'] == project_name:
+                total_hard += storage_limit * 1024 * 1024 * 1024
+            else:
+                total_hard += i['quota_info']['hard']
+            project_name_list.append(i['name'])
+        if project_name not in project_name_list:
+            return self.return_response(False, 400, f"仓库不存在: {project_name}")
+        if total_hard > all_quota:
+            return self.return_response(False, 400, f"仓库配额超出限制100GB: {project_name}")
+
         # 更新项目公开性设置
         update_custom_projects_response = self.harbor.update_custom_projects(
             project_name, public
@@ -565,12 +595,12 @@ class HarborService:
                     )
                     if update_project_quotas_response["status"]:
                         update_custom_projects_response["message"] = (
-                            f"项目 {project_name} 更新成功"
+                            f"仓库 {project_name} 更新成功"
                         )
                         return update_custom_projects_response
                     else:
                         update_custom_projects_response["message"] = (
-                            f"项目 {project_name} 更新失败"
+                            f"仓库 {project_name} 更新失败"
                         )
                         return update_custom_projects_response
         else:

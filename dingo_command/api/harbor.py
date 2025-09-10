@@ -100,10 +100,11 @@ async def update_custom_projects(
     project_name: str = Body(..., description="项目名称"),
     public: str = Body(..., description="是否公开"),
     storage_limit: int = Body(..., description="存储限制"),
+    user_name: str = Body(..., description="用户名"),
 ):
     try:
         result = harbor_service.update_custom_projects(
-            project_name=project_name, public=public, storage_limit=storage_limit
+            project_name=project_name, public=public, storage_limit=storage_limit, user_name=user_name
         )
         return result
     except Exception as e:
@@ -143,7 +144,7 @@ async def get_custom_projects(
     description="删除自定义镜像仓库",
 )
 async def delete_custom_projects(
-    project_name: str = Body(..., description="项目名称"),
+    project_name: str = Body(..., embed=True, description="项目名称"),
 ):
     try:
         result = harbor_service.delete_custom_projects(project_name=project_name)
