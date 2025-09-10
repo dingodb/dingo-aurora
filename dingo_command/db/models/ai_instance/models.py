@@ -13,6 +13,7 @@ class AiK8sConfigs(Base):
     k8s_id = Column(String(length=128), nullable=True, index=True, unique=True)
     k8s_type = Column(String(length=128), nullable=True)
     public_ip = Column(String(length=128), nullable=True)
+    dns_suffix = Column(String(length=128), nullable=True)
     kubeconfig_path = Column(String(length=255), nullable=True)
     kubeconfig_context_name = Column(String(length=128), nullable=True)
     kubeconfig = Column(Text, nullable=False)

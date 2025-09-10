@@ -1,15 +1,14 @@
+import textwrap
 from typing import Dict
 import json
-import time
 
-from kubernetes.client import V1StatefulSet, ApiException, V1Ingress, V1ObjectMeta, V1IngressSpec, V1IngressTLS, \
+from kubernetes.client import V1StatefulSet, ApiException, V1Ingress, V1ObjectMeta, V1IngressSpec, \
     V1IngressRule, V1HTTPIngressRuleValue, V1HTTPIngressPath, V1IngressBackend, V1IngressServiceBackend, \
     V1ServiceBackendPort, V1ServicePort, V1Service, V1ServiceSpec
 from kubernetes import client
 from oslo_log import log
 
-from dingo_command.utils.constant import RESOURCE_TYPE_KEY, PRODUCT_TYPE_CCI, DEV_TOOL_JUPYTER, CCI_STS_PREFIX, \
-    CCI_STS_POD_SUFFIX, INGRESS_SUFFIX
+from dingo_command.utils.constant import RESOURCE_TYPE_KEY, PRODUCT_TYPE_CCI, DEV_TOOL_JUPYTER, INGRESS_SIGN
 
 LOG = log.getLogger(__name__)
 
@@ -162,18 +161,89 @@ class K8sCommonOperate:
         except Exception as e:
             print(f"创建Service时发生系统异常: {e}")
 
-    def create_cci_ingress_rule(self, networking_v1: client.NetworkingV1Api, instance_id: str, namespace: str, service_name: str, k8s_id: str, region_id: str):
+    def create_configmap(self, core_v1: client.CoreV1Api, namespace, configmap_name, nb_prefix):
+        """
+        创建 Jupyter Notebook 配置的 ConfigMap
+
+        参数:
+            namespace (str): Kubernetes 命名空间
+            configmap_name (str): ConfigMap 名称
+            jupyter_config_content (str): Jupyter Notebook 配置文件内容
+        """
+        try:
+            # Jupyter 配置内容
+
+            jupyter_config_content = textwrap.dedent(f"""\
+                c = get_config()
+                c.ServerApp.token = ''
+                c.ServerApp.password = ''
+                c.ServerApp.disable_check_xsrf = True
+                c.ServerApp.allow_origin = '*'
+                c.ServerApp.allow_remote_access = True
+                c.ServerApp.base_url = '{nb_prefix}'
+                c.ServerApp.trust_xheaders = True
+                c.ServerApp.allow_root = True
+                """)
+
+            # 定义 ConfigMap 主体
+            configmap_manifest = {
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "metadata": {
+                    "name": configmap_name,
+                    "namespace": namespace
+                },
+                "data": {
+                    "jupyter_notebook_config.py": jupyter_config_content  # 配置数据
+                }
+            }
+
+            # 创建 ConfigMap
+            api_response = core_v1.create_namespaced_config_map(
+                namespace=namespace,
+                body=configmap_manifest
+            )
+            LOG.info(f"ConfigMap '{configmap_name}' 创建成功. API 响应: {api_response.metadata.name}")
+            return api_response
+
+        except ApiException as e:
+            LOG.error(f"创建 ConfigMap 时发生异常: {e}")
+            raise e
+
+    def delete_configmap(self, core_v1: client.CoreV1Api, namespace, configmap_name):
+        """
+        删除指定的 ConfigMap
+        参数:
+            namespace (str): Kubernetes 命名空间
+            configmap_name (str): 要删除的 ConfigMap 名称
+        """
+        try:
+            # propagation_policy='Background'：Kubernetes 在删除对象后立即返回，并在后台进行垃圾回收
+            # grace_period_seconds=0：尽可能缩短优雅删除期限（对 ConfigMap 可能影响不大，但表明意图）
+            delete_options = client.V1DeleteOptions(
+                propagation_policy='Background',
+                grace_period_seconds=0
+            )
+            api_response = core_v1.delete_namespaced_config_map(
+                name=configmap_name,
+                namespace=namespace,
+                body=delete_options
+            )
+            LOG.info(f"ConfigMap '{configmap_name}' 删除请求已发送. 状态: {api_response.status}")
+            return api_response
+
+        except ApiException as e:
+            if e.status == 404:
+                LOG.warning(f"ConfigMap '{configmap_name}' 在命名空间 '{namespace}' 中不存在")
+            else:
+                LOG.error(f"删除 ConfigMap 时发生异常: {e}")
+            raise e
+
+    def create_cci_ingress_rule(self, networking_v1: client.NetworkingV1Api, namespace: str, service_name: str, host_domain: str, nb_prefix: str):
         """创建Ingress Service"""
         # 定义变量
-        ingress_name = f"{service_name}-{INGRESS_SUFFIX}"
+        ingress_name = f"{service_name}-{INGRESS_SIGN}"
         user_cci_pod_service_name = service_name + "-" + DEV_TOOL_JUPYTER  # 替换为实际 jupter Service 名称
-        region_id = "default" if not region_id else region_id  # 替换为实际 region_id, 云上会传过来
-        zone_id = k8s_id  # 替换为实际 zone_id
-        cci_pod_name = service_name + CCI_STS_POD_SUFFIX  # 替换为实际 Pod 名称
-
-        # 构建 Ingress 主机名和路径
-        host = f"{region_id}-{zone_id}.alayanew.com"
-        path = f"/{instance_id}/notebook/jupyter/{namespace}/{cci_pod_name}"
 
         # 创建 Ingress 对象
         ingress = V1Ingress(
@@ -183,7 +253,7 @@ class K8sCommonOperate:
                 name=ingress_name,
                 namespace=namespace,
                 annotations={
-                    "nginx.ingress.kubernetes.io/rewrite-target": "/$1",
+                    # "nginx.ingress.kubernetes.io/rewrite-target": "/$1",
                     "nginx.ingress.kubernetes.io/ssl-redirect": "true",
                     "nginx.ingress.kubernetes.io/websocket-services": service_name + "-" + DEV_TOOL_JUPYTER,
                     "nginx.ingress.kubernetes.io/proxy-read-timeout": "3600",
@@ -194,11 +264,11 @@ class K8sCommonOperate:
                 ingress_class_name="nginx",
                 rules=[
                     V1IngressRule(
-                        host=host,
+                        host=host_domain,
                         http=V1HTTPIngressRuleValue(
                             paths=[
                                 V1HTTPIngressPath(
-                                    path=path,
+                                    path=nb_prefix,
                                     path_type="Prefix",
                                     backend=V1IngressBackend(
                                         service=V1IngressServiceBackend(
@@ -495,7 +565,7 @@ class K8sCommonOperate:
         try:
             # 删除Ingress
             api_response = networking_v1.delete_namespaced_ingress(
-                name=f"{ingress_name}-{INGRESS_SUFFIX}",
+                name=f"{ingress_name}-{INGRESS_SIGN}",
                 namespace=namespace,
                 body=client.V1DeleteOptions(  # 可选删除参数
                     propagation_policy='Foreground',  # 删除策略：'Foreground', 'Background', 'Orphan'

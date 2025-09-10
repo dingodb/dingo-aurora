@@ -25,6 +25,7 @@ def upgrade() -> None:
         sa.Column("k8s_id", sa.String(length=128), nullable=False, unique=True, comment='k8s集群ID（唯一）'),
         sa.Column("k8s_type", sa.String(length=128), nullable=False, comment='k8s集群类型', default='public'),
         sa.Column("public_ip", sa.String(length=128), nullable=False, unique=True, comment='K8s中创建容器实例公共IP'),
+        sa.Column("doman", sa.String(length=256), nullable=False, unique=True, comment='域名后缀'),
         sa.Column("kubeconfig_path", sa.String(length=255), nullable=True, comment='k8s集群kube-config文件路径'),
         sa.Column("kubeconfig_context_name", sa.String(length=128), nullable=True, comment='k8s集群kube-config context admin name'),
         sa.Column("kubeconfig", sa.Text(), nullable=True, comment='k8s集群kube-config内容'),
