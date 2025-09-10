@@ -573,7 +573,7 @@ class HarborAPI:
                     True, 200, "获取项目配额成功", all_quotas
                 )
         except Exception as e:
-            return self.return_response(False, 500, f"异常: {str(e)}")
+            return self.return_response(False, 500, f"获取项目配额异常异常: {str(e)}")
 
 
     def get_project_quotas(self, quota_id: int) -> Dict[str, Any]:
@@ -865,7 +865,7 @@ class HarborAPI:
         获取Harbor中所有项目的基本信息
 
         该方法会查询系统中所有项目的列表，返回项目的基本信息包括
-        项目名称、ID、公开性、创建时间等。支持分页查询。
+        项目名称、ID、公开性、创建时间等。自动分页获取所有数据。
 
         Returns:
             Dict[str, Any]: 包含项目列表的响应字典
@@ -904,15 +904,38 @@ class HarborAPI:
         Note:
             - 返回所有用户有权限访问的项目
             - 项目按创建时间倒序排列
-            - 如果项目数量很多，建议使用分页参数
+            - 自动分页获取所有数据，无需手动分页
             - 公开项目所有用户都可以访问
             - 私有项目只有成员可以访问
         """
         try:
-            url = f"{self.base_url}/api/v2.0/projects"
-            response = self.request("GET", url)
+            all_projects = []
+            page = 1
+            page_size = 100  # 每页获取100条数据，减少请求次数
+            
+            while True:
+                url = f"{self.base_url}/api/v2.0/projects?page={page}&page_size={page_size}"
+                response = self.request("GET", url)
+                if response.status_code != 200:
+                    return self.return_response(
+                        False, response.status_code, f"获取仓库第{page}页失败", response.text
+                    )
+                
+                data = response.json()
+                
+                if not data:  # 如果没有更多数据，退出循环
+                    break
+                    
+                all_projects.extend(data)
+                
+                # 如果返回的数据少于page_size，说明已经是最后一页
+                if len(data) < page_size:
+                    break
+                    
+                page += 1
+            
             return self.return_response(
-                True, response.status_code, "获取所有项目成功", response.json()
+                True, 200, f"获取所有项目成功，共{len(all_projects)}个项目", all_projects
             )
         except Exception as e:
             return self.return_response(False, 500, f"获取所有项目异常: {str(e)}")
