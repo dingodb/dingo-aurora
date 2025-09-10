@@ -48,7 +48,8 @@ class AiInstanceService:
     def delete_ai_instance_by_id(self, id):
         ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
         if not ai_instance_info_db:
-            raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
+            LOG.error("ai instance[{id}] is not found")
+            return
         # 更新状态为删除中
         ai_instance_info_db.instance_status="DELETING"
         AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
