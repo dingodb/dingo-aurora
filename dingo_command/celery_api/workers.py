@@ -274,7 +274,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
             # 发生错误时更新任务状态为"失败"
             task_info.end_time =datetime.fromtimestamp(datetime.now().timestamp())
             task_info.state = "failed"
-            task_info.detail = res.stderr
+            task_info.detail = replace_ansi_with_single_newline(res.stderr)
             update_task_state(task_info)
             print(f"Terraform init error: {res.stderr}")
             return False, replace_ansi_with_single_newline(res.stderr)
@@ -295,7 +295,8 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
             # 发生错误时更新任务状态为"失败"
             task_info.end_time =datetime.fromtimestamp(datetime.now().timestamp())
             task_info.state = "failed"
-            task_info.detail = "deploy base infrastructure failed, reason: " + res.stderr
+            task_info.detail = ("deploy base infrastructure failed, reason: " +
+                                replace_ansi_with_single_newline(res.stderr))
             update_task_state(task_info)
             print(f"Terraform apply error: {res.stderr}")
             set_instance_status(cluster, node_list, node_type=node_type)
@@ -346,7 +347,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
         # 发生错误时更新任务状态为"失败"
         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
         task_info.state = "failed"
-        task_info.detail = str(e)
+        task_info.detail = replace_ansi_with_single_newline(str(e))
         update_task_state(task_info)
         print(f"Terraform error: {e}")
         return False, str(e)
