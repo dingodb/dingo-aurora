@@ -129,9 +129,8 @@ async def ai_instance_ssh_web(
                         buffer = buffer[:-1] if buffer else ""  # 防止空 buffer 报错
                         await websocket.send_text("\b \b")  # 回显删除效果（退格 + 空格 + 退格）
                     elif char == '\n' or char == '\r':  # 支持回车
-                        if buffer:  # 避免空命令
-                            resp.write_stdin(buffer + "\n")  # 确保命令以换行结束
-                            buffer = ""
+                        resp.write_stdin("\n")  # 确保命令以换行结束
+                        buffer = ""
                     else:
                         buffer += char
                         await websocket.send_text(char)  # 实时回显输入字符
