@@ -10,7 +10,8 @@ if [ ! -d "$TARGET_DIR" ]; then
 else
     echo "the target dir is exist"
 fi
-
+#设置dingo-command目录权限
+chmod 644 /var/lib/dingo-command/ansible-deploy
 # kolla_set_configs
 echo "/usr/bin/supervisord -c /etc/dingo-command/supervisord.conf" >/run_command
 
