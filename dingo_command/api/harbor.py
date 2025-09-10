@@ -164,7 +164,7 @@ async def delete_custom_projects(
     description="获取自定义镜像仓库镜像",
 )
 async def get_custom_projects_images(
-    project_name: str = Query(..., description="项目名称"),
+    project_name: str = Query(..., embed=True, description="项目名称"),
 ):
     try:
         result = harbor_service.get_custom_projects_images(project_name=project_name)

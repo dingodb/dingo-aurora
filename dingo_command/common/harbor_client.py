@@ -557,18 +557,24 @@ class HarborAPI:
             - 建议定期调用此方法监控存储使用情况
         """
         try:
-            url = f"{self.base_url}/api/v2.0/quotas?page=1&page_size=1000"
-            response = self.request("GET", url)
-            if response.status_code == 200:
-                return self.return_response(
-                    True, response.status_code, "获取项目配额成功", response.json()
-                )
-            else:
-                return self.return_response(
-                    False, response.status_code, "获取项目配额失败", response.json()
+            page = 1
+            page_size = 100
+            all_quotas = []
+            while True:
+                url = f"{self.base_url}/api/v2.0/quotas?page={page}&page_size={page_size}"
+                response = self.request("GET", url)
+                response.raise_for_status()
+                data = response.json()
+                if not data:
+                    break
+                all_quotas.extend(data)
+                page+=1
+            return self.return_response(
+                    True, 200, "获取项目配额成功", all_quotas
                 )
         except Exception as e:
-            return self.return_response(False, 500, f"获取项目配额异常: {str(e)}")
+            return self.return_response(False, 500, f"异常: {str(e)}")
+
 
     def get_project_quotas(self, quota_id: int) -> Dict[str, Any]:
         """
@@ -691,14 +697,14 @@ class HarborAPI:
             response = self.request("GET", url)
             if response.status_code == 200:
                 return self.return_response(
-                    True, response.status_code, "获取项目镜像仓库成功", response.json()
+                    True, response.status_code, "获取项目下所有镜像成功", response.json()
                 )
             else:
                 return self.return_response(
-                    False, response.status_code, "获取项目镜像仓库失败", response.json()
+                    False, response.status_code, "获取项目下所有镜像失败", response.json()
                 )
         except Exception as e:
-            return self.return_response(False, 500, f"获取项目镜像仓库异常: {str(e)}")
+            return self.return_response(False, 500, f"获取项目下所有镜像异常: {str(e)}")
 
     def get_project_repository(
         self,
@@ -768,18 +774,18 @@ class HarborAPI:
                 return self.return_response(
                     True,
                     response.status_code,
-                    "获取项目镜像仓库成功",
+                    "获取项目下指定镜像仓库成功",
                     [response.json()],
                 )
             else:
                 return self.return_response(
                     False,
                     response.status_code,
-                    "获取项目镜像仓库失败",
+                    "获取项目下指定镜像仓库失败",
                     [response.json()],
                 )
         except Exception as e:
-            return self.return_response(False, 500, f"获取项目镜像仓库异常: {str(e)}")
+            return self.return_response(False, 500, f"获取项目下指定镜像仓库异常: {str(e)}")
 
     def delete_project_repository(
         self, project_name: str, repository_name: str
@@ -845,14 +851,14 @@ class HarborAPI:
             response = self.request("DELETE", url)
             if response.status_code == 200:
                 return self.return_response(
-                    True, response.status_code, "删除项目镜像仓库成功", response.text
+                    True, response.status_code, "仓库镜像删除成功", response.text
                 )
             else:
                 return self.return_response(
-                    False, response.status_code, "删除项目镜像仓库失败", response.text
+                    False, response.status_code, "仓库镜像删除失败", response.text
                 )
         except Exception as e:
-            return self.return_response(False, 500, f"删除项目镜像仓库异常: {str(e)}")
+            return self.return_response(False, 500, f"仓库镜像删除异常: {str(e)}")
 
     def get_projects(self) -> Dict[str, Any]:
         """
@@ -1215,9 +1221,10 @@ class HarborAPI:
             url = f"{self.base_url}/api/v2.0/projects/{project_name}/repositories/{encoded_repo}/artifacts"
             params = {
                 "with_tag": "true",
-                "with_scan_overview": "true",
-                "with_sbom_overview": "true",
-                "with_label": "true",
+                "with_scan_overview": "false",
+                "with_sbom_overview": "false",
+                "with_label": "false",
+                "with_immutable_status": "false",
                 "with_accessory": "false",
                 "page_size": 100,
                 "page": 1,
