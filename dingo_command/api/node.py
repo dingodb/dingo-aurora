@@ -78,7 +78,7 @@ async def get_cluster_progress(cluster_id:str):
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"get scale progress error {str(e)}")
 
-@router.get("/node/remove/progress", summary="扩容进度", description="扩容进度")
+@router.get("/node/remove/progress", summary="缩容进度", description="缩容进度")
 async def get_cluster_progress(cluster_id:str):
     try:
         # 集群信息存入数据库
