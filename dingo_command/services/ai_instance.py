@@ -30,7 +30,8 @@ from dingo_command.utils.constant import CCI_NAMESPACE_PREFIX, AI_INSTANCE_SYSTE
     SYSTEM_DISK_NAME_DEFAULT, RESOURCE_TYPE_KEY, PRODUCT_TYPE_CCI, AI_INSTANCE_PVC_MOUNT_PATH_DEFAULT, \
     APP_LABEL, AI_INSTANCE_CM_MOUNT_PATH_SSHKEY, AI_INSTANCE_CM_MOUNT_PATH_SSHKEY_SUB_PATH, \
     CONFIGMAP_PREFIX, DEV_TOOL_JUPYTER, SAVE_TO_IMAGE_CCI_PREFIX, GPU_CARD_MAPPING, SYSTEM_DISK_SIZE_DEFAULT, \
-    GPU_POD_LABEL_KEY, GPU_POD_LABEL_VALUE, CCI_STS_PREFIX, CCI_STS_POD_SUFFIX
+    GPU_POD_LABEL_KEY, GPU_POD_LABEL_VALUE, CCI_STS_PREFIX, CCI_STS_POD_SUFFIX, INGRESS_SIGN, HYPHEN_SIGN, POINT_SIGN, \
+    JUPYTER_CONFIG_MOUNT_NAME, JUPYTER_CONFIG_MOUNT_PATH, JUPYTER_CONFIG_SUB_PATH, CCI_JUPYTER_PREFIX
 from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client, get_k8s_networking_client
 from dingo_command.services.custom_exception import Fail
 
@@ -75,6 +76,12 @@ class AiInstanceService:
                 k8s_common_operate.delete_namespaced_ingress(networking_k8s_client, real_name, namespace_name)
             except Exception as e:
                 LOG.error(f"删除ingress资源[{namespace_name}/{real_name}-jupyter]失败: {str(e)}")
+
+            try:
+                # 删除 jupyter configMap
+                k8s_common_operate.delete_configmap(core_k8s_client, namespace_name, CCI_JUPYTER_PREFIX+id)
+            except Exception as e:
+                LOG.error(f"删除jupyter configMap资源[{namespace_name}/{CCI_JUPYTER_PREFIX+id}]失败: {str(e)}")
 
             try:
                 # 删除镜像库中保存的关机镜像
@@ -648,7 +655,7 @@ class AiInstanceService:
     def _create_cci_k8s_resources(self, ai_instance, ai_instance_db, namespace_name, resource_config):
         """创建K8s相关资源"""
         # 获取服务IP
-        service_ip = self._get_service_ip(ai_instance_db)
+        service_ip, dns_suffix = self._get_service_ip(ai_instance_db)
 
         # 1、创建jupter的service服务，包括默认端口8888
         k8s_common_operate.create_cci_jupter_service(
@@ -660,10 +667,16 @@ class AiInstanceService:
             self.core_k8s_client, namespace_name, ai_instance_db.instance_real_name, service_ip
         )
 
+        # 规则： host: ingress-${zone_id}.${region_id}.alayanew.com # 这里的region_id和zone_id对应的就是下一步的值，每一个cci实例的ingress都是这个值
+        # 生产环境域名后缀： alayanew.com； 测试环境：zetyun.cn
+        host_domain = f"{INGRESS_SIGN}{HYPHEN_SIGN}{ai_instance_db.instance_k8s_id}{POINT_SIGN}{ai_instance_db.instance_region_id}{POINT_SIGN}{dns_suffix}"
+        # 这个path对应的就是注入到pod的环境变量中的path. 规则： /notebook/jupyter/{region_id}/{zone_id}/{instance_id{user_namespace}/{cci_pod_name}  # HTTPS 路径
+        nb_prefix = f"/notebook/jupyter/{ai_instance_db.instance_region_id}/{ai_instance_db.instance_k8s_id}/{ai_instance_db.id}/{namespace_name}/{ai_instance_db.instance_real_name}{CCI_STS_POD_SUFFIX}"
+
         # 3、创建ingress 规则，端口是8888
         k8s_common_operate.create_cci_ingress_rule(
-            self.networking_k8s_client, ai_instance_db.id, namespace_name,
-            ai_instance_db.instance_real_name, ai_instance_db.instance_k8s_id, ai_instance.region_id
+            self.networking_k8s_client, namespace_name, ai_instance_db.instance_real_name,
+            host_domain, nb_prefix
         )
 
         # 4、创建sshkey的configmap（如果有就跳过，没有就创建）
@@ -672,8 +685,11 @@ class AiInstanceService:
             self.core_k8s_client, namespace_name, configmap_name, {"authorized_keys": ""}
         )
 
-        # 5、创建StatefulSet
-        sts_data = self._assemble_sts_data(ai_instance, ai_instance_db, namespace_name, resource_config)
+        # 5、挂载jupyter config
+        k8s_common_operate.create_configmap(self.core_k8s_client, namespace_name, CCI_JUPYTER_PREFIX + ai_instance_db.id, nb_prefix)
+
+        # 6、创建StatefulSet
+        sts_data = self._assemble_sts_data(ai_instance, ai_instance_db, namespace_name, resource_config, nb_prefix)
         k8s_common_operate.create_sts_pod(self.app_k8s_client, namespace_name, sts_data)
 
         # 保存数据库信息
@@ -686,9 +702,9 @@ class AiInstanceService:
             return account_vip_db.vip
 
         k8s_configs_db = AiInstanceSQL.get_k8s_configs_info_by_k8s_id(ai_instance_db.instance_k8s_id)
-        return k8s_configs_db.public_ip
+        return k8s_configs_db.public_ip, k8s_configs_db.dns_suffix
 
-    def _assemble_sts_data(self, ai_instance, ai_instance_db, namespace_name, resource_config):
+    def _assemble_sts_data(self, ai_instance, ai_instance_db, namespace_name, resource_config, nb_prefix):
         """
         组装创建StatefulSet所需的数据对象。
 
@@ -708,8 +724,7 @@ class AiInstanceService:
 
         # 环境变量处理
         env_vars_dict = json.loads(ai_instance_db.instance_envs) if ai_instance_db.instance_envs else {}
-        # 处理环境变量
-        env_vars_dict['NB_PREFIX'] = f"/{ai_instance_db.id}/notebook/jupyter/{namespace_name}/{ai_instance_db.instance_real_name}-0"
+        env_vars_dict['NB_PREFIX'] = nb_prefix
         if "JUPYTER_TOKEN" not in env_vars_dict.keys():
             env_vars_dict['JUPYTER_TOKEN'] = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
         env_list = [
@@ -733,6 +748,17 @@ class AiInstanceService:
         #         )
         #     )
         # ]
+
+        volume_mounts.append(
+            V1VolumeMount(name=JUPYTER_CONFIG_MOUNT_NAME, mount_path=JUPYTER_CONFIG_MOUNT_PATH,
+                          sub_path=JUPYTER_CONFIG_SUB_PATH)
+        )
+        pod_volumes.append(
+            V1Volume(
+                name=JUPYTER_CONFIG_MOUNT_NAME,
+                config_map=V1ConfigMapVolumeSource(name=CCI_JUPYTER_PREFIX + ai_instance_db.id)
+            )
+        )
 
         # 处理PVC (从ai_instance.volumes中获取信息)
         pvc_template = None
@@ -1545,7 +1571,7 @@ class AiInstanceService:
                     node_port_assigned = getattr(p, 'node_port', None)
                     break
             # 查询实例对应的vip
-            vip = self._get_service_ip(ai_instance_info_db)
+            vip, _ = self._get_service_ip(ai_instance_info_db)
             # 组装返回参数
             if not vip or not ai_instance_info_db.ssh_root_password or not node_port_assigned:
                 raise Fail("ssh service invalid", error_message="SSH Service 无效")

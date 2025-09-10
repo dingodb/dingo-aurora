@@ -169,7 +169,7 @@ async def start_instance_by_id(id: str, request: Optional[StartInstanceModel] = 
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail=f"开机容器实例失败:{id}")
+        raise HTTPException(status_code=400, detail=f"开机容器实例[{id}]失败:{e}")
 
 @router.post("/ai-instance/{id}/stop", summary="关机容器实例", description="根据实例id关机容器实例")
 async def stop_instance_by_id(id: str):
@@ -180,7 +180,7 @@ async def stop_instance_by_id(id: str):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail=f"关机容器实例失败:{id}")
+        raise HTTPException(status_code=400, detail=f"关机容器实例[{id}]失败:{e}")
 
 @router.post("/ai-instance/{id}/auto-close", summary="设置定时关机容器实例", description="根据实例id设置定时关机容器实例")
 async def set_auto_close_instance_by_id(id: str, request: AutoCloseRequest):
