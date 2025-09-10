@@ -13,7 +13,7 @@ from typing import Dict, Optional, List
 from dingo_command.api.model.cluster import ClusterObject
 from dingo_command.api.model.instance import InstanceCreateObject
 from dingo_command.celery_api.ansible import run_playbook
-from dingo_command.celery_api.util import update_task_state
+from dingo_command.celery_api.util import update_task_state, install_app_chart
 from dingo_command.services.cluster import TaskService
 from dingo_command.db.models.cluster.models import Cluster, Taskinfo
 from dingo_command.db.models.node.models import NodeInfo
@@ -518,15 +518,18 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
         worker_bool = False
         log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "ansible_debug.log")
         while runner.status not in ['canceled', 'successful', 'timeout', 'failed']:
+            #输出ansible部署的详细进度
             # 处理事件日志
             for event in runner.events:
+                
                 # 检查事件是否包含 task 信息
                 if 'event_data' in event and 'task' in event['event_data']:
                     task_name = event['event_data'].get('task')
                     host =  event['event_data'].get('host')
+                    msg = event['event_data'].get('res', {}).get('msg', '')
                     task_status = event['event'].split('_')[-1]  # 例如 runner_on_ok -> ok
                     # 处理 etcd 任务的特殊逻辑
-                    # print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
+                    print(f"[进度] 主机: {host}, 任务: {task_name}, 状态: {task_status}, 消息: {msg}")
                     if task_name == runtime_task_name and host is not None:
                         if not runtime_bool:
                             runtime_bool = True
@@ -597,6 +600,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
         component_task.state = "success"
         component_task.detail = TaskService.TaskDetail.component_deploy.value
         update_task_state(component_task)
+        (cluster.charts)install_app_chart
         return True, ""
     
     except Exception as e:

@@ -1,6 +1,3 @@
 output "k8s_master_ips" {
-   value = concat(
-    [openstack_compute_instance_v2.masters],
-    #[openstack_compute_instance_v2.k8s-master-no-floatip]
-  )
+  value = [for m in openstack_compute_instance_v2.masters : m]
 }

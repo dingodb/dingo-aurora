@@ -22,10 +22,16 @@ def update_task_state(task:Taskinfo):
         return task.task_id
 def install_app_chart(charts:List[CreateAppObject]):
     # 判空
-    for chart in charts:
-        chart.namespace = "default" if not chart.namespace else chart.namespace
-        chart.values = {} if not chart.values else chart.values
-    # 调用service库chart.py中的install_app方法
-    chart_service = ChartService()
-    chart_service.install_app(chart)
+    try:
+        if charts is None or charts == []:
+            return
+        for chart in charts:
+            chart.namespace = "default" if not chart.namespace else chart.namespace
+            chart.values = {} if not chart.values else chart.values
+        # 调用service库chart.py中的install_app方法
+        chart_service = ChartService()
+        chart_service.install_app(chart)
+    except Exception as e:
+        print(f"install helm chart err: {e}")
+        raise e
     
