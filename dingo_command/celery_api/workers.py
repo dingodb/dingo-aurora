@@ -254,15 +254,6 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
             cluster.router_id = router.get("id", "")
         else:
             cluster.router_id = ""
-        fip_id, fip_address = neutron_api.get_first_floatingip_id_by_tags(
-            tags=["bastion_fip"],
-            tenant_id=cluster.tenant_id
-        )
-        cluster.bastion_floatip_id = fip_id
-        cluster.bastion_fips = [fip_address]
-        if fip_address == "": 
-            cluster.bastion_fips = []
-        
 
         cluster.group_vars_path = os.path.join(cluster_dir, "group_vars")
         tfvars_str = json.dumps(cluster, default=lambda o: o.__dict__, indent=2)
@@ -336,7 +327,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
                 db_cluster.bus_network_cidr = bus_subnet.get("cidr")
             #db_cluster.status = "running"
             ClusterSQL.update_cluster(db_cluster)
-        init_cluster_network(project_id=cluster.tenant_id, subnet_id=subnet_id)
+        #init_cluster_network(project_id=cluster.tenant_id, subnet_id=subnet_id)
         # 更新任务状态为"成功"
         task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
         task_info.state = "success"
@@ -458,7 +449,7 @@ def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list, scale=False
         ClusterSQL.update_cluster(db_cluster)
         raise
 
-def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
+def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None, netns: str = None):
     """使用Ansible部署K8s集群"""
     runtime_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
                          start_time=datetime.fromtimestamp(datetime.now().timestamp()),
@@ -512,7 +503,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
                 private_key_content = key_file.read()
         
         print(f"start deploy kubernetes cluster: {str(cluster.id)}")
-        thread, runner = run_playbook(playbook_file, host_file, ansible_dir, ssh_key=private_key_content)
+        thread, runner = run_playbook(playbook_file, host_file, ansible_dir, ssh_key=private_key_content, netns=netns)
         # 处理并打印事件日志
         runtime_bool = False
         etcd_bool = False
@@ -648,7 +639,7 @@ def update_ansible_status(task_info, event, task_name, host, task_status):
             update_task_state(task_info)
 
 
-def scale_kubernetes(cluster_id, scale_nodes, task_id):
+def scale_kubernetes(cluster_id, scale_nodes, task_id, netns: str = None):
     """使用Ansible扩容K8s集群"""
     try:
         runtime_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
@@ -671,7 +662,7 @@ def scale_kubernetes(cluster_id, scale_nodes, task_id):
             private_key_content = None
         #print
         thread, runner = run_playbook(playbook_file, host_file, ansible_dir,
-                                      ssh_key=private_key_content, limit=scale_nodes)
+                                      ssh_key=private_key_content, limit=scale_nodes,  netns=netns)
         # 处理并打印事件日志
         runtime_bool = False
         etcd_bool = False
@@ -772,6 +763,7 @@ def get_cluster_kubeconfig(cluster: ClusterTFVarsObject, lb_ip, master_ip, float
         kubeconfig = ""
         # SSH连接到master节点获取kubeconfig
         if cluster.password != "":
+
             result = subprocess.run(
                 [
                     "ssh",
@@ -1031,7 +1023,7 @@ def create_bm_instance(conn, instance_info: InstanceCreateObject, instance_list)
             server_list.append(server.get("id"))
     return server_list
 
-def check_nodes_connectivity(host_file, key_file_path):
+def check_nodes_connectivity(host_file, key_file_path, netns):
 
     """检查所有节点的连通性并返回详细结果"""
     print(f"config node no password:")
@@ -1039,6 +1031,7 @@ def check_nodes_connectivity(host_file, key_file_path):
     res={}
     if key_file_path != "":   
         res = subprocess.run([
+            "ip", "netns", "exec", netns,
             "ansible",
             "-i", host_file,
             "-m", "ping",
@@ -1049,6 +1042,7 @@ def check_nodes_connectivity(host_file, key_file_path):
         ], capture_output=True, text=True)
     else:
         res = subprocess.run([
+            "ip", "netns", "exec", netns,
             "ansible",
             "-i", host_file,
             "-m", "ping",
@@ -1213,6 +1207,8 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tf_dict["id"], "hosts")
         os.chmod(host_file, 0o755)  # rwxr-xr-x permission
         master_ip, lb_ip, hosts_data = get_ips(cluster_tfvars, task_info, host_file, cluster_dir)
+        network_id = hosts_data["_meta"]["hostvars"][f"{cluster_tfvars.cluster_name}-master-1"]["network"][0]['uuid']
+        netns = "qdhcp-" + network_id
         # ensure /root/.ssh/known_hosts exists
         if os.path.exists("/root/.ssh/known_hosts"):
             for i in range(1, cluster_tfvars.number_of_k8s_masters + 1):
@@ -1234,11 +1230,12 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                 tmp_ip = hosts_data["_meta"]["hostvars"][master_node_name]["ansible_host"]
                 
                 cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p 22 ' f'{cluster_tfvars.ssh_user}@{tmp_ip}')
-                print(f"config node with password: {cmd} {task_id}")
+                netns_cmd = f"ip netns exec {netns} {cmd}"
+                print(f"config node with password: {netns_cmd} {task_id}")
                 retry_count = 0
                 max_retries = 30
                 while retry_count < max_retries:
-                    result = subprocess.run(cmd, shell=True, capture_output=True)
+                    result = subprocess.run(netns_cmd, shell=True, capture_output=True)
                     if result.returncode == 0:
                         break
                     else:
@@ -1253,11 +1250,12 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                 tmp_ip = hosts_data["_meta"]["hostvars"][node_name]["ansible_host"]
                 cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p 22 '
                        f'{cluster_tfvars.ssh_user}@{tmp_ip}')
-                print(f"config node with password: {cmd} {task_id}")
+                netns_cmd = f"ip netns exec {netns} {cmd}"
+                print(f"config node with password: {netns_cmd} {task_id}")
                 retry_count = 0
                 max_retries = 30
                 while retry_count < max_retries:
-                    result = subprocess.run(cmd, shell=True, capture_output=True)
+                    result = subprocess.run(netns_cmd, shell=True, capture_output=True)
                     if result.returncode == 0:
                         break
                     else:
@@ -1312,7 +1310,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                         break
 
         while not connection_success and (time.time() - start_time) < max_retry_time:
-            nodes_result = check_nodes_connectivity(host_file, key_file_path)
+            nodes_result = check_nodes_connectivity(host_file, key_file_path, netns)
             
             if nodes_result["all_nodes_reachable"]:
                 connection_success = True
@@ -1362,7 +1360,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         if scale:
             ansible_result = scale_kubernetes(cluster.id, scale_nodes, task_id)
         else:
-            ansible_result = deploy_kubernetes(cluster, lb_ip, task_id)
+            ansible_result = deploy_kubernetes(cluster, lb_ip, task_id, netns)
         if not ansible_result[0]:
             raise Exception(f"Ansible kubernetes deployment failed: {ansible_result[1]}")
         # 阻塞线程，直到ansible_client.get_playbook_result()返回结果
@@ -1672,7 +1670,7 @@ def delete_cluster(self, cluster_id, token):
         raise
 
 
-def remove_node_exporter(cluster_tfvars, node_list, hosts_data, master_ip, cluster_dir):
+def remove_node_exporter(cluster_tfvars, node_list, hosts_data, master_ip, cluster_dir, netns):
     master_node_name = f"{cluster_tfvars.cluster_name}-master-1"
     ssh_port = hosts_data["_meta"]["hostvars"][master_node_name].get("ansible_port", 22)
     for node in node_list:
@@ -1684,16 +1682,18 @@ def remove_node_exporter(cluster_tfvars, node_list, hosts_data, master_ip, clust
                    f'pushgateway-job.timer && sudo systemctl stop pushgateway-job.service && sudo systemctl disable '
                    f'pushgateway-job.timer && sudo systemctl stop node_exporter && sudo '
                    f'systemctl disable node_exporter"')
+                   
         else:
             cmd = (f'ssh -o ProxyCommand="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p '
                    f'-q -p {ssh_port} root@{master_ip} -i {cluster_dir}/id_rsa" -o StrictHostKeyChecking=no '
                    f'-o UserKnownHostsFile=/dev/null root@{node.get("admin_address")} -i {cluster_dir}/id_rsa '
                    f'"systemctl stop pushgateway-job.timer && systemctl stop pushgateway-job.service && systemctl '
                    f'disable pushgateway-job.timer && systemctl stop node_exporter && systemctl disable node_exporter"')
+        netns_cmd = f"ip netns exec {netns} {cmd}"
         retry_count = 0
         max_retries = 3
         while retry_count < max_retries:
-            result = subprocess.run(cmd, shell=True, capture_output=True)
+            result = subprocess.run(netns_cmd, shell=True, capture_output=True)
             if result.returncode == 0:
                 print("execute remote command successfully ")
                 break
@@ -1783,6 +1783,8 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
             cluster_tfvars.ssh_user = content.get("ssh_user")
             cluster_tfvars.password = content.get("password")
             master_ip, lb_ip, hosts_data = get_ips(cluster_tfvars, task_info, host_file, cluster_dir)
+            network_id = hosts_data["_meta"]["hostvars"][f"{cluster_name}-master-1"]["network"][0]['uuid']
+            netns = "qdhcp-" + network_id
             # ensure /root/.ssh/known_hosts exists
             if os.path.exists("/root/.ssh/known_hosts"):
                 for i in range(1, cluster_tfvars.number_of_k8s_masters + 1):
@@ -1797,29 +1799,6 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
                         task_info.detail = "Ansible kubernetes deployment failed, configure ssh-keygen error"
                         update_task_state(task_info)
                         raise Exception("Ansible kubernetes deployment failed, configure ssh-keygen error")
-            if cluster_tfvars.password:
-                master_node_name = f"{cluster_tfvars.cluster_name}-master-1"
-                ssh_port = hosts_data["_meta"]["hostvars"][master_node_name].get("ansible_port", 22)
-                cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p {ssh_port} '
-                       f'{cluster_tfvars.ssh_user}@{master_ip}')
-                retry_count = 0
-                max_retries = 30
-                while retry_count < max_retries:
-                    result = subprocess.run(cmd, shell=True, capture_output=True)
-                    if result.returncode == 0:
-                        break
-                    else:
-                        retry_count += 1
-                        if retry_count < max_retries:
-                            print(f"sshpass failed, retry {retry_count}/{max_retries} after 5s...")
-                            time.sleep(5)
-                if result.returncode != 0:
-                    task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                    task_info.state = "failed"
-                    task_info.detail = "Ansible kubernetes deployment failed, configure sshpass error"
-                    update_task_state(task_info)
-                    print(f"sshpass failed after {max_retries} retries: {result.stderr}")
-                    raise Exception("Ansible kubernetes deployment failed, configure sshpass error")
 
             extravars["skip_confirmation"] = "true"
             os.environ['CURRENT_CLUSTER_DIR'] = cluster_dir
@@ -1835,7 +1814,7 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
                 with open(key_file_path, 'r') as key_file:
                     private_key_content = key_file.read()
             thread, runner = run_playbook(playbook_file, host_file, ansible_dir,
-                                          ssh_key=private_key_content, extravars=extravars)
+                                          ssh_key=private_key_content, extravars=extravars,  netns=netns)
             # 处理并打印事件日志
             runtime_bool = False
             etcd_bool = False

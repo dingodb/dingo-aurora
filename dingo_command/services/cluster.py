@@ -6,6 +6,7 @@ import json
 import os
 import random
 import uuid
+import ctypes
 from datetime import datetime
 
 from openpyxl.styles import Border, Side
@@ -31,6 +32,7 @@ from dingo_command.services.custom_exception import Fail
 from dingo_command.services.system import SystemService
 from dingo_command.services import CONF
 from dingo_command.db.engines.mysql import get_session
+from contextlib import contextmanager
 
 
 LOG = log.getLogger(__name__)
@@ -50,6 +52,14 @@ master_flvaor = CONF.DEFAULT.k8s_master_flavor
 system_service = SystemService()
 
 class ClusterService:
+
+    
+    def request_k8s_api_in_netns(self, netns_name, k8s_api_func, *args, **kwargs):
+        """
+        在指定网络命名空间中请求 k8s api
+        """
+        with self.NetnsContext(netns_name):
+            return k8s_api_func(*args, **kwargs)
 
     def get_az_value(self, node_type):
         """根据节点类型返回az值"""
@@ -436,6 +446,7 @@ class ClusterService:
             res_cluster.network_config.kube_lb_address = kube_info.kube_lb_address
             if cluster.admin_network_id and cluster.admin_network_id != "":
                 res_cluster.network_config.admin_network_name = cluster.admin_network_name
+                res_cluster.network_config.admin_network_id = cluster.admin_network_id
             if cluster.admin_subnet_id and cluster.admin_subnet_id!= "":
                 res_cluster.network_config.admin_cidr = cluster.admin_network_cidr
             if cluster.bus_network_id and cluster.bus_network_id != "":
@@ -1037,7 +1048,45 @@ class ClusterService:
             else:
                 operation_system = image.get("name")
         return operation_system, image.get("id")
+    def create_cluster_with_netns(self, cluster: ClusterObject, token):
+        """
+        在集群网络命名空间中创建集群
+        """
+        with self.enter_cluster_netns(cluster.id if hasattr(cluster, 'id') else None):
+            return self.create_cluster(cluster, token)
 
+    def delete_cluster_with_netns(self, cluster_id, token):
+        """
+        在集群网络命名空间中删除集群
+        """
+        with self.enter_cluster_netns(cluster_id):
+            return self.delete_cluster(cluster_id, token)
+
+    def add_existing_nodes_with_netns(self, cluster_id: str, server_details: list, token: str, private_key=None, user=None, password=None):
+        """
+        在集群网络命名空间中添加现有节点
+        """
+        with self.enter_cluster_netns(cluster_id):
+            return self.add_existing_nodes_to_cluster(cluster_id, server_details, token, private_key, user, password)
+
+    def get_cluster_with_netns(self, cluster_id):
+        """
+        在集群网络命名空间中获取集群信息
+        """
+        with self.enter_cluster_netns(cluster_id):
+            return self.get_cluster(cluster_id)
+
+    def make_cluster_request(self, cluster_id, request_func, *args, **kwargs):
+        """
+        通用方法：在集群网络命名空间中执行请求
+        
+        Args:
+            cluster_id: 集群ID
+            request_func: 要执行的函数
+            *args, **kwargs: 传递给函数的参数
+        """
+        with self.enter_cluster_netns(cluster_id):
+            return request_func(*args, **kwargs)
 
 class TaskService:
     
