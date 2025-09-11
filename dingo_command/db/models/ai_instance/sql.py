@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 from dingo_command.db.engines.mysql import get_session
-from dingo_command.db.models.ai_instance.models import AiK8sConfigs, AiInstanceInfo, AiK8sNodeResourceInfo, AccountInfo
+from dingo_command.db.models.ai_instance.models import AiK8sConfigs, AiInstanceInfo, AiK8sNodeResourceInfo, AccountInfo, \
+    AiInstancePortsInfo
 
 # 容器实例排序字段字典
 ai_instance_dir_dic= {"instance_name":AiInstanceInfo.instance_name}
@@ -254,3 +255,40 @@ class AiInstanceSQL:
         session = get_session()
         with session.begin():
             return session.query(AccountInfo).filter(AccountInfo.account == account, AccountInfo.id != exclude_id).first()
+
+    # ========================以下为 ports 相关 ===================================
+    @classmethod
+    def save_ai_instance_ports_info(cls, ai_instance_ports):
+        session = get_session()
+        with session.begin():
+            session.add_all(ai_instance_ports)
+
+    @classmethod
+    def update_ai_instance_ports_info(cls, ai_instance_ports):
+        session = get_session()
+        with session.begin():
+            session.merge(ai_instance_ports)
+
+    @classmethod
+    def delete_ai_instance_ports_info_by_instance_id(cls, instance_id):
+        session = get_session()
+        with session.begin():
+            session.query(AiInstancePortsInfo).filter(AiInstancePortsInfo.instance_id == instance_id).delete()
+
+    @classmethod
+    def delete_ports_info_by_instance_id_port(cls, instance_id, instance_svc_port):
+        session = get_session()
+        with session.begin():
+            session.query(AiInstancePortsInfo).filter(AiInstancePortsInfo.instance_id == instance_id).filter(AiInstancePortsInfo.instance_svc_port == instance_svc_port).delete()
+
+    @classmethod
+    def delete_ports_info_by_instance_id_target_port(cls, instance_id, instance_svc_target_port):
+        session = get_session()
+        with session.begin():
+            session.query(AiInstancePortsInfo).filter(AiInstancePortsInfo.instance_id == instance_id).filter(AiInstancePortsInfo.instance_svc_target_port == instance_svc_target_port).delete()
+
+    @classmethod
+    def list_ai_instance_ports_info(cls):
+        session = get_session()
+        with session.begin():
+            return session.query(AiInstancePortsInfo).all()

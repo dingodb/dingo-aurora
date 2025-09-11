@@ -79,3 +79,13 @@ class AccountInfo(Base):
     vip = Column(String(length=128), nullable=True, comment="VIP")
     create_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"), comment="创建时间")
     update_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"), comment="更新时间")
+
+class AiInstancePortsInfo(Base):
+    __tablename__ = "ops_ai_instance_ports_info"
+
+    id = Column(String(length=128), primary_key=True, nullable=False, index=True, unique=True)
+    instance_id = Column(String(length=128), nullable=True, comment="容器实例的id")
+    instance_svc_port = Column(Integer, nullable=True, comment="容器实例的服务的port")
+    instance_svc_target_port = Column(Integer, nullable=True, comment="容器实例的服务的target port")
+    create_time = Column(DateTime, nullable=True, server_default=text("CURRENT_TIMESTAMP"), comment="创建时间")
+    update_time = Column(DateTime, nullable=True, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"), comment="更新时间")

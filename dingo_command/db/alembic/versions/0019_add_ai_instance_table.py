@@ -39,7 +39,7 @@ def upgrade() -> None:
         sa.Column("product_code", sa.String(length=255), nullable=True, comment='产品code'),
         sa.Column("error_msg", sa.Text(), nullable=True, comment='错误信息'),
         sa.Column("instance_description", sa.Text(), nullable=True, comment='描述信息'),
-        sa.Column("instance_start_time", sa.DateTime(), nullable=False, comment='开机时间'),
+        sa.Column("instance_start_time", sa.DateTime(), nullable=True, comment='开机时间'),
         sa.Column("create_time", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP"),
                   comment='创建时间'),
         sa.Column("update_time", sa.DateTime(), nullable=False,
