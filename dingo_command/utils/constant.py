@@ -7,6 +7,7 @@ KUBECONFIG_DIR_DEFAULT = "/home/dingo-command/kubeconfig/"
 CCI_NAMESPACE_PREFIX = "cci-"
 CCI_STS_PREFIX = "cci-"
 CCI_STS_POD_SUFFIX = "-0"
+CCI_SHARE_METALLB = "cci"
 #用户公钥存放configmap的前缀
 CONFIGMAP_PREFIX = "cm-ssh-key-"
 #容器实例系统盘默认挂载路径
@@ -32,6 +33,8 @@ JUPYTER_CONFIG_SUB_PATH = "jupyter_notebook_config.py"
 #jupyter config 挂载名称
 JUPYTER_CONFIG_MOUNT_NAME = "jupyter-config"
 CCI_JUPYTER_PREFIX = "cci-jupyter-"
+JUPYTER_INIT_MOUNT_NAME = "init-dir"
+JUPYTER_INIT_MOUNT_PATH = "/anc-init"
 INGRESS_SIGN = "ingress"
 #CCI保存为镜像后缀
 SAVE_TO_IMAGE_CCI_PREFIX = "cci_saving_to_image-"
@@ -136,10 +139,6 @@ GPU_CARD_MAPPING = {
         "original_name": "NVIDIA-H100",
         "gpu_code": "nvidia.com/gpu-h100"
     },
-    "NVIDIA-L40S-PCIE-48G": {
-        "original_name": "NVIDIA-L40S",
-        "gpu_code": "nvidia.com/gpu-l40s"
-    },
     "NVIDIA-H800-NV-80G": {
         "original_name": "NVIDIA-H800",
         "gpu_code": "nvidia.com/gpu-h800"
@@ -151,5 +150,13 @@ GPU_CARD_MAPPING = {
     "NVIDIA-H800E-NV-35G": {
         "original_name": "NVIDIA-H200-MIG",
         "gpu_code": "nvidia.com/mig-h200-1g.35gb"
+    },
+    "NVIDIA-P4-PCIE-8G": {
+        "original_name": "Tesla-P4",
+        "gpu_code": "nvidia.com/gpu-tesla-p4"
+    },
+    "NVIDIA-L40S-PCIE-48G": {
+        "original_name": "NVIDIA-L40S",
+        "gpu_code": "nvidia.com/gpu-l40s"
     }
 }

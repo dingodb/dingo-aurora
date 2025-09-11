@@ -22,7 +22,7 @@ from oslo_log import log
 from dingo_command.api.model.aiinstance import StorageObj, AddPortModel
 from dingo_command.common.Enum.AIInstanceEnumUtils import AiInstanceStatus, K8sStatus
 from dingo_command.common.k8s_common_operate import K8sCommonOperate
-from dingo_command.db.models.ai_instance.models import AiInstanceInfo, AccountInfo
+from dingo_command.db.models.ai_instance.models import AiInstanceInfo, AccountInfo, AiInstancePortsInfo
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
 from dingo_command.services.harbor import HarborService
 from dingo_command.services.redis_connection import redis_connection, RedisLock
@@ -94,6 +94,9 @@ class AiInstanceService:
                 print(f"ai instance [{id}] project_name:{project_name}, image_name:{image_name}")
             except Exception as e:
                 LOG.error(f"删除容器实例[{id}]的关机镜像失败: {e}")
+
+            # 删除metallb的默认端口
+            AiInstanceSQL.delete_ai_instance_ports_info_by_instance_id(id)
 
             try:
                 k8s_common_operate.delete_sts_by_name(app_k8s_client, real_name, namespace_name)
@@ -479,7 +482,7 @@ class AiInstanceService:
         temp["instance_user_id"] = r.instance_user_id
         temp["instance_tenant_id"] = r.instance_tenant_id
         if r.instance_tenant_id: 
-            temp["namespace"] = "ns-" + r.instance_tenant_id
+            temp["namespace"] = CCI_NAMESPACE_PREFIX + r.instance_tenant_id
         temp["instance_image"] = r.instance_image
         temp["stop_time"] = r.stop_time
         temp["auto_delete_time"] = r.auto_delete_time
@@ -663,9 +666,15 @@ class AiInstanceService:
             self.core_k8s_client, namespace_name, ai_instance_db.instance_real_name
         )
 
+        # 22、9001、9002 port需实时获取,防止冲突
+        available_ports = self.find_ai_instance_available_ports()
+        print(f"----wwb: available_ports:{available_ports}")
+        if len(available_ports) < 3:
+            raise Fail("Not enough available IPs", error_message="无足够可用IP")
+
         # 2、创建metallb的服务，包括默认端口22、9001、9002
         k8s_common_operate.create_cci_metallb_service(
-            self.core_k8s_client, namespace_name, ai_instance_db.instance_real_name, service_ip
+            self.core_k8s_client, namespace_name, ai_instance_db.instance_real_name, service_ip, available_ports
         )
 
         # 规则： host: ingress-${zone_id}.${region_id}.alayanew.com # 这里的region_id和zone_id对应的就是下一步的值，每一个cci实例的ingress都是这个值
@@ -692,9 +701,51 @@ class AiInstanceService:
         # 6、创建StatefulSet
         sts_data = self._assemble_sts_data(ai_instance, ai_instance_db, namespace_name, resource_config, nb_prefix)
         k8s_common_operate.create_sts_pod(self.app_k8s_client, namespace_name, sts_data)
+        # 22、9001、9002默认端口的metallb配置
+        ports = []
+        port_22 = AiInstancePortsInfo(
+            id=uuid.uuid4().hex,
+            instance_id=ai_instance_db.id,
+            instance_svc_port=available_ports[0],
+            instance_svc_target_port=22
+        )
+        port_9001 = AiInstancePortsInfo(
+            id=uuid.uuid4().hex,
+            instance_id=ai_instance_db.id,
+            instance_svc_port=available_ports[1],
+            instance_svc_target_port=9001
+        )
+        port_9002 = AiInstancePortsInfo(
+            id=uuid.uuid4().hex,
+            instance_id=ai_instance_db.id,
+            instance_svc_port=available_ports[2],
+            instance_svc_target_port=9002
+        )
+        ports.append(port_22)
+        ports.append(port_9001)
+        ports.append(port_9002)
+        AiInstanceSQL.save_ai_instance_ports_info(ports)
 
         # 保存数据库信息
         AiInstanceSQL.update_ai_instance_info(ai_instance_db)
+
+    def find_ai_instance_available_ports(self, start_port=30001, end_port=65535, count=3):
+        """查找从start_port开始的最小count个可用端口"""
+        with RedisLock(redis_connection.redis_connection, lock_name= f"cci-metallb-port", retry_interval=1) as lock:
+            if lock:
+                available_ports = []
+                current_port = start_port
+                ai_instance_ports_db = AiInstanceSQL.list_ai_instance_ports_info()
+                print(f"---wwb find_ai_instance_available_ports ai_instance_ports_db:{len(ai_instance_ports_db)}")
+                ports_db = [ports.instance_svc_port for ports in ai_instance_ports_db] if ai_instance_ports_db else []
+                print(f"---wwb find_ai_instance_available_ports ports_db:{ports_db}")
+                while current_port <= end_port and len(available_ports) < count:
+                    if current_port not in ports_db:
+                        available_ports.append(current_port)
+                    current_port += 1
+
+                return available_ports
+
 
     def _get_service_ip(self, ai_instance_db):
         """获取服务IP地址"""
@@ -1344,37 +1395,32 @@ class AiInstanceService:
             namespace_name = CCI_NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id
             service_name = ai_instance_info_db.instance_real_name
 
-            port = int(model.port)
-            target_port = int(model.target_port) if hasattr(model, 'target_port') and model.target_port is not None else 8888
-            node_port = int(model.node_port) if getattr(model, 'node_port', None) is not None else None
+            # port = int(model.port)
+            target_port = int(model.target_port) if hasattr(model,
+                                                            'target_port') and model.target_port is not None else 8888
+            # node_port = int(model.node_port) if getattr(model, 'node_port', None) is not None else None
             protocol = getattr(model, 'protocol', None) or 'TCP'
 
-            # NodePort 占用校验（以 node_port=port 的策略暴露）
-            if k8s_common_operate.is_port_in_use(core_k8s_client, port):
-                raise Fail(f"port {port} already in use", error_message=f"节点端口 {port} 已被占用")
-
+            # 查询一个未被占用的port
+            available_port = self.find_ai_instance_available_ports(count=1)
+            port=available_port[0]
             # 读取 Service 并追加端口
             svc = core_k8s_client.read_namespaced_service(name=service_name, namespace=namespace_name)
             if not svc or not svc.spec:
+
                 raise Fail("service invalid", error_message="Service 无效")
 
             existing_ports = svc.spec.ports or []
             new_port = client.V1ServicePort(port=port, target_port=target_port, protocol=protocol)
 
             # 必须为每个端口设置唯一 name 字段
-            new_port.name = f"port-{port}"
-
-            # 设为固定 nodePort
-            if not svc.spec.type:
-                svc.spec.type = "NodePort"
-            if svc.spec.type != "NodePort":
-                svc.spec.type = "NodePort"
-            new_port.node_port = node_port
-
+            new_port.name = f"port-{target_port}"
             existing_ports.append(new_port)
             svc.spec.ports = existing_ports
 
             core_k8s_client.patch_namespaced_service(name=service_name, namespace=namespace_name, body=svc)
+            port_db = AiInstancePortsInfo(instance_id=id, instance_svc_port=port, instance_svc_target_port=target_port)
+            AiInstanceSQL.save_ai_instance_ports_info(port_db)
             return {"data": "success", "port": port}
         except Fail:
             raise
@@ -1405,7 +1451,7 @@ class AiInstanceService:
             # 查找目标端口的 index
             target_index = None
             for idx, p in enumerate(old_ports):
-                if int(getattr(p, 'port', -1)) == int(port):
+                if int(getattr(p, 'targetPort', -1)) == int(port):
                     target_index = idx
                     break
             if target_index is None:
@@ -1419,6 +1465,8 @@ class AiInstanceService:
                 }
             ]
             core_k8s_client.patch_namespaced_service(name=service_name, namespace=namespace_name, body=patch_operations)
+            # 删数据库表数据
+            AiInstanceSQL.delete_ports_info_by_instance_id_target_port(id, port)
             return {"data": "success", "port": port}
         except Fail:
             raise

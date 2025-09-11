@@ -8,7 +8,8 @@ from kubernetes.client import V1StatefulSet, ApiException, V1Ingress, V1ObjectMe
 from kubernetes import client
 from oslo_log import log
 
-from dingo_command.utils.constant import RESOURCE_TYPE_KEY, PRODUCT_TYPE_CCI, DEV_TOOL_JUPYTER, INGRESS_SIGN
+from dingo_command.utils.constant import RESOURCE_TYPE_KEY, PRODUCT_TYPE_CCI, DEV_TOOL_JUPYTER, INGRESS_SIGN, \
+    CCI_SHARE_METALLB
 
 LOG = log.getLogger(__name__)
 
@@ -110,16 +111,16 @@ class K8sCommonOperate:
             traceback.print_exc()
             raise e
 
-    def create_cci_metallb_service(self, core_v1: client.CoreV1Api(), namespace: str, service_name: str, cci_service_ip: str):
+    def create_cci_metallb_service(self, core_v1: client.CoreV1Api(), namespace: str, service_name: str, cci_service_ip: str, available_ports):
         """
         创建带有特定注解的MetalLB Service
         """
         try:
             # 定义Service端口
             ports = [
-                V1ServicePort(name="ssh", protocol="TCP", port=22, target_port=22),  # 第一个端口映射
-                V1ServicePort(name="port-9001", protocol="TCP", port=9001, target_port=9001),  # 第二个端口映射
-                V1ServicePort(name="port-9002", protocol="TCP", port=9002, target_port=9002)  # 第三个端口映射
+                V1ServicePort(name="ssh", protocol="TCP", port=available_ports[0], target_port=22),  # 第一个端口映射
+                V1ServicePort(name="port-9001", protocol="TCP", port=available_ports[1], target_port=9001),  # 第二个端口映射
+                V1ServicePort(name="port-9002", protocol="TCP", port=available_ports[2], target_port=9002)  # 第三个端口映射
             ]
 
             # 定义Service的metadata，包含名称、命名空间、标签和关键的MetalLB注解
@@ -129,7 +130,7 @@ class K8sCommonOperate:
                 labels={RESOURCE_TYPE_KEY: PRODUCT_TYPE_CCI},
 
                 annotations={
-                    "metallb.universe.tf/allow-shared-ip": service_name,  # 共享IP的标识
+                    "metallb.universe.tf/allow-shared-ip": CCI_SHARE_METALLB,  # 共享IP的标识
                     "metallb.universe.tf/loadBalancerIPs": cci_service_ip  # 指定的固定IP
                 }
             )
@@ -137,6 +138,7 @@ class K8sCommonOperate:
             # 定义Service的spec
             spec = V1ServiceSpec(
                 type="LoadBalancer",  # 类型为LoadBalancer，由MetalLB提供实现
+                allocate_load_balancer_node_ports=False,
                 ports=ports,
                 selector={
                     "app": service_name,
@@ -161,6 +163,49 @@ class K8sCommonOperate:
         except Exception as e:
             print(f"创建Service时发生系统异常: {e}")
 
+    def create_jupyter_configmap(self, core_v1: client.CoreV1Api, namespace, configmap_name, nb_prefix, nb_init_password):
+        """
+        创建 Jupyter Notebook 配置的 ConfigMap
+
+        参数:
+            namespace (str): Kubernetes 命名空间
+            configmap_name (str): ConfigMap 名称
+            jupyter_config_content (str): Jupyter Notebook 配置文件内容
+        """
+        try:
+            # 定义ConfigMap数据
+            configmap_data = {
+                "NB_INIT_PASSWORD": nb_init_password,  # 使用传入的变量值
+                "NOTEBOOK_ENABLE_PROXY": "False",
+                "PIP_SOURCE": "nexus",
+                "CONDA_SOURCE": "tsinghua",
+                "APT_SOURCE": "nexus",
+                "NB_PREFIX": nb_prefix
+            }
+
+            # 创建ConfigMap对象
+            configmap = client.V1ConfigMap(
+                api_version="v1",
+                kind="ConfigMap",
+                metadata=client.V1ObjectMeta(
+                    name=configmap_name,
+                    namespace=namespace
+                ),
+                data=configmap_data
+            )
+
+            # 创建 ConfigMap
+            api_response = core_v1.create_namespaced_config_map(
+                namespace=namespace,
+                body=configmap
+            )
+            LOG.info(f"ConfigMap '{configmap_name}' 创建成功. API 响应: {api_response.metadata.name}")
+            return api_response
+
+        except Exception as e:
+            LOG.error(f"创建 ConfigMap[{configmap_name}]时发生异常: {e}")
+            raise e
+
     def create_configmap(self, core_v1: client.CoreV1Api, namespace, configmap_name, nb_prefix):
         """
         创建 Jupyter Notebook 配置的 ConfigMap
@@ -172,7 +217,6 @@ class K8sCommonOperate:
         """
         try:
             # Jupyter 配置内容
-
             jupyter_config_content = textwrap.dedent(f"""\
                 c = get_config()
                 c.ServerApp.token = ''

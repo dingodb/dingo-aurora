@@ -189,6 +189,9 @@ def handle_orphan_resources(sts_names, db_instance_map, namespace, core_client, 
         except Exception as e:
             LOG.error(f"删除jupyter configMap资源[{namespace}/{CCI_JUPYTER_PREFIX + ai_instance_db.id}]失败: {str(e)}")
 
+        # 删除metallb的默认端口
+        AiInstanceSQL.delete_ai_instance_ports_info_by_instance_id(id)
+
 
 def cleanup_cci_resources(apps_client, core_client, networking_client, name, namespace):
     try:
