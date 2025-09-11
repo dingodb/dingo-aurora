@@ -1,15 +1,35 @@
+import ctypes
+import os
 from kubernetes import client, config, dynamic
 from kubernetes.client.rest import ApiException
 from typing import List, Dict, Any, Optional, Union
-
+import logging
 from dingo_command.common.k8s.resource import ResourceClientFactory
 
+logger = logging.getLogger(__name__)
+
+libc = ctypes.CDLL("libc.so.6")
+def set_netns(netns_name):
+    """
+    将当前线程切换到指定的网络命名空间。
+    libc.setns() 系统调用需要文件描述符和命名空间标识。
+    """
+    netns_path = f"/run/netns/{netns_name}"
+    if not os.path.exists(netns_path):
+        raise FileNotFoundError(f"网络命名空间 {netns_name} 不存在于 {netns_path}")
+    fd = os.open(netns_path, os.O_RDONLY)
+    try:
+        if libc.setns(fd, 0) == -1:
+            raise OSError("setns 系统调用失败")
+        print(f"已切换到网络命名空间: {netns_name}")
+    finally:
+        os.close(fd)
 class K8sClient:
     """
     一个统一的 Kubernetes API 客户端，支持查询、创建内置资源和自定义资源。
     内部主要使用 dynamic_client 实现通用操作。
-    """
-    def __init__(self, kubeconfig_path: Optional[str] = None, kubeconfig_content: Optional[str] = None):
+    """ 
+    def __init__(self, kubeconfig_path: Optional[str] = None, kubeconfig_content: Optional[str] = None, netns: Optional[str] = None):
         """
         初始化 Kubernetes 客户端。
 
@@ -19,16 +39,16 @@ class K8sClient:
                                              1. 默认 kubeconfig 文件路径 (~/.kube/config)
                                              2. 集群内配置 (In-cluster config)
         """
-        self._load_kubernetes_config(kubeconfig_path,kubeconfig_content)
-        # 初始化 dynamic_client，它是创建/更新/删除资源的关键
+        self._load_kubernetes_config(kubeconfig_path, kubeconfig_content, netns)
         self._dynamic_client = dynamic.DynamicClient(client.ApiClient())
-        # 对于查询，为了兼容性或特定优化，保留特定客户端
         self._core_v1_api = client.CoreV1Api()
         self._apps_v1_api = client.AppsV1Api()
         print("Kubernetes 客户端初始化成功。")
 
-    def _load_kubernetes_config(self, kubeconfig_path: Optional[str], kubeconfig_content: Optional[str] = None):
+    def _load_kubernetes_config(self, kubeconfig_path: Optional[str], kubeconfig_content: Optional[str] = None, netns: Optional[str] = None):
         """内部方法：加载 Kubernetes 配置。"""
+        if netns:
+            set_netns(netns)
         try:
             if kubeconfig_path:
                 config.load_kube_config(config_file=kubeconfig_path)
@@ -656,6 +676,7 @@ class K8sClient:
             search_terms: Optional[List[str]] = None,
         ) -> Dict[str, Any]:
         #根据资源类型组织不同的filter
+        
         try:
             if not api_version:
                 api_version = self._infer_api_version(resource_type)
@@ -682,8 +703,8 @@ class K8sClient:
             # 转换为字典格式
             items_dict = []
             for item in items:
-               items_dict.append(self._convert_k8s_object_to_dict(item))
-               
+                items_dict.append(self._convert_k8s_object_to_dict(item))
+            
             # 创建资源工厂
             factory = ResourceClientFactory(self)
             items_dict = factory.list(items_dict, resource_type = resource_type, namespace=namespace, label_selector=label_selector, field_selector=field_selector, filters=search_terms)
@@ -745,7 +766,6 @@ class K8sClient:
                 'metadata': {'error': str(e)},
                 'total_count': 0
             }
-
 
 
     def create_resource(
