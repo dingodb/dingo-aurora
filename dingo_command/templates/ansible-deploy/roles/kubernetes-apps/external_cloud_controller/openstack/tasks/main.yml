@@ -37,7 +37,7 @@
 - name: External OpenStack Cloud Controller | Apply Manifests
   kube:
     kubectl: "{{ bin_dir }}/kubectl"
-    filename: "{{ kube_config_dir }}/{{ item.item.file }}"
+    filename: "{{ kube_config_dir }}/external-openstack-cloud-config-secret.yml"
     state: "latest"
   with_items:
     - "{{ external_openstack_manifests.results }}"

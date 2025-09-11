@@ -25,15 +25,13 @@ class CustomCallback(CallbackBase):
         self.task_results.append({"task": task_name, "status": "unreachable", "result": result._result})
 
 
-# CLONE_NEWNET = 0x40000000
-
 # def enter_netns(netns):
 #     """
 #     切换当前进程到指定的网络命名空间。
     
-#     :param netns: netns名称，例如 'myns'
+#     :param namespace: netns名称，例如 'myns'
 #     """
-#     netns_path = f"/run/netns/{netns}"
+#     netns_path = f"/var/run/netns/{netns}"
 #     if not os.path.exists(netns_path):
 #         raise FileNotFoundError(f"Netns '{netns}' 不存在。确保已创建。")
     
@@ -46,6 +44,7 @@ class CustomCallback(CallbackBase):
 #         raise OSError("切换netns失败。请检查权限（需root）。")
     
 #     os.close(fd)
+#     print(f"已切换到netns: {namespace}")
 
 def run_playbook(playbook_name, inventory, data_dir, ssh_key, extravars=None, limit=None, netns=None):
     # 设置环境变量

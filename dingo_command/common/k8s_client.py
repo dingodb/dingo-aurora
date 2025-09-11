@@ -681,21 +681,21 @@ class K8sClient:
             if not api_version:
                 api_version = self._infer_api_version(resource_type)
 
-            resource_client = self._dynamic_client.resources.get(api_version=api_version, kind=self._infer_kind_from_resource_type(resource_type))
+                resource_client = self._dynamic_client.resources.get(api_version=api_version, kind=self._infer_kind_from_resource_type(resource_type))
 
-            # 构建查询参数
-            params = {
-                'label_selector': label_selector,
-                'field_selector': field_selector,
-                'limit': limit,
-                '_continue': continue_token
-            }
+                # 构建查询参数
+                params = {
+                    'label_selector': label_selector,
+                    'field_selector': field_selector,
+                    'limit': limit,
+                    '_continue': continue_token
+                }
 
-            # 执行查询
-            if namespace:
-                resource_list = resource_client.get(namespace=namespace, **self._filter_none_params(params))
-            else:
-                resource_list = resource_client.get(**self._filter_none_params(params))
+                # 执行查询
+                if namespace:
+                    resource_list = resource_client.get(namespace=namespace, **self._filter_none_params(params))
+                else:
+                    resource_list = resource_client.get(**self._filter_none_params(params))
 
             # 获取资源列表
             items = resource_list.items if hasattr(resource_list, 'items') else []
@@ -720,9 +720,10 @@ class K8sClient:
         #                 items_dict = self._filter_by_key_value(items, 'name', term.strip())
                     
                         
-                #result['total_count'] = len(result['items'])
-            
-            # 应用排序
+                            
+                    #result['total_count'] = len(result['items'])
+                
+                # 应用排序
             if sort_by:
                 items_dict = self._sort_resources(items_dict, sort_by, sort_order)
             # 应用客户端分页
@@ -764,8 +765,8 @@ class K8sClient:
             return {
                 'items': [],
                 'metadata': {'error': str(e)},
-                'total_count': 0
-            }
+                    'total_count': 0
+                }
 
 
     def create_resource(
