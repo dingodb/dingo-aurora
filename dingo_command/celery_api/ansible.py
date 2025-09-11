@@ -1,4 +1,5 @@
 import os
+import ctypes
 import ansible_runner
 from ansible.plugins.callback import CallbackBase
 
@@ -24,14 +25,45 @@ class CustomCallback(CallbackBase):
         self.task_results.append({"task": task_name, "status": "unreachable", "result": result._result})
 
 
+# CLONE_NEWNET = 0x40000000
 
-def run_playbook(playbook_name, inventory, data_dir, ssh_key, extravars=None, limit=None):
+# def enter_netns(netns):
+#     """
+#     切换当前进程到指定的网络命名空间。
+    
+#     :param netns: netns名称，例如 'myns'
+#     """
+#     netns_path = f"/run/netns/{netns}"
+#     if not os.path.exists(netns_path):
+#         raise FileNotFoundError(f"Netns '{netns}' 不存在。确保已创建。")
+    
+#     # 打开netns文件描述符
+#     fd = os.open(netns_path, os.O_RDONLY)
+    
+#     # 加载libc并调用setns
+#     libc = ctypes.CDLL('libc.so.6')
+#     if libc.setns(fd, CLONE_NEWNET) != 0:
+#         raise OSError("切换netns失败。请检查权限（需root）。")
+    
+#     os.close(fd)
+
+def run_playbook(playbook_name, inventory, data_dir, ssh_key, extravars=None, limit=None, netns=None):
     # 设置环境变量
     envvars = {
         "ANSIBLE_FORKS": 10,
         "ANSIBLE_BECOME": "True",
         "CURRENT_DIR": inventory,
     }
+    # 如果指定了 netns，则修改环境变量
+    if netns:
+        # Create the netns_ssh.sh script
+        script_path = os.path.join(data_dir, "netns_ssh.sh")
+        with open(script_path, "w") as f:
+            f.write("#!/bin/bash\n")
+            f.write(f"/usr/sbin/ip netns exec {netns} ssh \"$@\"\n")
+        os.chmod(script_path, 0o755)
+        envvars["ANSIBLE_SSH_EXECUTABLE"] = script_path
+    
     inventory_file = os.path.join(inventory, "hosts")
     # 运行 Ansible playbook 异步
     thread, runner = ansible_runner.run_async(

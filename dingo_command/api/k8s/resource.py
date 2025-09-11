@@ -59,7 +59,7 @@ def get_k8s_client_by_cluster(cluster_id: str) -> K8sClient:
         kubeconfig_content = cluster.kube_info.kube_config
 
         # 4. 使用kubeconfig内容创建K8sClient
-        k8s_client = K8sClient(kubeconfig_content=kubeconfig_content)
+        k8s_client = K8sClient(kubeconfig_content=kubeconfig_content, netns="qdhcp-" + str(cluster.network_config.admin_network_id))
 
         return k8s_client
             
