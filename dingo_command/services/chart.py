@@ -1170,7 +1170,7 @@ class ChartService:
             # 清除安装产生的缓存文件
             shutil.rmtree(helm_cache_dir)
         except Exception as e:
-            shutil.rmtree(helm_cache_dir)
+            # shutil.rmtree(helm_cache_dir)
             raise e
 
     def install_app(self, create_data: CreateAppObject, update=False):

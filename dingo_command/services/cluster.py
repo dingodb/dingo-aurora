@@ -109,7 +109,7 @@ class ClusterService:
                     instance_db.mem = mem
                     instance_db.disk = disk
                     instance_db.ip_address = ""
-                    instance_db.name = cluster.name + f"-k8s-master-{int(master_index)}"
+                    instance_db.name = cluster.name + f"-master-{int(master_index)}"
                     instance_db.create_time = datetime.now()
                     instance_db_list.append(instance_db)
 
@@ -138,7 +138,7 @@ class ClusterService:
                     node_db.ip_forward_rule = []
                     node_db.status_msg = ""
                     node_db.admin_address = ""
-                    node_db.name = cluster.name + f"-k8s-master-{int(master_index)}"
+                    node_db.name = cluster.name + f"-master-{int(master_index)}"
                     node_db.bus_address = ""
                     node_db.create_time = datetime.now()
                     node_db_list.append(node_db)
