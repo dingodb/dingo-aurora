@@ -211,6 +211,8 @@ def state_remove(node_list):
         except Exception as e:
             if "No matching objects found" in str(e):
                 continue
+            else:
+                raise e
     print(f"rm nodes from terraform state successfully")
 
 def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale=False, node_list=None,
@@ -597,7 +599,6 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None):
         component_task.state = "success"
         component_task.detail = TaskService.TaskDetail.component_deploy.value
         update_task_state(component_task)
-        install_app_chart(cluster.charts)
         return True, ""
     
     except Exception as e:
@@ -1247,7 +1248,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                             time.sleep(5) 
             index = 1
             for node in node_list:
-                node_name = f"{cluster_tfvars.cluster_name}-node-{str(i)}"
+                node_name = f"{cluster_tfvars.cluster_name}-node-{str(index)}"
                 #ssh_port = hosts_data["_meta"]["hostvars"][master_node_name].get("ansible_port", 22)
                 tmp_ip = hosts_data["_meta"]["hostvars"][node_name]["ansible_host"]
                 cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p 22 '
@@ -1387,6 +1388,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                 if gpu_count_info.resource_gpu_count is not None:
                     c.gpu = gpu_count_info.resource_gpu_count + c.gpu
         ClusterSQL.update_cluster(c)
+        install_app_chart(cluster.charts, cluster_dict["id"])
 
     except SoftTimeLimitExceeded:
         query_params = {}
@@ -1598,6 +1600,7 @@ def delete_cluster(self, cluster_id, token):
         env["TF_LOG"] = "DEBUG"
         resource_inuse = False
         # 创建子进程并实时捕获输出
+        remove_bastion_fip_from_state(cluster_dir)
         process = subprocess.Popen(
             ["terraform", "destroy", "-auto-approve", "-var-file=output.tfvars.json", "-lock=false"],
             stdout=subprocess.PIPE,

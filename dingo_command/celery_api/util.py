@@ -1,3 +1,4 @@
+import json
 from dingo_command.api.chart import ChartService
 from dingo_command.api.k8s.resource import List
 from dingo_command.db.models.cluster.models import Taskinfo
@@ -20,17 +21,24 @@ def update_task_state(task:Taskinfo):
         first_task.detail = task.detail
         TaskSQL.update(task)
         return task.task_id
-def install_app_chart(charts:List[CreateAppObject]):
+
+def install_app_chart(charts:List[CreateAppObject], cluster_id):
     # 判空
     try:
         if charts is None or charts == []:
             return
-        for chart in charts:
-            chart.namespace = "default" if not chart.namespace else chart.namespace
-            chart.values = {} if not chart.values else chart.values
-        # 调用service库chart.py中的install_app方法
         chart_service = ChartService()
-        chart_service.install_app(chart)
+        for chart in charts:
+            chart.cluster_id = cluster_id
+            chart.namespace = "kube-system" if not chart.namespace else chart.namespace
+            # 先获取chart的values
+            res = chart_service.get_chart_version(chart.chart_id, chart.chart_version)
+            if res.get("data").values:
+                chart.values = json.loads(res.get("data").values)
+            else:
+                chart.values = {}
+            # 调用service库chart.py中的install_app方法
+            chart_service.install_app(chart)
     except Exception as e:
         print(f"install helm chart err: {e}")
         raise e
