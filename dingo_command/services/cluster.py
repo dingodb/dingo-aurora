@@ -53,14 +53,6 @@ system_service = SystemService()
 
 class ClusterService:
 
-    
-    def request_k8s_api_in_netns(self, netns_name, k8s_api_func, *args, **kwargs):
-        """
-        在指定网络命名空间中请求 k8s api
-        """
-        with self.NetnsContext(netns_name):
-            return k8s_api_func(*args, **kwargs)
-
     def get_az_value(self, node_type):
         """根据节点类型返回az值"""
         return "nova" if node_type == "vm" else ""

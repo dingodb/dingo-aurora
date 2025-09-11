@@ -27,7 +27,7 @@ from dingo_command.celery_api.celery_app import celery_app
 from dingo_command.celery_api import CONF
 from dingo_command.db.engines.mysql import get_engine, get_session
 from dingo_command.db.models.cluster.sql import ClusterSQL, TaskSQL
-from dingo_command.common import CONF as CommonConf
+from dingo_command.common import CONF as CommonConf, keystone_client
 from dingo_command.services import CONF as ServiceConf
 from dingo_command.common.nova_client import NovaClient
 from dingo_command.common import neutron
@@ -449,7 +449,7 @@ def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list, scale=False
         ClusterSQL.update_cluster(db_cluster)
         raise
 
-def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None, netns: str = None):
+def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None, netns: str = None, app_credential_id: str=None, app_credential_secret: str=None,app_credential_name: str=None):
     """使用Ansible部署K8s集群"""
     runtime_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
                          start_time=datetime.fromtimestamp(datetime.now().timestamp()),
@@ -472,7 +472,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None, n
         cluster_file = os.path.join(target_dir, "offline.yml")
         render_templatefile(template_file, cluster_file, context)
         
-        template_file = "k8s-cluster.yml.j2"
+        template_file_k8s = "k8s-cluster.yml.j2"
         context = {
             'kube_version': cluster.kube_info.version,
             'kube_network_plugin': cluster.kube_info.cni,
@@ -486,7 +486,25 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None, n
         target_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "group_vars", "k8s_cluster")
         os.makedirs(target_dir, exist_ok=True)
         cluster_file = os.path.join(target_dir, "k8s-cluster.yml")
-        render_templatefile(template_file, cluster_file, context)
+        render_templatefile(template_file_k8s, cluster_file, context)
+
+        template_file_ops = "openstack.yml.j2"
+        context = {
+            'auth_url': NOVA_AUTH_URL,
+#            'username': cluster.kube_info.cni,
+            'region': cluster.region_name,
+            "project_id": cluster.project_id,
+#            "project_name": cluster.kube_info.kube_proxy_mode,
+            "user_domain_name": cluster.domain_name,
+            "user_domain_id": cluster.domain_id,
+            "app_credential_name": app_credential_name,
+            "app_credential_id": app_credential_id,
+            "app_credential_secret": app_credential_secret,
+        }
+        target_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "group_vars", "all")
+        os.makedirs(target_dir, exist_ok=True)
+        cluster_file = os.path.join(target_dir, "openstack.yml")
+        render_templatefile(template_file_ops, cluster_file, context)
 
         # 将templates下的ansible-deploy目录复制到WORK_DIR/cluster.id目录下
         runtime_task.start_time = datetime.fromtimestamp(datetime.now().timestamp())
@@ -639,7 +657,7 @@ def update_ansible_status(task_info, event, task_name, host, task_status):
             update_task_state(task_info)
 
 
-def scale_kubernetes(cluster_id, scale_nodes, task_id, netns: str = None):
+def scale_kubernetes(cluster_id, scale_nodes, task_id, netns: str = None, app_credential_id: str=None, app_credential_secret: str=None,app_credential_name: str=None):
     """使用Ansible扩容K8s集群"""
     try:
         runtime_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
@@ -1203,6 +1221,14 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                                  start_time=datetime.fromtimestamp(datetime.now().timestamp()),
                                  msg=TaskService.TaskScaleNodeMessage.scale_pre_install.name)
             TaskSQL.insert(task_info)
+
+        #调用keystoneclient的get_app_credential方法获取应用凭证，如果没有则用create_app_credential方法创建
+        app_credential = keystone_client.get_app_credential(user_id=task_info.user_id, name=task_info.cluster_id)
+        if not app_credential:
+            app_credential = keystone_client.create_app_credential(user_id=task_info.user_id, name=task_info.cluster_id)
+        #cluster_tfvars.app_credential_id = app_credential.get("id")
+        #cluster_tfvars.app_credential_secret = app_credential.get("secret")
+        
         # Give execute permissions to the host file
         host_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_tf_dict["id"], "hosts")
         os.chmod(host_file, 0o755)  # rwxr-xr-x permission
@@ -1358,9 +1384,9 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         # 2. 使用Ansible部署K8s集群
         cluster.id = cluster_tf_dict["id"]
         if scale:
-            ansible_result = scale_kubernetes(cluster.id, scale_nodes, task_id)
+            ansible_result = scale_kubernetes(cluster.id, scale_nodes, task_id, netns, app_credential.id, app_credential.secret, app_credential.name)
         else:
-            ansible_result = deploy_kubernetes(cluster, lb_ip, task_id, netns)
+            ansible_result = deploy_kubernetes(cluster, lb_ip, task_id, netns, app_credential.id, app_credential.secret, app_credential.name)
         if not ansible_result[0]:
             raise Exception(f"Ansible kubernetes deployment failed: {ansible_result[1]}")
         # 阻塞线程，直到ansible_client.get_playbook_result()返回结果

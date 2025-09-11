@@ -6,7 +6,7 @@ ENV LC_ALL C.UTF-8
 RUN apt-get update -y && apt-get install -y --no-install-recommends apt-utils \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     gcc traceroute lsof iputils-ping vim wget curl locales-all\
-    python3-pip cmake build-essential python3-dev libxml2-dev supervisor gnupg software-properties-common sshpass
+    python3-pip cmake build-essential python3-dev libxml2-dev supervisor gnupg software-properties-common sshpass iproute2
 
 RUN wget https://get.helm.sh/helm-v3.18.4-linux-amd64.tar.gz -O /tmp/helm.tar.gz && \
     tar -zxvf /tmp/helm.tar.gz -C /tmp && \
