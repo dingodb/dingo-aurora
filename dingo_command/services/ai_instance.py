@@ -1614,8 +1614,8 @@ class AiInstanceService:
             node_port_assigned = None
             for p in svc.spec.ports:
                 # 匹配到 22 的端口
-                if (int(p.port) == 22):
-                    node_port_assigned = getattr(p, 'node_port', None)
+                if (int(p.target_port) == 22):
+                    node_port_assigned = getattr(p, 'port', None)
                     break
             # 查询实例对应的vip
             vip, _ = self._get_service_ip(ai_instance_info_db)

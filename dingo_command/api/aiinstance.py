@@ -121,25 +121,16 @@ async def ai_instance_ssh_web(
         resp = ai_instance_service.ai_instance_web_ssh(id)
         # 创建异步任务处理双向数据流
         async def receive_from_ws():
-            buffer = ""
             while True:
                 data = await websocket.receive_text()
-                for char in data:
-                    if char in ['\b', '\x08', '\x7f']:  # 支持退格和 Delete
-                        buffer = buffer[:-1] if buffer else ""  # 防止空 buffer 报错
-                        await websocket.send_text("\b \b")  # 回显删除效果（退格 + 空格 + 退格）
-                    elif char == '\n' or char == '\r':  # 支持回车
-                        resp.write_stdin("\n")  # 确保命令以换行结束
-                        buffer = ""
-                    else:
-                        buffer += char
-                        await websocket.send_text(char)  # 实时回显输入字符
+                # 直接转发到 Kubernetes，不处理回显
+                resp.write_stdin(data)
 
         async def send_to_ws():
             while resp.is_open():
                 if resp.peek_stdout():
                     output = resp.read_stdout()
-                    await websocket.send_text(output)
+                    await websocket.send_text(output)  # 发送 Shell 输出
                 if resp.peek_stderr():
                     error = resp.read_stderr()
                     await websocket.send_text(f"[ERROR] {error}")
