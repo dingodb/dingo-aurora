@@ -4,6 +4,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from dingo_command.common.k8s_common_operate import K8sCommonOperate
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
+from dingo_command.services.redis_connection import RedisLock, redis_connection
 from dingo_command.utils.constant import CCI_NAMESPACE_PREFIX, PRODUCT_TYPE_CCI, RESOURCE_TYPE_KEY, DEV_TOOL_JUPYTER, \
     SAVE_TO_IMAGE_CCI_PREFIX, CCI_JUPYTER_PREFIX
 from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client
@@ -46,42 +47,46 @@ def start():
 
 
 def fetch_ai_instance_info():
-    start_time = datatime_util.get_now_time()
-    print(f"同步容器实例开始时间: {start_time}")
-    try:
-        # 查询所有容器实例
-        k8s_kubeconfig_configs_db = AiInstanceSQL.list_k8s_configs()
-        if not k8s_kubeconfig_configs_db:
-            LOG.info("ai k8s kubeconfig configs is temp")
-            return
-
-        for k8s_kubeconfig_db in k8s_kubeconfig_configs_db:
-            if not k8s_kubeconfig_db.k8s_id:
-                print(f"k8s cluster id empty")
-                continue
-
-            print(f"处理K8s集群: ID={k8s_kubeconfig_db.k8s_id}, Type={k8s_kubeconfig_db.k8s_type}")
+    with RedisLock(redis_connection.redis_connection, "dingo_command_ai_instance_lock", expire_time=120) as lock:
+        if lock:
+            start_time = datatime_util.get_now_time()
+            print(f"同步容器实例开始时间: {start_time}")
             try:
-                # 获取client
-                core_k8s_client = get_k8s_core_client(k8s_kubeconfig_db.k8s_id)
-                app_k8s_client = get_k8s_app_client(k8s_kubeconfig_db.k8s_id)
-                networking_k8s_client = get_k8s_app_client(k8s_kubeconfig_db.k8s_id)
-            except Exception as e:
-                LOG.error(f"获取k8s[{k8s_kubeconfig_db.k8s_id}] client失败: {e}")
-                continue
+                # 查询所有容器实例
+                k8s_kubeconfig_configs_db = AiInstanceSQL.list_k8s_configs()
+                if not k8s_kubeconfig_configs_db:
+                    LOG.info("ai k8s kubeconfig configs is temp")
+                    return
 
-            # 同步处理单个K8s集群
-            sync_single_k8s_cluster(
-                k8s_id=k8s_kubeconfig_db.k8s_id,
-                core_client=core_k8s_client,
-                apps_client=app_k8s_client,
-                networking_client=networking_k8s_client
-            )
-    except Exception as e:
-        LOG.error(f"同步容器实例失败: {e}")
-    finally:
-        end_time = datatime_util.get_now_time()
-        LOG.error(f"同步容器实例结束时间: {datatime_util.get_now_time()}, 耗时：{(end_time - start_time).total_seconds()}秒")
+                for k8s_kubeconfig_db in k8s_kubeconfig_configs_db:
+                    if not k8s_kubeconfig_db.k8s_id:
+                        print(f"k8s cluster id empty")
+                        continue
+
+                    print(f"处理K8s集群: ID={k8s_kubeconfig_db.k8s_id}, Type={k8s_kubeconfig_db.k8s_type}")
+                    try:
+                        # 获取client
+                        core_k8s_client = get_k8s_core_client(k8s_kubeconfig_db.k8s_id)
+                        app_k8s_client = get_k8s_app_client(k8s_kubeconfig_db.k8s_id)
+                        networking_k8s_client = get_k8s_app_client(k8s_kubeconfig_db.k8s_id)
+                    except Exception as e:
+                        LOG.error(f"获取k8s[{k8s_kubeconfig_db.k8s_id}] client失败: {e}")
+                        continue
+
+                    # 同步处理单个K8s集群
+                    sync_single_k8s_cluster(
+                        k8s_id=k8s_kubeconfig_db.k8s_id,
+                        core_client=core_k8s_client,
+                        apps_client=app_k8s_client,
+                        networking_client=networking_k8s_client
+                    )
+            except Exception as e:
+                LOG.error(f"同步容器实例失败: {e}")
+            finally:
+                end_time = datatime_util.get_now_time()
+                LOG.error(f"同步容器实例结束时间: {datatime_util.get_now_time()}, 耗时：{(end_time - start_time).total_seconds()}秒")
+        else:
+            print("get dingo_command_ai_instance_lock redis lock failed")
 
 
 def sync_single_k8s_cluster(k8s_id: str, core_client, apps_client, networking_client):
@@ -178,10 +183,10 @@ def handle_orphan_resources(sts_names, db_instance_map, namespace, core_client, 
            harbor_address = k8s_configs_db.harbor_address
            image_name = SAVE_TO_IMAGE_CCI_PREFIX + ai_instance_db.id
            project_name = ai_instance_service.extract_project_and_image_name(harbor_address)
-           print(f"ai instance [{id}] project_name:{project_name}, image_name:{image_name}")
+           print(f"ai instance [{ai_instance_db.id}] project_name:{project_name}, image_name:{image_name}")
            harbor_service.delete_custom_projects_images(project_name, image_name)
         except Exception as e:
-             LOG.error(f"删除容器实例[{id}]的关机镜像失败: {e}")
+             LOG.error(f"删除容器实例[{ai_instance_db.id}]的关机镜像失败: {e}")
 
         try:
             # 删除 jupyter configMap
@@ -190,7 +195,7 @@ def handle_orphan_resources(sts_names, db_instance_map, namespace, core_client, 
             LOG.error(f"删除jupyter configMap资源[{namespace}/{CCI_JUPYTER_PREFIX + ai_instance_db.id}]失败: {str(e)}")
 
         # 删除metallb的默认端口
-        AiInstanceSQL.delete_ai_instance_ports_info_by_instance_id(id)
+        AiInstanceSQL.delete_ai_instance_ports_info_by_instance_id(ai_instance_db.id)
 
 
 def cleanup_cci_resources(apps_client, core_client, networking_client, name, namespace):
@@ -242,7 +247,10 @@ def handle_missing_resources(sts_names, db_instances):
         if instance.instance_real_name not in sts_name_set:
             LOG.info(f"删除数据库中不存在的实例记录: {instance.instance_real_name}")
             try:
+                # 清理实例
                 AiInstanceSQL.delete_ai_instance_info_by_id(instance.id)
+                # 清理端口数据
+                AiInstanceSQL.delete_ai_instance_ports_info_by_instance_id(instance.id)
             except Exception as e:
                 LOG.error(f"删除数据库记录失败[{instance.id}]: {str(e)}")
 

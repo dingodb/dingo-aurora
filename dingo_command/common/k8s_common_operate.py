@@ -111,17 +111,22 @@ class K8sCommonOperate:
             traceback.print_exc()
             raise e
 
-    def create_cci_metallb_service(self, core_v1: client.CoreV1Api(), namespace: str, service_name: str, cci_service_ip: str, available_ports):
+    def create_cci_metallb_service(self, core_v1: client.CoreV1Api(), namespace: str, service_name: str, cci_service_ip: str, is_account: bool, available_ports_map):
         """
         创建带有特定注解的MetalLB Service
         """
         try:
             # 定义Service端口
             ports = [
-                V1ServicePort(name="ssh", protocol="TCP", port=available_ports[0], target_port=22),  # 第一个端口映射
-                V1ServicePort(name="port-9001", protocol="TCP", port=available_ports[1], target_port=9001),  # 第二个端口映射
-                V1ServicePort(name="port-9002", protocol="TCP", port=available_ports[2], target_port=9002)  # 第三个端口映射
+                V1ServicePort(name="ssh", protocol="TCP", port=available_ports_map['22'], target_port=22),  # 第一个端口映射
+                V1ServicePort(name="port-9001", protocol="TCP", port=available_ports_map['9001'], target_port=9001),  # 第二个端口映射
+                V1ServicePort(name="port-9002", protocol="TCP", port=available_ports_map['9002'], target_port=9002)  # 第三个端口映射
             ]
+
+            if is_account:
+                metallb_share = namespace
+            else:
+                metallb_share = CCI_SHARE_METALLB
 
             # 定义Service的metadata，包含名称、命名空间、标签和关键的MetalLB注解
             metadata = V1ObjectMeta(
@@ -130,7 +135,7 @@ class K8sCommonOperate:
                 labels={RESOURCE_TYPE_KEY: PRODUCT_TYPE_CCI},
 
                 annotations={
-                    "metallb.universe.tf/allow-shared-ip": CCI_SHARE_METALLB,  # 共享IP的标识
+                    "metallb.universe.tf/allow-shared-ip": metallb_share,  # 共享IP的标识
                     "metallb.universe.tf/loadBalancerIPs": cci_service_ip  # 指定的固定IP
                 }
             )
@@ -621,7 +626,7 @@ class K8sCommonOperate:
             print(f"Exception when calling NetworkingV1Api->delete_namespaced_ingress {ingress_name}: {e}")
             raise e
 
-    def list_node(self, core_v1: client.CoreV1Api, label_selector="kubernetes.io/role"):
+    def list_node(self, core_v1: client.CoreV1Api, label_selector="kubernetes.io/role=node"):
         """
        查询所有node基础信息
 

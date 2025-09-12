@@ -3,7 +3,7 @@
 from __future__ import annotations
 from dingo_command.db.engines.mysql import get_session
 from dingo_command.db.models.ai_instance.models import AiK8sConfigs, AiInstanceInfo, AiK8sNodeResourceInfo, AccountInfo, \
-    AiInstancePortsInfo
+    AiInstancePortsInfo, AiInstanceGpuCardInfo
 
 # 容器实例排序字段字典
 ai_instance_dir_dic= {"instance_name":AiInstanceInfo.instance_name}
@@ -292,3 +292,22 @@ class AiInstanceSQL:
         session = get_session()
         with session.begin():
             return session.query(AiInstancePortsInfo).all()
+
+    # ========================以下为 ports 相关 ===================================
+    @classmethod
+    def list_gpu_card_info(cls):
+        session = get_session()
+        with session.begin():
+            return session.query(AiInstanceGpuCardInfo).all()
+
+    @classmethod
+    def get_gpu_card_info_by_gpu_model_display(cls, gpu_model_display):
+        session = get_session()
+        with session.begin():
+            return session.query(AiInstanceGpuCardInfo).filter(AiInstanceGpuCardInfo.gpu_model_display == gpu_model_display).first()
+
+    @classmethod
+    def get_gpu_card_info_by_gpu_key(cls, gpu_key):
+        session = get_session()
+        with session.begin():
+            return session.query(AiInstanceGpuCardInfo).filter(AiInstanceGpuCardInfo.gpu_key == gpu_key).first()

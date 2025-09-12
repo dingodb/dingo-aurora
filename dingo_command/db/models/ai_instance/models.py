@@ -89,3 +89,12 @@ class AiInstancePortsInfo(Base):
     instance_svc_target_port = Column(Integer, nullable=True, comment="容器实例的服务的target port")
     create_time = Column(DateTime, nullable=True, server_default=text("CURRENT_TIMESTAMP"), comment="创建时间")
     update_time = Column(DateTime, nullable=True, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"), comment="更新时间")
+
+class AiInstanceGpuCardInfo(Base):
+    __tablename__ = "ops_ai_instance_gpu_card_info"
+
+    id = Column(String(length=128), primary_key=True, nullable=False, index=True, unique=True)
+    gpu_model_display = Column(String(length=255), nullable=True, comment="页面展示GPU卡型号")
+    gpu_node_label = Column(String(length=255), nullable=True, comment="Node上GPU卡标签")
+    gpu_key = Column(String(length=255), nullable=True, comment="Pod可使用的GPU key值")
+    update_time = Column(DateTime, nullable=True, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"), comment="更新时间")
