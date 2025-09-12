@@ -634,6 +634,24 @@ class ChartService:
                         chart_info_db = self.convert_db_harbor(chartname, dict_version, repo_info_db, prefix_name)
                         chart_list.append(chart_info_db)
                     ChartSQL.create_chart_list(chart_list)
+                    # 在这里添加同步已安装的app里面的chart_id，所有的关于这个repo的app都要重新同步下chart_id，
+                    # 根据repo_id和chart_name来匹配，如果匹配不到就跳过，匹配到了就更新chart_id
+                    query_params = {}
+                    query_params["repo_id"] = repo_info_db.id
+                    result = self.list_charts(query_params, 1, -1, None, None)
+                    chart_list = result.get("data")
+                    res = self.list_apps(query_params, 1, -1, None, None)
+                    if res.get("data"):
+                        app_list = []
+                        apps_data = res.get("data")
+                        for app in apps_data:
+                            for chart in chart_list:
+                                if chart.name == app.chart_name:
+                                    app.chart_id = chart.id
+                                    app_list.append(app)
+                                    break
+                        if app_list:
+                            AppSQL.update_app_list(app_list)
                     repo_info_db.status = util.repo_status_success
                     repo_info_db.status_msg = ""
                     RepoSQL.update_repo(repo_info_db)
@@ -707,6 +725,26 @@ class ChartService:
                     chart_info_db = self.convert_chart_db(chart_name, dict_version, repo_info_db)
                     chart_list.append(chart_info_db)
                 ChartSQL.create_chart_list(chart_list)
+                # 在这里添加同步已安装的app里面的chart_id，所有的关于这个repo的app都要重新同步下chart_id，
+                # 根据repo_id和chart_name来匹配，如果匹配不到就跳过，匹配到了就更新chart_id
+                query_params = {}
+                query_params["repo_id"] = repo_info_db.id
+                query_params = {}
+                query_params["repo_id"] = repo_info_db.id
+                result = self.list_charts(query_params, 1, -1, None, None)
+                chart_list = result.get("data")
+                res = self.list_apps(query_params, 1, -1, None, None)
+                if res.get("data"):
+                    app_list = []
+                    apps_data = res.get("data")
+                    for app in apps_data:
+                        for chart in chart_list:
+                            if chart.name == app.chart_name:
+                                app.chart_id = chart.id
+                                app_list.append(app)
+                                break
+                    if app_list:
+                        AppSQL.update_app_list(app_list)
                 repo_info_db.status = util.repo_status_success
                 repo_info_db.status_msg = ""
                 RepoSQL.update_repo(repo_info_db)
@@ -1296,119 +1334,57 @@ class ChartService:
 
     def get_app_detail(self, app_data: AppDB):
         try:
-            query_params = {}
-            query_params['id'] = app_data.chart_id
-            # 显示repo列表的逻辑
-            data = self.list_charts(query_params, 1, -1, None, None)
-            if data.get("total") > 0:
-                chart_data = data.get("data")[0]
-                # 0、要获取kube_config文件， 执行对应的命令获取下面的资源
-                kube_config, helm_cache_dir = self.get_kubeconfig(app_data.cluster_id)
-                content = self.get_info_cmd(kube_config, app_data.namespace, app_data.name)
-                dict_content = json.loads(content)
-                resourc_obj_list = []
-                dict_yaml_info = self.get_helm_release_manifest(app_data.name, kube_config, app_data.namespace)
-                # 1、获取chart信息
-                update_time = app_data.update_time.isoformat() if app_data.update_time else None
-                app_obj = AppChartObject(
-                    name=chart_data.name,
-                    description=chart_data.description,
-                    repo_name=chart_data.repo_name,
-                    icon=chart_data.icon,
-                    namespace=app_data.namespace,
-                    app_name=app_data.name,
-                    update_time=update_time,
-                    chart_version=app_data.version,
-                    app_version=app_data.app_version
-                )
+            # 0、要获取kube_config文件， 执行对应的命令获取下面的资源
+            kube_config, helm_cache_dir = self.get_kubeconfig(app_data.cluster_id)
+            content = self.get_info_cmd(kube_config, app_data.namespace, app_data.name)
+            dict_content = json.loads(content)
+            resourc_obj_list = []
+            dict_yaml_info = self.get_helm_release_manifest(app_data.name, kube_config, app_data.namespace)
+            # 1、获取chart信息
+            update_time = app_data.update_time.isoformat() if app_data.update_time else None
+            app_obj = AppChartObject(
+                name=app_data.chart_name,
+                description=app_data.description,
+                repo_name=app_data.repo_name,
+                icon=None,
+                namespace=app_data.namespace,
+                app_name=app_data.name,
+                update_time=update_time,
+                chart_version=app_data.version,
+                app_version=app_data.app_version
+            )
 
-                if dict_content.get("info") and dict_content.get("info").get("resources"):
-                    for k, v in dict_content.get("info").get("resources").items():
-                        if "related" in k:
-                            continue
-                        if len(v) > 0:
-                            for vv in v:
-                                if vv.get("status") and vv.get("status").get("phase"):
-                                    if vv.get("status").get("phase") in ("Running", "Succeeded"):
-                                        vv["status"]["phase"] = util.resource_status_active
-                                    elif vv.get("status").get("phase").lower() == "failed":
-                                        vv["status"]["phase"] = util.resource_status_failed
-                                    elif vv.get("status").get("phase").lower() == "unknown":
-                                        vv["status"]["phase"] = util.resource_status_unknown
-                                    else:
-                                        vv["status"]["phase"] = util.resource_status_pend
-                                    resourc_obj = ResourcesObject(
-                                        name=vv.get("metadata").get("name"),
-                                        namespace=vv.get("metadata").get("namespace"),
-                                        kind=vv.get("kind"),
-                                        status=vv.get("status").get("phase"),
-                                        yaml=json.dumps(dict_yaml_info.get(
-                                            f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
-                                    )
-                                    resourc_obj_list.append(resourc_obj)
-                                    continue
+            if dict_content.get("info") and dict_content.get("info").get("resources"):
+                for k, v in dict_content.get("info").get("resources").items():
+                    if "related" in k:
+                        continue
+                    if len(v) > 0:
+                        for vv in v:
+                            if vv.get("status") and vv.get("status").get("phase"):
+                                if vv.get("status").get("phase") in ("Running", "Succeeded"):
+                                    vv["status"]["phase"] = util.resource_status_active
+                                elif vv.get("status").get("phase").lower() == "failed":
+                                    vv["status"]["phase"] = util.resource_status_failed
+                                elif vv.get("status").get("phase").lower() == "unknown":
+                                    vv["status"]["phase"] = util.resource_status_unknown
+                                else:
+                                    vv["status"]["phase"] = util.resource_status_pend
+                                resourc_obj = ResourcesObject(
+                                    name=vv.get("metadata").get("name"),
+                                    namespace=vv.get("metadata").get("namespace"),
+                                    kind=vv.get("kind"),
+                                    status=vv.get("status").get("phase"),
+                                    yaml=json.dumps(dict_yaml_info.get(
+                                        f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
+                                )
+                                resourc_obj_list.append(resourc_obj)
+                                continue
 
-                                if vv.get("status") and vv.get("status") and not vv.get("status").get("phase"):
-                                    if vv.get("status").get("availableReplicas") and vv.get("status").get(
-                                            "availableReplicas") and vv.get("status").get("replicas"):
-                                        if vv.get("status").get("replicas") == vv.get("status").get(
-                                                "readyReplicas") == vv.get("status").get("availableReplicas"):
-                                            resourc_obj = ResourcesObject(
-                                                name=vv.get("metadata").get("name"),
-                                                namespace=vv.get("metadata").get("namespace"),
-                                                kind=vv.get("kind"),
-                                                status=util.resource_status_active,
-                                                yaml=json.dumps(dict_yaml_info.get(
-                                                    f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
-                                            )
-                                            resourc_obj_list.append(resourc_obj)
-                                            continue
-                                        else:
-                                            resourc_obj = ResourcesObject(
-                                                name=vv.get("metadata").get("name"),
-                                                namespace=vv.get("metadata").get("namespace"),
-                                                kind=vv.get("kind"),
-                                                status=util.resource_status_pend,
-                                                yaml=json.dumps(dict_yaml_info.get(
-                                                    f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
-                                            )
-                                            resourc_obj_list.append(resourc_obj)
-                                            continue
-                                    elif vv.get("status").get("unavailableReplicas"):
-                                        resourc_obj = ResourcesObject(
-                                            name=vv.get("metadata").get("name"),
-                                            namespace=vv.get("metadata").get("namespace"),
-                                            kind=vv.get("kind"),
-                                            status=util.resource_status_failed,
-                                            yaml=json.dumps(dict_yaml_info.get(
-                                                f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
-                                        )
-                                        resourc_obj_list.append(resourc_obj)
-                                        continue
-                                    elif "service" in k.lower() and vv.get("spec").get("type") == "LoadBalancer":
-                                        if not vv.get("status").get("loadBalancer"):
-                                            resourc_obj = ResourcesObject(
-                                                name=vv.get("metadata").get("name"),
-                                                namespace=vv.get("metadata").get("namespace"),
-                                                kind=vv.get("kind"),
-                                                status=util.resource_status_pend,
-                                                yaml=json.dumps(dict_yaml_info.get(
-                                                    f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
-                                            )
-                                            resourc_obj_list.append(resourc_obj)
-                                            continue
-                                        else:
-                                            resourc_obj = ResourcesObject(
-                                                name=vv.get("metadata").get("name"),
-                                                namespace=vv.get("metadata").get("namespace"),
-                                                kind=vv.get("kind"),
-                                                status=util.resource_status_active,
-                                                yaml=json.dumps(dict_yaml_info.get(
-                                                    f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
-                                            )
-                                            resourc_obj_list.append(resourc_obj)
-                                            continue
-                                    elif "service" in k.lower() and vv.get("spec").get("type") != "LoadBalancer":
+                            if vv.get("status") and vv.get("status") and not vv.get("status").get("phase"):
+                                if vv.get("status").get("availableReplicas") and vv.get("status").get(
+                                        "availableReplicas") and vv.get("status").get("replicas"):
+                                    if vv.get("status").get("replicas") == vv.get("status").get(
+                                            "readyReplicas") == vv.get("status").get("availableReplicas"):
                                         resourc_obj = ResourcesObject(
                                             name=vv.get("metadata").get("name"),
                                             namespace=vv.get("metadata").get("namespace"),
@@ -1419,57 +1395,52 @@ class ChartService:
                                         )
                                         resourc_obj_list.append(resourc_obj)
                                         continue
-                                    elif "statefulset" in k.lower() and vv.get("status"):
-                                        if vv.get("status").get("replicas") == vv.get("status").get(
-                                                "readyReplicas") == vv.get("status").get("availableReplicas"):
-                                            resourc_obj = ResourcesObject(
-                                                name=vv.get("metadata").get("name"),
-                                                namespace=vv.get("metadata").get("namespace"),
-                                                kind=vv.get("kind"),
-                                                status=util.resource_status_active,
-                                                yaml=json.dumps(dict_yaml_info.get(
-                                                    f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
-                                            )
-                                            resourc_obj_list.append(resourc_obj)
-                                            continue
-                                        else:
-                                            resourc_obj = ResourcesObject(
-                                                name=vv.get("metadata").get("name"),
-                                                namespace=vv.get("metadata").get("namespace"),
-                                                kind=vv.get("kind"),
-                                                status=util.resource_status_pend,
-                                                yaml=json.dumps(dict_yaml_info.get(
-                                                    f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
-                                            )
-                                            resourc_obj_list.append(resourc_obj)
-                                            continue
-                                    elif "daemonset" in k.lower() and vv.get("status"):
-                                        if vv.get("status").get("numberReady") == vv.get("status").get(
-                                                "desiredNumberScheduled") == vv.get("status").get(
-                                                "currentNumberScheduled"):
-                                            resourc_obj = ResourcesObject(
-                                                name=vv.get("metadata").get("name"),
-                                                namespace=vv.get("metadata").get("namespace"),
-                                                kind=vv.get("kind"),
-                                                status=util.resource_status_active,
-                                                yaml=json.dumps(dict_yaml_info.get(
-                                                    f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
-                                            )
-                                            resourc_obj_list.append(resourc_obj)
-                                            continue
-                                        else:
-                                            resourc_obj = ResourcesObject(
-                                                name=vv.get("metadata").get("name"),
-                                                namespace=vv.get("metadata").get("namespace"),
-                                                kind=vv.get("kind"),
-                                                status=util.resource_status_pend,
-                                                yaml=json.dumps(dict_yaml_info.get(
-                                                    f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
-                                            )
-                                            resourc_obj_list.append(resourc_obj)
-                                            continue
-
-                                if vv.get("metadata") and not vv.get("status"):
+                                    else:
+                                        resourc_obj = ResourcesObject(
+                                            name=vv.get("metadata").get("name"),
+                                            namespace=vv.get("metadata").get("namespace"),
+                                            kind=vv.get("kind"),
+                                            status=util.resource_status_pend,
+                                            yaml=json.dumps(dict_yaml_info.get(
+                                                f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
+                                        )
+                                        resourc_obj_list.append(resourc_obj)
+                                        continue
+                                elif vv.get("status").get("unavailableReplicas"):
+                                    resourc_obj = ResourcesObject(
+                                        name=vv.get("metadata").get("name"),
+                                        namespace=vv.get("metadata").get("namespace"),
+                                        kind=vv.get("kind"),
+                                        status=util.resource_status_failed,
+                                        yaml=json.dumps(dict_yaml_info.get(
+                                            f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
+                                    )
+                                    resourc_obj_list.append(resourc_obj)
+                                    continue
+                                elif "service" in k.lower() and vv.get("spec").get("type") == "LoadBalancer":
+                                    if not vv.get("status").get("loadBalancer"):
+                                        resourc_obj = ResourcesObject(
+                                            name=vv.get("metadata").get("name"),
+                                            namespace=vv.get("metadata").get("namespace"),
+                                            kind=vv.get("kind"),
+                                            status=util.resource_status_pend,
+                                            yaml=json.dumps(dict_yaml_info.get(
+                                                f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
+                                        )
+                                        resourc_obj_list.append(resourc_obj)
+                                        continue
+                                    else:
+                                        resourc_obj = ResourcesObject(
+                                            name=vv.get("metadata").get("name"),
+                                            namespace=vv.get("metadata").get("namespace"),
+                                            kind=vv.get("kind"),
+                                            status=util.resource_status_active,
+                                            yaml=json.dumps(dict_yaml_info.get(
+                                                f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
+                                        )
+                                        resourc_obj_list.append(resourc_obj)
+                                        continue
+                                elif "service" in k.lower() and vv.get("spec").get("type") != "LoadBalancer":
                                     resourc_obj = ResourcesObject(
                                         name=vv.get("metadata").get("name"),
                                         namespace=vv.get("metadata").get("namespace"),
@@ -1480,31 +1451,90 @@ class ChartService:
                                     )
                                     resourc_obj_list.append(resourc_obj)
                                     continue
+                                elif "statefulset" in k.lower() and vv.get("status"):
+                                    if vv.get("status").get("replicas") == vv.get("status").get(
+                                            "readyReplicas") == vv.get("status").get("availableReplicas"):
+                                        resourc_obj = ResourcesObject(
+                                            name=vv.get("metadata").get("name"),
+                                            namespace=vv.get("metadata").get("namespace"),
+                                            kind=vv.get("kind"),
+                                            status=util.resource_status_active,
+                                            yaml=json.dumps(dict_yaml_info.get(
+                                                f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
+                                        )
+                                        resourc_obj_list.append(resourc_obj)
+                                        continue
+                                    else:
+                                        resourc_obj = ResourcesObject(
+                                            name=vv.get("metadata").get("name"),
+                                            namespace=vv.get("metadata").get("namespace"),
+                                            kind=vv.get("kind"),
+                                            status=util.resource_status_pend,
+                                            yaml=json.dumps(dict_yaml_info.get(
+                                                f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
+                                        )
+                                        resourc_obj_list.append(resourc_obj)
+                                        continue
+                                elif "daemonset" in k.lower() and vv.get("status"):
+                                    if vv.get("status").get("numberReady") == vv.get("status").get(
+                                            "desiredNumberScheduled") == vv.get("status").get(
+                                            "currentNumberScheduled"):
+                                        resourc_obj = ResourcesObject(
+                                            name=vv.get("metadata").get("name"),
+                                            namespace=vv.get("metadata").get("namespace"),
+                                            kind=vv.get("kind"),
+                                            status=util.resource_status_active,
+                                            yaml=json.dumps(dict_yaml_info.get(
+                                                f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
+                                        )
+                                        resourc_obj_list.append(resourc_obj)
+                                        continue
+                                    else:
+                                        resourc_obj = ResourcesObject(
+                                            name=vv.get("metadata").get("name"),
+                                            namespace=vv.get("metadata").get("namespace"),
+                                            kind=vv.get("kind"),
+                                            status=util.resource_status_pend,
+                                            yaml=json.dumps(dict_yaml_info.get(
+                                                f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
+                                        )
+                                        resourc_obj_list.append(resourc_obj)
+                                        continue
+
+                            if vv.get("metadata") and not vv.get("status"):
                                 resourc_obj = ResourcesObject(
                                     name=vv.get("metadata").get("name"),
                                     namespace=vv.get("metadata").get("namespace"),
                                     kind=vv.get("kind"),
-                                    status=util.resource_status_unknown,
+                                    status=util.resource_status_active,
                                     yaml=json.dumps(dict_yaml_info.get(
                                         f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
                                 )
                                 resourc_obj_list.append(resourc_obj)
+                                continue
+                            resourc_obj = ResourcesObject(
+                                name=vv.get("metadata").get("name"),
+                                namespace=vv.get("metadata").get("namespace"),
+                                kind=vv.get("kind"),
+                                status=util.resource_status_unknown,
+                                yaml=json.dumps(dict_yaml_info.get(
+                                    f"{vv.get('kind')}_{vv.get('metadata').get('name')}"))
+                            )
+                            resourc_obj_list.append(resourc_obj)
 
-                    # 3、把上述的资源信息和chart信息组装成一个对象返回
-                    response_obj = ResponseAppObject(
-                        resources=resourc_obj_list,
-                        values=app_data.values,
-                        chart_info=app_obj
-                    )
-                else:
-                    response_obj = ResponseAppObject(
-                        resources=None,
-                        values=app_data.values,
-                        chart_info=app_obj
-                    )
-                return response_obj
+                # 3、把上述的资源信息和chart信息组装成一个对象返回
+                response_obj = ResponseAppObject(
+                    resources=resourc_obj_list,
+                    values=app_data.values,
+                    chart_info=app_obj
+                )
             else:
-                raise ValueError("chart not found")
+                response_obj = ResponseAppObject(
+                    resources=None,
+                    values=app_data.values,
+                    chart_info=app_obj
+                )
+            return response_obj
 
         except Exception as e:
             raise ValueError(f"get app detail error: {str(e)}")

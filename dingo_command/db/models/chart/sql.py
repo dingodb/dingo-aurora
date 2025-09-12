@@ -308,6 +308,18 @@ class AppSQL:
             session.merge(app)
 
     @classmethod
+    def update_app_list(cls, app_list):
+        session = get_session()
+        try:
+            with session.begin():
+                # 使用bulk_save_objects替代循环merge
+                session.bulk_save_objects(app_list, update_changed_only=True)
+        except Exception as e:
+            Log.error("update_app_list failed, error: %s" % str(e))
+            session.rollback()
+            raise
+
+    @classmethod
     def delete_app_list(cls, app_list):
         # Session = sessionmaker(bind=engine, expire_on_commit=False)
         # session = Session()
