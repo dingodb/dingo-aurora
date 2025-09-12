@@ -1,3 +1,4 @@
+from re import S
 from dingo_command.common.harbor_client import HarborAPI
 from typing import Any
 
@@ -182,14 +183,28 @@ class HarborService:
             - 如果镜像没有标签，tag_name和tag_push_time将显示为'none'
             - 返回的数据结构经过优化，便于前端展示和处理
         """
+
+        # 搜索项目
+        repo_count = 0
+        search_response = self.harbor.search(project_name)
+        if search_response["status"]:
+            projects = search_response["data"]["project"]
+            if len(projects) > 0:
+                for project in projects:
+                    if project["name"] == project_name:
+                        repo_count = project["repo_count"]
+            else:
+                return self.return_response(False, 400, "项目不存在")
+        else:
+            return self.return_response(False, 400, "搜索项目失败")
+        
         if public_image_name:
             # project_repositories = self.harbor.get_project_repository(
             #     project_name, public_image_name, page=page, page_size=page_size
             # )
             project_repositories = self.harbor.get_project_repositories(
-                project_name, page=page, page_size=page_size
+                project_name, page=page, page_size=page_size, get_all=True
             )
-
             if not project_repositories["status"]:
                 return project_repositories
 
@@ -258,7 +273,7 @@ class HarborService:
 
         else:
             project_repositories = self.harbor.get_project_repositories(
-                project_name, page=page, page_size=page_size
+                project_name, page=page, page_size=page_size, get_all=False
             )
 
             if not project_repositories["status"]:
@@ -318,9 +333,16 @@ class HarborService:
                 repository.update(dict(tags_list=tags_list))
                 project_repositories_list.append(repository)
 
-            return self.return_response(
-                True, 200, "获取镜像成功", project_repositories_list
-            )
+            # return self.return_response(
+            #     True, 200, "获取镜像成功", project_repositories_list
+            # )
+            return {
+                "status": True,
+                "code": 200,
+                "message": "获取公共仓库镜像成功",
+                "page_size": repo_count,
+                "data": project_repositories_list,
+            }
 
     # 添加harbor用户
     def add_harbor_user(

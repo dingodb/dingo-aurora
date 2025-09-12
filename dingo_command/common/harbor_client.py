@@ -640,7 +640,7 @@ class HarborAPI:
             return self.return_response(False, 500, f"获取指定项目配额异常: {str(e)}")
 
     def get_project_repositories(
-        self, project_name: str, page: int = 1, page_size: int = 100
+        self, project_name: str, page: int = 1, page_size: int = 100, get_all: bool = False
     ) -> Dict[str, Any]:
         """
         获取指定项目下的所有镜像仓库信息
@@ -697,22 +697,29 @@ class HarborAPI:
             - 建议结合get_repository_artifacts获取详细标签信息
         """
         try:
-            all_repositories = []
-            while True:
+            if get_all:
+                all_repositories = []
+                while True:
+                    url = f"{self.base_url}/api/v2.0/projects/{project_name}/repositories?page={page}&page_size={page_size}"
+                    response = self.request("GET", url)
+                    if response.status_code == 200:
+                        all_repositories.extend(response.json())
+                        page += 1
+                        if len(response.json()) < page_size:
+                            break
+                    else:
+                        return self.return_response(
+                            False, response.status_code, "获取项目下所有镜像失败", response.json()
+                        )
+                return self.return_response(
+                    True, 200, "获取项目下所有镜像成功", all_repositories
+                )
+            else:
                 url = f"{self.base_url}/api/v2.0/projects/{project_name}/repositories?page={page}&page_size={page_size}"
                 response = self.request("GET", url)
-                if response.status_code == 200:
-                    all_repositories.extend(response.json())
-                    page += 1
-                    if len(response.json()) < page_size:
-                        break
-                else:
-                    return self.return_response(
-                        False, response.status_code, "获取项目下所有镜像失败", response.json()
-                    )
-            return self.return_response(
-                True, 200, "获取项目下所有镜像成功", all_repositories
-            )
+                return self.return_response(
+                    True, 200, "获取项目下所有镜像成功", response.json()
+                )
         except Exception as e:
             return self.return_response(False, 500, f"获取项目下所有镜像异常: {str(e)}")
 
@@ -869,6 +876,19 @@ class HarborAPI:
                 )
         except Exception as e:
             return self.return_response(False, 500, f"仓库镜像删除异常: {str(e)}")
+
+    def search(self,q: str) -> Dict[str, Any]:
+        """
+        搜索Harbor中的项目和仓库
+        """
+        try:
+            url = f"{self.base_url}/api/v2.0/search?q={q}"
+            response = self.request("GET", url)
+            return self.return_response(
+                True, response.status_code, "搜索项目和仓库成功", response.json()
+            )
+        except Exception as e:
+            return self.return_response(False, 500, f"搜索项目和仓库异常: {str(e)}")
 
     def get_projects(self) -> Dict[str, Any]:
         """
