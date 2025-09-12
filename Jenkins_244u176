@@ -1,0 +1,92 @@
+pipeline {
+    agent {
+        node {
+            label "dingo_stack"
+        }
+    }
+    environment {
+      SOURCE_DIR = '/data/pipeline_demo'
+      BUILD_DATE = sh(script: 'date +%Y%m%d', returnStdout: true).trim()
+      IMAGE_TAG = "${branch ? branch : 'main'}-${BUILD_DATE}"
+    }
+    
+
+    stages {
+        stage('Milestone: kill older builds') {
+            steps {
+                milestone(1)
+            }
+        }
+        stage('docker build') {
+            when {
+                anyOf { branch 'develop'; branch 'main' }
+            }
+            
+            agent {
+                node {
+                    label "dingo_stack"
+                }
+            }
+            steps {
+                echo "build image harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG}"
+                withCredentials([usernamePassword(credentialsId: 'harbor_credential', usernameVariable: 'HARBOR_USERNAME', passwordVariable: 'HARBOR_PASSWORD')]) {
+                    sh 'podman login harbor.zetyun.cn -u $HARBOR_USERNAME -p $HARBOR_PASSWORD'
+                }
+                sh 'podman build -t harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG} -f docker/Dockerfile-local .'
+                echo "Tagging dingo-command image as harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG}"
+                retry(3) {
+                    sh 'podman push harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG}'
+                }
+                sh 'podman tag harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG} harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}'
+                retry(3) {
+                    sh 'podman push harbor.zetyun.cn/openstack/dingo-command:${IMAGE_TAG}'
+                }
+            }
+            
+        }
+        stage('Pull and Tag Images') {
+            when {
+                anyOf { branch 'develop'; branch 'main' }
+            }
+
+            agent {
+                node {
+                    label "dingo_stack"
+                }
+            }
+            steps {
+                echo 'podman push to second registry'
+                sh 'podman tag harbor.zetyun.cn/dingostack/dingo-command:${IMAGE_TAG} 10.220.56.101:5000/dockerproxy.zetyun.cn/quay.nju.edu.cn/openstack.kolla/dingo-command:${IMAGE_TAG}'
+                sh 'podman push 10.220.56.101:5000/dockerproxy.zetyun.cn/quay.nju.edu.cn/openstack.kolla/dingo-command:${IMAGE_TAG} --tls-verify=false'
+            }
+
+        }
+        stage('Deploy to test'){
+            when {
+                branch 'main'
+            }
+            parallel {
+               
+    
+
+                stage('pull image on functional test cluster(244.176)') {
+                    agent {
+                        node {
+                            label "dingo_stack"  // 请替换为实际的第二个节点标签
+                        }
+                    }
+
+                    steps {
+                        echo "pull dingo-command images to test on second node"
+                        // dir('/home/cicd/kolla-ansible/tools') {
+                        //     sh 'ansible-playbook -e @/home/cicd/envs/functional_test_env/globals.yml -e @/home/cicd/envs/functional_test_env/passwords.yml --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e CONFIG_DIR=/home/cicd/envs/functional_test_env -e kolla_action=pull ../ansible/site.yml  --inventory /home/cicd/envs/functional_test_env/multinode -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
+                        //     echo 'deploy images to develop on second node'
+                        //     sh 'ansible-playbook -e @/home/cicd/envs/functional_test_env/globals.yml -e @/home/cicd/envs/functional_test_env/passwords.yml --tags dingo-command -e openstack_tag=${IMAGE_TAG} -e CONFIG_DIR=/home/cicd/envs/functional_test_env -e kolla_action=upgrade ../ansible/site.yml  --inventory /home/cicd/envs/functional_test_env/multinode -e docker_namespace=openstack -e docker_registry=harbor.zetyun.cn'
+                        // }
+                    }
+                }
+            }
+        }
+    
+    }
+}
