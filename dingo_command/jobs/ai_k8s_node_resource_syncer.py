@@ -6,6 +6,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from dingo_command.common.Enum.AIInstanceEnumUtils import AiInstanceStatus
 from dingo_command.common.k8s_common_operate import K8sCommonOperate
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
+from dingo_command.services.redis_connection import RedisLock, redis_connection
 from dingo_command.utils.k8s_client import get_k8s_core_client
 from dingo_command.db.models.ai_instance.models import AiK8sNodeResourceInfo
 from dingo_command.services.ai_instance import AiInstanceService
@@ -23,63 +24,68 @@ def start():
     node_resource_scheduler.start()
 
 def fetch_ai_k8s_node_resource():
-    start_time = datetime.now()
-    print(f"sync k8s node resource start time: {start_time}")
-    try:
-        # 查询所有k8s集群配置
-        k8s_configs = AiInstanceSQL.list_k8s_configs()
-        if not k8s_configs:
-            LOG.info("ai k8s kubeconfig configs is temp")
-            return
-
-        for k8s_kubeconfig_db in k8s_configs:
-            if not k8s_kubeconfig_db.k8s_id:
-                print(f"k8s cluster id empty")
-                continue
-
-            print(f"handle K8s cluster: ID={k8s_kubeconfig_db.k8s_id}, Type={k8s_kubeconfig_db.k8s_type}")
+    # 获取redis的锁，自动释放时间是60s
+    with RedisLock(redis_connection.redis_connection, "dingo_command_ai_k8s_node_resource_lock", expire_time=120) as lock:
+        if lock:
+            start_time = datetime.now()
+            print(f"sync k8s node resource start time: {start_time}")
             try:
-                # 获取client
-                core_client  = get_k8s_core_client(k8s_kubeconfig_db.k8s_id)
-                k8s_nodes = k8s_common_operate.list_node(core_client)
-                if not k8s_nodes:
-                    LOG.info(f"k8s cluster {k8s_kubeconfig_db.k8s_id} no available node, clear old data")
-                    AiInstanceSQL.delete_k8s_node_resource_by_k8s_id(k8s_kubeconfig_db.k8s_id)
-                    continue
-                # k8s node 信息
-                k8s_node_map = {node.metadata.name: node for node in k8s_nodes}
+                # 查询所有k8s集群配置
+                k8s_configs = AiInstanceSQL.list_k8s_configs()
+                if not k8s_configs:
+                    LOG.info("ai k8s kubeconfig configs is temp")
+                    return
 
-                # 获取数据库中记录的节点
-                db_node_map = {node.node_name: node for node in
-                            AiInstanceSQL.get_k8s_node_resource_by_k8s_id(k8s_kubeconfig_db.k8s_id)}
-                # 移除node 名称
-                removed_node_names = set(db_node_map.keys()) - set(k8s_node_map.keys())
-                # print(f"fetch_ai_k8s_node_resource k8s_node_name:{json.dumps(k8s_node_map.keys())}, db_node_map:{json.dumps(db_node_map.keys())}, removed_node_names:{json.dumps(removed_node_names)}")
+                for k8s_kubeconfig_db in k8s_configs:
+                    if not k8s_kubeconfig_db.k8s_id:
+                        print(f"k8s cluster id empty")
+                        continue
 
-                # 处理节点删除场景
-                handle_removed_nodes(k8s_kubeconfig_db.k8s_id, removed_node_names)
+                    print(f"handle K8s cluster: ID={k8s_kubeconfig_db.k8s_id}, Type={k8s_kubeconfig_db.k8s_type}")
+                    try:
+                        # 获取client
+                        core_client  = get_k8s_core_client(k8s_kubeconfig_db.k8s_id)
+                        k8s_nodes = k8s_common_operate.list_node(core_client)
+                        if not k8s_nodes:
+                            LOG.info(f"k8s cluster {k8s_kubeconfig_db.k8s_id} no available node, clear old data")
+                            AiInstanceSQL.delete_k8s_node_resource_by_k8s_id(k8s_kubeconfig_db.k8s_id)
+                            continue
+                        # k8s node 信息
+                        k8s_node_map = {node.metadata.name: node for node in k8s_nodes}
 
-                for k8s_node in k8s_nodes:
-                    # 同步单个node资源
-                    sync_node_and_pod_resources(
-                        k8s_kubeconfig_db.k8s_id,
-                        k8s_node,
-                        core_client
-                    )
+                        # 获取数据库中记录的节点
+                        db_node_map = {node.node_name: node for node in
+                                    AiInstanceSQL.get_k8s_node_resource_by_k8s_id(k8s_kubeconfig_db.k8s_id)}
+                        # 移除node 名称
+                        removed_node_names = set(db_node_map.keys()) - set(k8s_node_map.keys())
+                        # print(f"fetch_ai_k8s_node_resource k8s_node_name:{json.dumps(k8s_node_map.keys())}, db_node_map:{json.dumps(db_node_map.keys())}, removed_node_names:{json.dumps(removed_node_names)}")
+
+                        # 处理节点删除场景
+                        handle_removed_nodes(k8s_kubeconfig_db.k8s_id, removed_node_names)
+
+                        for k8s_node in k8s_nodes:
+                            # 同步单个node资源
+                            sync_node_and_pod_resources(
+                                k8s_kubeconfig_db.k8s_id,
+                                k8s_node,
+                                core_client
+                            )
+
+                    except Exception as e:
+                        import traceback
+                        traceback.print_exc()
+                        LOG.error(f"get k8s[{k8s_kubeconfig_db.k8s_id}] client fail: {e}")
+                        continue
 
             except Exception as e:
                 import traceback
                 traceback.print_exc()
-                LOG.error(f"get k8s[{k8s_kubeconfig_db.k8s_id}] client fail: {e}")
-                continue
-
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        LOG.error(f"sync k8s node resource fail: {e}")
-    finally:
-        end_time = datetime.now()
-        LOG.error(f"sync k8s node resource end time: {end_time}, time-consuming：{(end_time - start_time).total_seconds()}s")
+                LOG.error(f"sync k8s node resource fail: {e}")
+            finally:
+                end_time = datetime.now()
+                LOG.error(f"sync k8s node resource end time: {end_time}, time-consuming：{(end_time - start_time).total_seconds()}s")
+        else:
+            print("get dingo_command_ai_k8s_node_resource_lock redis lock failed")
 
 def handle_removed_nodes(k8s_id, removed_node_names):
     """处理被删除的节点"""

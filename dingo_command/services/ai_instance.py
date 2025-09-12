@@ -617,23 +617,23 @@ class AiInstanceService:
     def _prepare_resource_config(self, instance_config):
         """准备资源限制配置"""
         resource_limits = {
-            'cpu': int(instance_config.compute_cpu),
-            'memory': instance_config.compute_memory + "Gi",
-            'ephemeral-storage': SYSTEM_DISK_SIZE_DEFAULT
+            'cpu': int(instance_config.compute_cpu) if instance_config.compute_cpu else 0,
+            'memory': instance_config.compute_memory + "Gi" if instance_config.compute_memory else "0Gi",
+            'ephemeral-storage': instance_config.system_disk_size + "Gi" if instance_config.system_disk_size else SYSTEM_DISK_SIZE_DEFAULT
         }
 
         node_selector_gpu = {}
         toleration_gpus = []
 
         if instance_config.gpu_model:
-            gpu_card_info = GPU_CARD_MAPPING.get(instance_config.gpu_model)
+            gpu_card_info = AiInstanceSQL.get_gpu_card_info_by_gpu_model_display(instance_config.gpu_model)
             if not gpu_card_info:
                 raise Fail(f"GPU card mapping not found for model: {instance_config.gpu_model}")
-            resource_limits[gpu_card_info['gpu_code']] = instance_config.gpu_count
-            node_selector_gpu['nvidia.com/gpu.product'] = gpu_card_info['original_name']
+            resource_limits[gpu_card_info.gpu_key] = instance_config.gpu_count
+            node_selector_gpu['nvidia.com/gpu.product'] = gpu_card_info.gpu_node_label
             # 容忍度
             toleration_gpus.append(V1Toleration(
-                key=gpu_card_info['original_name'],
+                key=gpu_card_info.gpu_node_label,
                 operator="Exists",
                 effect="NoSchedule"
             ))
@@ -659,7 +659,7 @@ class AiInstanceService:
     def _create_cci_k8s_resources(self, ai_instance, ai_instance_db, namespace_name, resource_config):
         """创建K8s相关资源"""
         # 获取服务IP
-        service_ip, dns_suffix = self._get_service_ip(ai_instance_db)
+        service_ip, dns_suffix, is_account = self._get_service_ip(ai_instance_db)
 
         # 1、创建jupter的service服务，包括默认端口8888
         k8s_common_operate.create_cci_jupter_service(
@@ -668,13 +668,18 @@ class AiInstanceService:
 
         # 22、9001、9002 port需实时获取,防止冲突
         available_ports = self.find_ai_instance_available_ports()
-        print(f"----wwb: available_ports:{available_ports}")
         if len(available_ports) < 3:
-            raise Fail("Not enough available IPs", error_message="无足够可用IP")
+            raise Fail("Not enough available ports", error_message="无足够可用端口")
 
+        available_ports_map = {
+            "22": available_ports[0] if len(available_ports) > 0 else None,
+            "9001": available_ports[1] if len(available_ports) > 1 else None,
+            "9002": available_ports[2] if len(available_ports) > 2 else None,
+        }
+        print(f"ai instance [{ai_instance_db.id}] available_ports:{available_ports}")
         # 2、创建metallb的服务，包括默认端口22、9001、9002
         k8s_common_operate.create_cci_metallb_service(
-            self.core_k8s_client, namespace_name, ai_instance_db.instance_real_name, service_ip, available_ports
+            self.core_k8s_client, namespace_name, ai_instance_db.instance_real_name, service_ip, is_account, available_ports_map
         )
 
         # 规则： host: ingress-${zone_id}.${region_id}.alayanew.com # 这里的region_id和zone_id对应的就是下一步的值，每一个cci实例的ingress都是这个值
@@ -703,27 +708,14 @@ class AiInstanceService:
         k8s_common_operate.create_sts_pod(self.app_k8s_client, namespace_name, sts_data)
         # 22、9001、9002默认端口的metallb配置
         ports = []
-        port_22 = AiInstancePortsInfo(
-            id=uuid.uuid4().hex,
-            instance_id=ai_instance_db.id,
-            instance_svc_port=available_ports[0],
-            instance_svc_target_port=22
-        )
-        port_9001 = AiInstancePortsInfo(
-            id=uuid.uuid4().hex,
-            instance_id=ai_instance_db.id,
-            instance_svc_port=available_ports[1],
-            instance_svc_target_port=9001
-        )
-        port_9002 = AiInstancePortsInfo(
-            id=uuid.uuid4().hex,
-            instance_id=ai_instance_db.id,
-            instance_svc_port=available_ports[2],
-            instance_svc_target_port=9002
-        )
-        ports.append(port_22)
-        ports.append(port_9001)
-        ports.append(port_9002)
+        for port_key, port_value in available_ports_map.items():
+            port = AiInstancePortsInfo(
+                id=uuid.uuid4().hex,
+                instance_id=ai_instance_db.id,
+                instance_svc_target_port=int(port_key),
+                instance_svc_port=port_value
+            )
+            ports.append(port)
         AiInstanceSQL.save_ai_instance_ports_info(ports)
 
         # 保存数据库信息
@@ -734,9 +726,7 @@ class AiInstanceService:
         available_ports = []
         current_port = start_port
         ai_instance_ports_db = AiInstanceSQL.list_ai_instance_ports_info()
-        print(f"---wwb find_ai_instance_available_ports ai_instance_ports_db:{len(ai_instance_ports_db)}")
         ports_db = [ports.instance_svc_port for ports in ai_instance_ports_db] if ai_instance_ports_db else []
-        print(f"---wwb find_ai_instance_available_ports ports_db:{ports_db}")
         while current_port <= end_port and len(available_ports) < count:
             if current_port not in ports_db:
                 available_ports.append(current_port)
@@ -747,12 +737,15 @@ class AiInstanceService:
 
     def _get_service_ip(self, ai_instance_db):
         """获取服务IP地址"""
+        k8s_configs_db = AiInstanceSQL.get_k8s_configs_info_by_k8s_id(ai_instance_db.instance_k8s_id)
+        # 是否为大客户
+        is_account = False
         account_vip_db = AiInstanceSQL.get_account_info_by_account(ai_instance_db.instance_tenant_id)
         if account_vip_db:
-            return account_vip_db.vip
+            is_account = True
+            return account_vip_db.vip, k8s_configs_db.dns_suffix, is_account
 
-        k8s_configs_db = AiInstanceSQL.get_k8s_configs_info_by_k8s_id(ai_instance_db.instance_k8s_id)
-        return k8s_configs_db.public_ip, k8s_configs_db.dns_suffix
+        return k8s_configs_db.public_ip, k8s_configs_db.dns_suffix, is_account
 
     def _assemble_sts_data(self, ai_instance, ai_instance_db, namespace_name, resource_config, nb_prefix):
         """
@@ -889,7 +882,8 @@ class AiInstanceService:
             metadata=V1ObjectMeta(
                 name=ai_instance_db.instance_real_name,
                 namespace=namespace_name,  # 指定命名空间
-                labels={RESOURCE_TYPE_KEY: PRODUCT_TYPE_CCI}
+                labels={RESOURCE_TYPE_KEY: PRODUCT_TYPE_CCI},
+                annotations={"dc.com/quota.xfs.size": "50g"}
             ),
             spec=V1StatefulSetSpec(
                 replicas=1,  # StatefulSet副本数，通常为1，由外层控制多实例
@@ -929,8 +923,7 @@ class AiInstanceService:
             # 原sts 数据
             existing_sts = k8s_common_operate.read_sts_info(app_k8s_client, real_name, namespace_name)
 
-            resource_config = self._prepare_resource_config(
-                request.instance_config) if request and request.instance_config else {}
+            resource_config = self._prepare_resource_config(request.instance_config) if request and request.instance_config else {}
 
             if request and request.image:
                 image_name = request.image
@@ -1205,7 +1198,7 @@ class AiInstanceService:
                                                        instance_id: str,
                                                        pod_name: str,
                                                        namespace: str,
-                                                       timeout: int = 360
+                                                       timeout: int = 300
                                                        ):
         """
         异步检查 Pod 状态并更新数据库
@@ -1618,7 +1611,7 @@ class AiInstanceService:
                     node_port_assigned = getattr(p, 'port', None)
                     break
             # 查询实例对应的vip
-            vip, _ = self._get_service_ip(ai_instance_info_db)
+            vip, _, _ = self._get_service_ip(ai_instance_info_db)
             # 组装返回参数
             if not vip or not ai_instance_info_db.ssh_root_password or not node_port_assigned:
                 raise Fail("ssh service invalid", error_message="SSH Service 无效")
@@ -1725,7 +1718,7 @@ class AiInstanceService:
             node_stats = {
                 'node_name': node_resource_db.node_name,
                 'less_gpu_pod_count': node_resource_db.less_gpu_pod_count,
-                'gpu_model': None if not node_resource_db.gpu_model else self.find_key_by_gpu_code(node_resource_db.gpu_model),
+                'gpu_model': None if not node_resource_db.gpu_model else self.find_gpu_display_by_key(node_resource_db.gpu_model),
                 # GPU资源（整数）
                 'gpu_total': int(gpu_total) if gpu_total else 0,
                 'gpu_used': int(gpu_used) if gpu_used else 0,
@@ -1748,9 +1741,9 @@ class AiInstanceService:
         # 返回所有node资源
         return  node_resources
 
-    def find_key_by_gpu_code(self, gpu_code_value):
-        reverse_mapping = {details["gpu_code"]: key for key, details in GPU_CARD_MAPPING.items()}
-        return reverse_mapping.get(gpu_code_value)
+    def find_gpu_display_by_key(self, gpu_key):
+        gpu_card_info = AiInstanceSQL.get_gpu_card_info_by_gpu_key(gpu_key)
+        return gpu_card_info.gpu_model_display if gpu_card_info else None
 
     """计算单个节点的资源统计"""
     def safe_convert(self, value, convert_type=float):
