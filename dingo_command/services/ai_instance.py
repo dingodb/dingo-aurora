@@ -731,20 +731,18 @@ class AiInstanceService:
 
     def find_ai_instance_available_ports(self, start_port=30001, end_port=65535, count=3):
         """查找从start_port开始的最小count个可用端口"""
-        with RedisLock(redis_connection.redis_connection, lock_name= f"cci-metallb-port", retry_interval=1) as lock:
-            if lock:
-                available_ports = []
-                current_port = start_port
-                ai_instance_ports_db = AiInstanceSQL.list_ai_instance_ports_info()
-                print(f"---wwb find_ai_instance_available_ports ai_instance_ports_db:{len(ai_instance_ports_db)}")
-                ports_db = [ports.instance_svc_port for ports in ai_instance_ports_db] if ai_instance_ports_db else []
-                print(f"---wwb find_ai_instance_available_ports ports_db:{ports_db}")
-                while current_port <= end_port and len(available_ports) < count:
-                    if current_port not in ports_db:
-                        available_ports.append(current_port)
-                    current_port += 1
+        available_ports = []
+        current_port = start_port
+        ai_instance_ports_db = AiInstanceSQL.list_ai_instance_ports_info()
+        print(f"---wwb find_ai_instance_available_ports ai_instance_ports_db:{len(ai_instance_ports_db)}")
+        ports_db = [ports.instance_svc_port for ports in ai_instance_ports_db] if ai_instance_ports_db else []
+        print(f"---wwb find_ai_instance_available_ports ports_db:{ports_db}")
+        while current_port <= end_port and len(available_ports) < count:
+            if current_port not in ports_db:
+                available_ports.append(current_port)
+            current_port += 1
 
-                return available_ports
+        return available_ports
 
 
     def _get_service_ip(self, ai_instance_db):
