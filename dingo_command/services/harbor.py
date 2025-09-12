@@ -135,7 +135,7 @@ class HarborService:
         project_name: str = "anc-public",
         public_image_name="",
         page: int = 1,
-        page_size: int = 10,
+        page_size: int = 100,
     ) -> dict:
         """
         获取公共基础镜像仓库信息
