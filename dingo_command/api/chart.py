@@ -505,6 +505,25 @@ async def put_app(app_id: Union[str, int], update_data: CreateAppObject, backgro
             raise ValueError("app is updating, please wait")
         if app_data.status == util.app_status_delete:
             raise ValueError("app is deleting, please wait")
+
+        # 如果发现repo正在更新或者正在同步，就不能编辑app
+        repo_id = app_data.repo_id
+        query_params = {}
+        query_params["id"] = repo_id
+        data = chart_service.list_repos(query_params, 1, -1, None, None)
+        if data.get("total") == 0:
+            raise ValueError("repo not found")
+        repo_data = data.get("data")[0]
+        if repo_data.status == util.repo_status_failed:
+            raise ValueError("repo is unavailable, please check")
+        if repo_data.status == util.repo_status_sync:
+            raise ValueError("repo is syncing, please wait")
+        if repo_data.status == util.repo_status_update:
+            raise ValueError("repo is updating, please wait")
+        if repo_data.status == util.repo_status_delete:
+            raise ValueError("repo is deleting, can't edit app")
+        chart_service.get_chart_version_info(app_data.chart_id)
+
         update_data.id = app_data.id
         update_data.name = app_data.name
         update_data.cluster_id = app_data.cluster_id
