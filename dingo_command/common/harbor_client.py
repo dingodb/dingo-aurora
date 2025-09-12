@@ -640,19 +640,22 @@ class HarborAPI:
             return self.return_response(False, 500, f"获取指定项目配额异常: {str(e)}")
 
     def get_project_repositories(
-        self, project_name: str, page: int = 1, page_size: int = 100
+        self, project_name: str, page: int = 1, page_size: int = 100, get_all: bool = False
     ) -> Dict[str, Any]:
         """
         获取指定项目下的所有镜像仓库信息
 
         该方法会查询指定项目中的所有镜像仓库，返回仓库的基本信息、
-        标签数量、创建时间等详细信息。支持分页查询。
+        标签数量、创建时间等详细信息。该方法会自动遍历所有页面，
+        获取项目下的全部仓库数据，忽略传入的page和page_size参数。
 
         Args:
             project_name (str): 项目名称
                 - 必须是已存在的项目名称
                 - 项目名称区分大小写
                 - 示例：'k8s', 'my-project'
+            page (int): 起始页码（此参数被忽略，始终从第1页开始）
+            page_size (int): 每页大小（此参数被忽略，内部固定为100）
 
         Returns:
             Dict[str, Any]: 包含仓库信息的响应字典
@@ -687,21 +690,35 @@ class HarborAPI:
                 print(f"获取失败: {result['message']}")
 
         Note:
-            - 默认返回前100个仓库（page_size=100）
+            - 该方法会自动获取项目下的所有仓库，不受page和page_size参数影响
+            - 内部使用分页机制（每页100条）循环获取所有数据
             - 仓库名称包含项目前缀，如'k8s/nginx'
             - 如果项目不存在或没有仓库，返回空列表
             - 建议结合get_repository_artifacts获取详细标签信息
         """
         try:
-            url = f"{self.base_url}/api/v2.0/projects/{project_name}/repositories?page={page}&page_size={page_size}"
-            response = self.request("GET", url)
-            if response.status_code == 200:
+            if get_all:
+                all_repositories = []
+                while True:
+                    url = f"{self.base_url}/api/v2.0/projects/{project_name}/repositories?page={page}&page_size={page_size}"
+                    response = self.request("GET", url)
+                    if response.status_code == 200:
+                        all_repositories.extend(response.json())
+                        page += 1
+                        if len(response.json()) < page_size:
+                            break
+                    else:
+                        return self.return_response(
+                            False, response.status_code, "获取项目下所有镜像失败", response.json()
+                        )
                 return self.return_response(
-                    True, response.status_code, "获取项目下所有镜像成功", response.json()
+                    True, 200, "获取项目下所有镜像成功", all_repositories
                 )
             else:
+                url = f"{self.base_url}/api/v2.0/projects/{project_name}/repositories?page={page}&page_size={page_size}"
+                response = self.request("GET", url)
                 return self.return_response(
-                    False, response.status_code, "获取项目下所有镜像失败", response.json()
+                    True, 200, "获取项目下所有镜像成功", response.json()
                 )
         except Exception as e:
             return self.return_response(False, 500, f"获取项目下所有镜像异常: {str(e)}")
@@ -859,6 +876,19 @@ class HarborAPI:
                 )
         except Exception as e:
             return self.return_response(False, 500, f"仓库镜像删除异常: {str(e)}")
+
+    def search(self,q: str) -> Dict[str, Any]:
+        """
+        搜索Harbor中的项目和仓库
+        """
+        try:
+            url = f"{self.base_url}/api/v2.0/search?q={q}"
+            response = self.request("GET", url)
+            return self.return_response(
+                True, response.status_code, "搜索项目和仓库成功", response.json()
+            )
+        except Exception as e:
+            return self.return_response(False, 500, f"搜索项目和仓库异常: {str(e)}")
 
     def get_projects(self) -> Dict[str, Any]:
         """
