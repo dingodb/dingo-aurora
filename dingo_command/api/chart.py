@@ -51,6 +51,7 @@ async def create_repo(repo: CreateRepoObject, background_tasks: BackgroundTasks)
         await chart_service.check_repo_args(repo)
         Log.info("add repo, repo info %s" % repo)
         # 2、异步处理创建repo仓库的逻辑
+        repo.url = repo.url.strip()
         background_tasks.add_task(chart_service.create_repo, repo, update=False, status="creating")
         return {"success": True, "message": "create repo started, please wait"}
     except Exception as e:
