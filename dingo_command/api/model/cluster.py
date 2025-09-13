@@ -26,6 +26,11 @@ class PortForwards(BaseModel):
     protocol: Optional[str] = Field(None, description="协议")
 
 
+class DataVolumns(BaseModel):
+    volume_type: Optional[str] = Field(None, description="卷类型")
+    volume_size: Optional[int] = Field(None, description="卷大小")
+
+
 class NodeConfigObject(BaseModel):
     count: Optional[int] = Field(None, description="项目id")
     image: Optional[str] = Field(None, description="用户id")
@@ -43,6 +48,7 @@ class NodeConfigObject(BaseModel):
     use_local_disk: Optional[bool] = Field(False, description="实例id")
     volume_type: Optional[str] = Field("", description="卷类型")
     volume_size: Optional[int] = Field(0, description="卷大小")
+    data_volumns: Optional[List[DataVolumns]] = Field(None, description="数据卷配置")
     
 class NodeGroup(BaseModel):
     az: Optional[str] = Field(None, description="可用域")

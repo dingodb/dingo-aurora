@@ -1,3 +1,4 @@
+import time
 import json
 import os
 import uuid
@@ -660,14 +661,17 @@ class ChartService:
                     e_object = e
                     Log.error("Harbor API请求超时，请检查网络或Harbor服务状态")
                     try_times += 1
+                    time.sleep(3)
                 except HTTPStatusError as e:
                     e_object = e
                     Log.error(f"Harbor API请求失败: {e}")
                     try_times += 1
+                    time.sleep(3)
                 except Exception as e:
                     e_object = e
                     Log.error(f"other failed: {e}")
                     try_times += 1
+                    time.sleep(3)
             if try_times >= util.try_times:
                 raise ValueError(f"{str(e_object)}")
 
@@ -807,7 +811,7 @@ class ChartService:
                     list_chart_version.append(chart_version_info)
                 readme_content, values_dict = self.get_chart_details(chart_data.name, chart_url, username, password,
                                                                      chart_data.latest_version)
-                if not readme_content or not values_dict:
+                if not readme_content and not values_dict:
                     raise ValueError(f"get chart {chart_data.name} failed, please check")
             else:
                 # 处理oci类型的chart应用展示
@@ -824,7 +828,7 @@ class ChartService:
                     list_chart_version.append(chart_version_info)
                 readme_content, values_dict = self.get_chart_oci_details(chart_readme_url, chart_values_url,
                                                                          username, password)
-                if not readme_content or not values_dict:
+                if not readme_content and not values_dict:
                     raise ValueError(f"get oci chart {chart_data.name} failed, please check")
 
             chart_object = ChartObject(
@@ -1084,6 +1088,8 @@ class ChartService:
         helm_cache_dir = os.path.join(WORK_DIR, "ansible-deploy/inventory/", cluster_id, util.helm_cache)
         os.makedirs(helm_cache_dir, exist_ok=True)
         kube_config = os.path.join(WORK_DIR, "ansible-deploy/inventory/", cluster_id, "kube_config")
+        if os.path.exists(kube_config):
+            return kube_config, helm_cache_dir
         with open(kube_config, "w") as f :
             f.write(res_cluster.kube_info.kube_config)
             # f.write(yaml.dump(json.loads(res_cluster.kube_info.kube_config)))
@@ -1197,18 +1203,21 @@ class ChartService:
         # 还有带不带--plain-http也需要考虑进去
         try:
             config = os.path.join(helm_cache_dir, util.registry_config)
+            helm_cache_tmp_dir = os.path.join(helm_cache_dir, str(uuid.uuid4()))
+            os.makedirs(helm_cache_tmp_dir, exist_ok=True)
             if app_type == util.repo_type_http:
-                self.run_helm_upgrade(name, remote_url, version, config, helm_cache_dir, kube_config, values, namespace
-                                      , username, password)
+                self.run_helm_upgrade(name, remote_url, version, config, helm_cache_tmp_dir, kube_config, values,
+                                      namespace, username, password)
             else:
                 # 1、先要login登录harbor上才行
                 self.login_registry(repo_url, username, password, config)
                 # 2、执行命令
-                self.run_helm_upgrade(name, remote_url, version, config, helm_cache_dir, kube_config, values, namespace)
+                self.run_helm_upgrade(name, remote_url, version, config, helm_cache_tmp_dir, kube_config, values,
+                                      namespace)
             # 清除安装产生的缓存文件
-            shutil.rmtree(helm_cache_dir)
+            shutil.rmtree(helm_cache_tmp_dir)
         except Exception as e:
-            # shutil.rmtree(helm_cache_dir)
+            shutil.rmtree(helm_cache_dir)
             raise e
 
     def install_app(self, create_data: CreateAppObject, update=False):
@@ -1254,7 +1263,9 @@ class ChartService:
             "uninstall",
             name,
             "--kubeconfig", kube_config,
-            "--namespace", namespace
+            "--namespace", namespace,
+            "--no-hooks",
+            "--ignore-not-found"
         ]
 
         try:

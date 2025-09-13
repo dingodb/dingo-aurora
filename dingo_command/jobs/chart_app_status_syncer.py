@@ -77,14 +77,12 @@ def check_app_status():
     try:
         LOG.info(f"Starting check app status at {time.strftime('%Y-%m-%d %H:%M:%S')}")
         os.makedirs(config_dir, exist_ok=True)
-        # 先获取所有repo的cluster_id
+        # 先获取所有app的cluster_id
         query_params = {}
-        count, repos = RepoSQL.list_repos(query_params, page_size=-1)
+        count, apps = AppSQL.list_apps(query_params, page_size=-1)
         cluster_id_list = []
-        for repo in repos:
-            if repo.is_global:
-                continue
-            cluster_id = repo.cluster_id
+        for app in apps:
+            cluster_id = app.cluster_id
             if cluster_id not in cluster_id_list:
                 query_params = {}
                 query_params["id"] = cluster_id
@@ -117,6 +115,27 @@ def check_app_status():
             # 2、拿到kube_config文件后，通过helm list获取真实存在的app的名称
             content = chart_service.get_helm_list(config_file)
             content_list = json.loads(content)
+            # 处理app状态为creating、updating、deleting的情况
+            for app in apps:
+                if ((app.status == util.app_status_create or app.status == util.app_status_update) and
+                        (datetime.now() - app.update_time).total_seconds() > 600):
+                    # 重新安装app
+                    create_data = CreateAppObject(
+                        id=str(app.id),
+                        name=app.name,
+                        namespace=app.namespace,
+                        chart_id=str(app.chart_id),
+                        cluster_id=app.cluster_id,
+                        values=json.loads(app.values),
+                        chart_version=app.version,
+                        description=app.description
+                    )
+                    chart_service.install_app(create_data, update=True)
+                elif app.status == util.app_status_delete and (datetime.now() - app.update_time).total_seconds() > 600:
+                    # 删除app
+                    chart_service.delete_app(app)
+
+            # 处理app状态为running的情况
             for app in apps:
                 if app.status != util.app_status_success:
                     continue
