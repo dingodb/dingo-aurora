@@ -12,26 +12,26 @@ from keystoneclient import client
 from math import ceil
 from kubernetes.client import V1PersistentVolumeClaim, V1ObjectMeta, V1PersistentVolumeClaimSpec, \
     V1ResourceRequirements, V1PodTemplateSpec, V1StatefulSet, V1LabelSelector, V1Container, V1VolumeMount, V1Volume, \
-    V1ConfigMapVolumeSource, V1EnvVar, V1PodSpec, V1StatefulSetSpec, V1LifecycleHandler, V1ExecAction, V1Lifecycle, \
-    V1ContainerPort, V1Toleration, V1EmptyDirVolumeSource, V1Affinity, V1PodAffinity, V1WeightedPodAffinityTerm, \
-    V1PodAffinityTerm, V1LabelSelectorRequirement
+    V1ConfigMapVolumeSource, V1EnvVar, V1PodSpec, V1StatefulSetSpec, V1ContainerPort, V1Toleration,  V1Affinity, V1PodAffinity, \
+    V1WeightedPodAffinityTerm, V1PodAffinityTerm, V1LabelSelectorRequirement, V1HostPathVolumeSource
 from kubernetes import client
 from kubernetes.stream import stream
 from oslo_log import log
 
-from dingo_command.api.model.aiinstance import StorageObj, AddPortModel
+from dingo_command.api.model.aiinstance import AddPortModel
 from dingo_command.common.Enum.AIInstanceEnumUtils import AiInstanceStatus, K8sStatus
 from dingo_command.common.k8s_common_operate import K8sCommonOperate
 from dingo_command.db.models.ai_instance.models import AiInstanceInfo, AccountInfo, AiInstancePortsInfo
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
 from dingo_command.services.harbor import HarborService
 from dingo_command.services.redis_connection import redis_connection, RedisLock
-from dingo_command.utils.constant import CCI_NAMESPACE_PREFIX, AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT, \
-    SYSTEM_DISK_NAME_DEFAULT, RESOURCE_TYPE_KEY, PRODUCT_TYPE_CCI, AI_INSTANCE_PVC_MOUNT_PATH_DEFAULT, \
-    APP_LABEL, AI_INSTANCE_CM_MOUNT_PATH_SSHKEY, AI_INSTANCE_CM_MOUNT_PATH_SSHKEY_SUB_PATH, \
-    CONFIGMAP_PREFIX, DEV_TOOL_JUPYTER, SAVE_TO_IMAGE_CCI_PREFIX, GPU_CARD_MAPPING, SYSTEM_DISK_SIZE_DEFAULT, \
-    GPU_POD_LABEL_KEY, GPU_POD_LABEL_VALUE, CCI_STS_PREFIX, CCI_STS_POD_SUFFIX, INGRESS_SIGN, HYPHEN_SIGN, POINT_SIGN, \
-    JUPYTER_CONFIG_MOUNT_NAME, JUPYTER_CONFIG_MOUNT_PATH, JUPYTER_CONFIG_SUB_PATH, CCI_JUPYTER_PREFIX
+from dingo_command.utils.constant import CCI_NAMESPACE_PREFIX, RESOURCE_TYPE_KEY, PRODUCT_TYPE_CCI, \
+    AI_INSTANCE_PVC_MOUNT_PATH_DEFAULT, \
+    APP_LABEL, AI_INSTANCE_CM_MOUNT_PATH_SSHKEY, AI_INSTANCE_CM_MOUNT_PATH_SSHKEY_SUB_PATH, CONFIGMAP_PREFIX, \
+    DEV_TOOL_JUPYTER, \
+    SAVE_TO_IMAGE_CCI_PREFIX, GPU_POD_LABEL_KEY, GPU_POD_LABEL_VALUE, CCI_STS_PREFIX, CCI_STS_POD_SUFFIX, INGRESS_SIGN, \
+    HYPHEN_SIGN, POINT_SIGN, \
+    CCI_JUPYTER_PREFIX, JUPYTER_INIT_MOUNT_NAME, JUPYTER_INIT_MOUNT_PATH, HARBOR_PULL_IMAGE_SUFFIX
 from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client, get_k8s_networking_client
 from dingo_command.services.custom_exception import Fail
 
@@ -198,7 +198,7 @@ class AiInstanceService:
         异步保存AI实例为镜像（立即返回，实际操作在后台执行）
         """
         try:
-            with RedisLock(redis_connection.redis_connection, f"ai-instance-image-{id}", expire_time=3600) as lock:
+            with RedisLock(redis_connection.redis_master_connection, f"ai-instance-image-{id}", expire_time=3600) as lock:
                 if lock:
                     # 参数验证和基本信息获取
                     ai_instance_info_db = self._validate_and_get_instance_info(id, image_registry, image_name, image_tag)
@@ -242,7 +242,7 @@ class AiInstanceService:
         """
         try:
             redis_key = SAVE_TO_IMAGE_CCI_PREFIX + id
-            value = redis_connection.get_redis_by_key(redis_key)
+            value = redis_connection.redis_master_connection.get_redis_by_key(redis_key)
             if value:
                 return {
                     "instance_id": id,
@@ -336,7 +336,7 @@ class AiInstanceService:
         # 存入redis，镜像推送完成标识
         redis_key = SAVE_TO_IMAGE_CCI_PREFIX + id
         try:
-            redis_connection.set_redis_by_key_with_expire(redis_key, f"{image_name}:{image_tag}", 3600)
+            redis_connection.redis_master_connection.set_redis_by_key_with_expire(redis_key, f"{image_name}:{image_tag}", 3600)
 
             # 1. Harbor登录
             await self._harbor_login(core_k8s_client, nerdctl_api_pod, harbor_address, harbor_username, harbor_password)
@@ -354,7 +354,7 @@ class AiInstanceService:
         except Exception as e:
             print(f"Async save operation failed for instance {id}: {str(e)}")
         finally:
-            redis_connection.delete_redis_key(redis_key)
+            redis_connection.redis_master_connection.delete_redis_key(redis_key)
 
     async def _execute_k8s_command(self, core_k8s_client, pod_name, namespace, command):
         """异步执行K8s命令的辅助函数"""
@@ -507,6 +507,16 @@ class AiInstanceService:
             self._initialize_clients(ai_instance.k8s_id)
             # 准备命名空间
             namespace_name = self._prepare_namespace(ai_instance)
+            # 镜像全路径。格式：  域名/项目/镜像名+tag
+            image_pull = ai_instance.image
+            harbor_address = image_pull.split("/")[0]
+            print(f"create_ai_instance harbor_address:{harbor_address}")
+            k8s_configs_db = AiInstanceSQL.get_k8s_configs_info_by_k8s_id(ai_instance.k8s_id)
+            # 创建私有镜像默认拉取秘钥
+            k8s_common_operate.create_docker_registry_secret(self.core_k8s_client, namespace_name, namespace_name + HARBOR_PULL_IMAGE_SUFFIX,
+                                                             harbor_address, k8s_configs_db.harbor_username, k8s_configs_db.harbor_password)
+            # 设置默认服务账号的harbor 秘钥
+            k8s_common_operate.patch_default_service_account(self.core_k8s_client, namespace_name, namespace_name + HARBOR_PULL_IMAGE_SUFFIX)
             # 转换数据结构
             ai_instance_db = self._convert_to_db_model(ai_instance)
 
@@ -619,7 +629,7 @@ class AiInstanceService:
         resource_limits = {
             'cpu': int(instance_config.compute_cpu) if instance_config.compute_cpu else 0,
             'memory': instance_config.compute_memory + "Gi" if instance_config.compute_memory else "0Gi",
-            'ephemeral-storage': instance_config.system_disk_size + "Gi" if instance_config.system_disk_size else SYSTEM_DISK_SIZE_DEFAULT
+            # 'ephemeral-storage': instance_config.system_disk_size + "Gi" if instance_config.system_disk_size else SYSTEM_DISK_SIZE_DEFAULT
         }
 
         node_selector_gpu = {}
@@ -701,11 +711,15 @@ class AiInstanceService:
         )
 
         # 5、挂载jupyter config
-        k8s_common_operate.create_configmap(self.core_k8s_client, namespace_name, CCI_JUPYTER_PREFIX + ai_instance_db.id, nb_prefix)
+        nb_init_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+        ai_instance_db.ssh_root_password = nb_init_password
+        k8s_common_operate.create_jupyter_configmap(self.core_k8s_client, namespace_name,
+                                           ai_instance_db.instance_real_name, nb_prefix, nb_init_password)
 
         # 6、创建StatefulSet
         sts_data = self._assemble_sts_data(ai_instance, ai_instance_db, namespace_name, resource_config, nb_prefix)
         k8s_common_operate.create_sts_pod(self.app_k8s_client, namespace_name, sts_data)
+
         # 22、9001、9002默认端口的metallb配置
         ports = []
         for port_key, port_value in available_ports_map.items():
@@ -777,31 +791,21 @@ class AiInstanceService:
 
 
         # 准备Volume和VolumeMount
-        volume_mounts = []
-        pod_volumes = []
-        # volume_mounts = [
-        #     V1VolumeMount(name=SYSTEM_DISK_NAME_DEFAULT, mount_path=AI_INSTANCE_SYSTEM_MOUNT_PATH_DEFAULT)
-        # ]
-        #
-        # pod_volumes = [
-        #     V1Volume(
-        #         name=SYSTEM_DISK_NAME_DEFAULT,
-        #         empty_dir=V1EmptyDirVolumeSource(
-        #             size_limit=resource_limits.get('ephemeral-storage', '50Gi')  # 从资源限制中获取或使用默认值
-        #         )
-        #     )
-        # ]
-
-        volume_mounts.append(
-            V1VolumeMount(name=JUPYTER_CONFIG_MOUNT_NAME, mount_path=JUPYTER_CONFIG_MOUNT_PATH,
-                          sub_path=JUPYTER_CONFIG_SUB_PATH)
-        )
-        pod_volumes.append(
-            V1Volume(
-                name=JUPYTER_CONFIG_MOUNT_NAME,
-                config_map=V1ConfigMapVolumeSource(name=CCI_JUPYTER_PREFIX + ai_instance_db.id)
+        volume_mounts = [
+            V1VolumeMount(
+                name=JUPYTER_INIT_MOUNT_NAME,  # 卷名称，需与下面定义的卷匹配
+                mount_path=JUPYTER_INIT_MOUNT_PATH  # 容器内的挂载路径
             )
-        )
+        ]
+        pod_volumes = [
+            V1Volume(
+                name=JUPYTER_INIT_MOUNT_NAME,
+                host_path= V1HostPathVolumeSource(
+                    path="/" + JUPYTER_INIT_MOUNT_NAME,  # 宿主机上的路径
+                    type="DirectoryOrCreate"  # 类型：如果目录不存在则创建
+                )
+            )
+        ]
 
         # 处理PVC (从ai_instance.volumes中获取信息)
         pvc_template = None
@@ -832,30 +836,26 @@ class AiInstanceService:
             )
         )
 
-        PASSWORD = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-        ai_instance_db.ssh_root_password = PASSWORD
         # 定义容器
         container = V1Container(
             name=ai_instance_db.instance_real_name,  # 使用实例的真实名称
             image=ai_instance.image,
             image_pull_policy="Always",
             env=env_list,
+            env_from=[
+                client.V1EnvFromSource(
+                    config_map_ref=client.V1ConfigMapEnvSource(
+                        name=ai_instance_db.instance_real_name
+                    )
+                )
+            ],
             ports=[V1ContainerPort(container_port=22), V1ContainerPort(container_port=8888), V1ContainerPort(container_port=9001), V1ContainerPort(container_port=9002)],  # 固定端口
             resources=V1ResourceRequirements(
                 requests=resource_limits,
                 limits=resource_limits
             ),
             volume_mounts=volume_mounts,
-            lifecycle=client.V1Lifecycle(
-                post_start=client.V1LifecycleHandler(
-                    _exec=client.V1ExecAction(
-                        command=[
-                            "/bin/bash", "-c",
-                            f"echo root:{PASSWORD} | chpasswd"
-                        ]
-                    )
-                )
-            ),
+            command=["/anc-init/script/anc-init"],
         )
 
         # 亲和性
@@ -1304,6 +1304,8 @@ class AiInstanceService:
             if (datetime.now() - start_time).total_seconds() >= timeout:
                 print(f"Pod {pod_name} 状态检查超时(6分钟)")
                 self.update_pod_status_and_node_name_in_db(instance_id, K8sStatus.ERROR.value, pod_located_node_name)
+                # 副本数改成0
+                self.set_k8s_sts_replica_by_instance_id(instance_id, 0)
 
         except Exception as e:
             print(f"检查Pod状态时发生未预期错误: {e}")
@@ -1864,3 +1866,25 @@ class AiInstanceService:
         project_name = parts[-1] if parts else ""  # 获取最后一部分作为命名空间
 
         return project_name
+
+    def set_k8s_sts_replica_by_instance_id(self, instance_id: str, replica: int):
+        # 空
+        if not instance_id:
+            return
+        # 查库
+        instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(instance_id)
+        # 空
+        if not instance_info_db:
+            return
+        # 连接k8s，设置副本数0
+        try:
+            app_client = get_k8s_app_client(instance_info_db.instance_k8s_id)
+            body = {"spec": {"replicas": replica}}
+            app_client.patch_namespaced_stateful_set(
+                name=instance_info_db.instance_real_name,
+                namespace=CCI_NAMESPACE_PREFIX + instance_info_db.instance_tenant_id,
+                body=body,
+                _preload_content=False
+            )
+        except Exception as e:
+            LOG.error(f"实例设置副本数{replica}失败，实例ID: {id}, 错误: {e}")
