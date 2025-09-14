@@ -1410,8 +1410,13 @@ class AiInstanceService:
             svc.spec.ports = existing_ports
 
             core_k8s_client.patch_namespaced_service(name=service_name, namespace=namespace_name, body=svc)
-            port_db = AiInstancePortsInfo(instance_id=id, instance_svc_port=port, instance_svc_target_port=target_port)
-            AiInstanceSQL.save_ai_instance_ports_info(port_db)
+            port_db = AiInstancePortsInfo(
+                id=uuid.uuid4().hex,
+                instance_id=id,
+                instance_svc_port=port,
+                instance_svc_target_port=target_port
+            )
+            AiInstanceSQL.save_ai_instance_ports_info([port_db])
             return {"data": "success", "port": port}
         except Fail:
             raise
