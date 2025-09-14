@@ -242,7 +242,7 @@ class AiInstanceService:
         """
         try:
             redis_key = SAVE_TO_IMAGE_CCI_PREFIX + id
-            value = redis_connection.redis_master_connection.get_redis_by_key(redis_key)
+            value = redis_connection.get_redis_by_key(redis_key)
             if value:
                 return {
                     "instance_id": id,
@@ -336,7 +336,7 @@ class AiInstanceService:
         # 存入redis，镜像推送完成标识
         redis_key = SAVE_TO_IMAGE_CCI_PREFIX + id
         try:
-            redis_connection.redis_master_connection.set_redis_by_key_with_expire(redis_key, f"{image_name}:{image_tag}", 3600)
+            redis_connection.set_redis_by_key_with_expire(redis_key, f"{image_name}:{image_tag}", 3600)
 
             # 1. Harbor登录
             await self._harbor_login(core_k8s_client, nerdctl_api_pod, harbor_address, harbor_username, harbor_password)
@@ -354,7 +354,7 @@ class AiInstanceService:
         except Exception as e:
             print(f"Async save operation failed for instance {id}: {str(e)}")
         finally:
-            redis_connection.redis_master_connection.delete_redis_key(redis_key)
+            redis_connection.delete_redis_key(redis_key)
 
     async def _execute_k8s_command(self, core_k8s_client, pod_name, namespace, command):
         """异步执行K8s命令的辅助函数"""
