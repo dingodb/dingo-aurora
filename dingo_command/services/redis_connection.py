@@ -57,9 +57,9 @@ class RedisConnection:
         if not redis_key:
             return None
         # 判断redis存在当前key
-        if self.redis_connection.exists(redis_key):
+        if self.redis_master_connection.exists(redis_key):
             # 返回数据
-            return self.redis_connection.get(redis_key)
+            return self.redis_master_connection.get(redis_key)
 
     # 向redis中写入
     def set_redis_by_key(self, redis_key:str, redis_value):
@@ -70,7 +70,7 @@ class RedisConnection:
         if not redis_key:
             return None
         # 返回数据
-        return self.redis_connection.set(redis_key, redis_value)
+        return self.redis_master_connection.set(redis_key, redis_value)
 
     def set_redis_by_key_with_expire(self, redis_key: str, redis_value, expire_seconds=None):
         """
@@ -90,10 +90,10 @@ class RedisConnection:
         try:
             if expire_seconds is not None:
                 # 使用setex命令同时设置值和过期时间[6,7](@ref)
-                return self.redis_connection.setex(redis_key, expire_seconds, redis_value)
+                return self.redis_master_connection.setex(redis_key, expire_seconds, redis_value)
             else:
                 # 不使用过期时间
-                return self.redis_connection.set(redis_key, redis_value)
+                return self.redis_master_connection.set(redis_key, redis_value)
         except Exception as e:
             print(f"Redis set operation failed: {e}")
             return False
@@ -113,7 +113,7 @@ class RedisConnection:
             return False
 
         try:
-            result = self.redis_connection.delete(redis_key)
+            result = self.redis_master_connection.delete(redis_key)
             return True
         except Exception as e:
             print(f"Redis delete operation failed: {e}")

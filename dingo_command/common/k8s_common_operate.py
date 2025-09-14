@@ -1,3 +1,4 @@
+import base64
 import textwrap
 from typing import Dict
 import json
@@ -208,7 +209,7 @@ class K8sCommonOperate:
             return api_response
 
         except Exception as e:
-            LOG.error(f"创建 ConfigMap[{configmap_name}]时发生异常: {e}")
+            LOG.error(f"创建 ConfigMap[{namespace}/{configmap_name}]时发生异常: {e}")
             raise e
 
     def create_configmap(self, core_v1: client.CoreV1Api, namespace, configmap_name, nb_prefix):
@@ -678,4 +679,74 @@ class K8sCommonOperate:
                     raise e
             else:
                 # 其他 API 错误
+                import traceback
+                traceback.print_exc()
                 raise e
+
+    def create_docker_registry_secret(self, core_v1: client.CoreV1Api, namespace, secret_name, docker_server, docker_username,
+                                      docker_password, docker_email=None):
+        """
+        创建 Docker Registry 类型的 Secret
+        """
+        # 构造认证字符串并编码
+        auth_str = f"{docker_username}:{docker_password}"
+        auth_b64 = base64.b64encode(auth_str.encode()).decode()
+
+        # 构造 Docker Config JSON 对象并编码
+        docker_config_json = {
+            "auths": {
+                docker_server: {
+                    "username": docker_username,
+                    "password": docker_password,
+                    "auth": auth_b64
+                }
+            }
+        }
+        docker_config_json_b64 = base64.b64encode(str(docker_config_json).replace("'", '"').encode()).decode()
+
+        # 定义 Secret 对象
+        secret = client.V1Secret(
+            metadata=client.V1ObjectMeta(name=secret_name, namespace=namespace),
+            type="kubernetes.io/dockerconfigjson",
+            data={".dockerconfigjson": docker_config_json_b64}
+        )
+
+        try:
+            # 在指定命名空间中创建 Secret
+            core_v1.create_namespaced_secret(namespace=namespace, body=secret)
+            print(f"Secret '{secret_name}' created successfully in namespace '{namespace}'.")
+        except ApiException as e:
+            if e.status == 409:  # 如果 Secret 已存在，则更新它
+                print(f"Secret '{secret_name}' already exists in namespace '{namespace}'. Updating it.")
+                core_v1.replace_namespaced_secret(name=secret_name, namespace=namespace, body=secret)
+                print(f"Secret '{secret_name}' updated successfully in namespace '{namespace}'.")
+            else:
+                print(f"Failed to create/update secret '{secret_name}': {e}")
+                raise
+
+    def patch_default_service_account(self, core_v1: client.CoreV1Api, namespace, secret_name):
+        """
+        为指定命名空间的默认 ServiceAccount 添加 imagePullSecrets
+        """
+        try:
+            # 获取当前的默认 ServiceAccount
+            sa = core_v1.read_namespaced_service_account(name="default", namespace=namespace)
+            # 确保 image_pull_secrets 属性是一个列表
+            if sa.image_pull_secrets is None:
+                sa.image_pull_secrets = []
+
+            # 检查要添加的 secret 是否已存在，避免重复添加
+            existing_secrets = [ips.name for ips in sa.image_pull_secrets]
+            if secret_name not in existing_secrets:
+                # 添加新的 imagePullSecret
+                sa.image_pull_secrets.append(client.V1LocalObjectReference(name=secret_name))
+                # 更新 ServiceAccount
+                core_v1.replace_namespaced_service_account(name="default", namespace=namespace, body=sa)
+                print(
+                    f"Successfully added secret '{secret_name}' to default ServiceAccount in namespace '{namespace}'.")
+            else:
+                print(
+                    f"Secret '{secret_name}' already exists in imagePullSecrets of default ServiceAccount in namespace '{namespace}'.")
+        except ApiException as e:
+            print(f"Failed to patch default ServiceAccount in namespace '{namespace}': {e}")
+            raise

@@ -42,6 +42,7 @@ GPU_POD_LABEL_KEY = "cci_gpu_pod"
 GPU_POD_LABEL_VALUE = "true"
 POINT_SIGN = "."
 HYPHEN_SIGN  = "-"
+HARBOR_PULL_IMAGE_SUFFIX = "-harbor-pull-image"
 
 # excel的目录文件
 EXCEL_TEMP_DIR = "/home/dingo_command/temp_excel/"
