@@ -201,6 +201,7 @@ def handle_orphan_resources(sts_names, db_instance_map, namespace, core_client, 
 def cleanup_cci_resources(apps_client, core_client, networking_client, name, namespace):
     try:
         # 删除StatefulSet
+        print(f"删除底层k8s的sts资源: namespace = {namespace}, name = {name}")
         k8s_common_operate.delete_sts_by_name(
             apps_client,
             real_sts_name=name,
@@ -247,6 +248,7 @@ def handle_missing_resources(sts_names, db_instances):
         if instance.instance_real_name not in sts_name_set:
             LOG.info(f"删除数据库中不存在的实例记录: {instance.instance_real_name}")
             try:
+                print(f"删除db的instance资源: id = {instance.id}, name = {instance.instance_name}, real_name = {instance.instance_real_name}")
                 # 清理实例
                 AiInstanceSQL.delete_ai_instance_info_by_id(instance.id)
                 # 清理端口数据
