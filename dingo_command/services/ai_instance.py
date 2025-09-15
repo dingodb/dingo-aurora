@@ -1459,7 +1459,7 @@ class AiInstanceService:
             # 查找目标端口的 index
             target_index = None
             for idx, p in enumerate(old_ports):
-                if int(getattr(p, 'targetPort', -1)) == int(port):
+                if int(getattr(p, 'target_port', -1)) == int(port):
                     target_index = idx
                     break
             if target_index is None:
