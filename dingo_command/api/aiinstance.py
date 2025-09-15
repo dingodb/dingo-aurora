@@ -1,5 +1,6 @@
 # ai相关的容器实例的创建接口
 import asyncio
+import json
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -123,6 +124,25 @@ async def ai_instance_ssh_web(
         async def receive_from_ws():
             while True:
                 data = await websocket.receive_text()
+
+                # 判断是否为 resize 消息
+                try:
+                    msg = json.loads(data)
+                    if msg.get("type") == "resize":
+                        rows = msg.get("rows", 24)
+                        cols = msg.get("cols", 80)
+
+                        # 通过专用通道发送 resize 消息
+                        resize_msg = json.dumps({
+                            "type": "resize",
+                            "width": cols,
+                            "height": rows
+                        })
+                        resp.write_channel(4, resize_msg.encode())
+                        continue
+                except Exception as e:
+                    pass
+
                 # 直接转发到 Kubernetes，不处理回显
                 resp.write_stdin(data)
 
