@@ -5,6 +5,7 @@ import json
 import os
 import random
 import string
+import time
 import uuid
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
@@ -218,13 +219,12 @@ class AiInstanceService:
                     nerdctl_api_pod = self._get_nerdctl_api_pod(core_k8s_client, sts_pod_info['node_name'])
 
                     # 立即返回响应，后续操作异步执行
-                    asyncio.create_task(
-                        self._async_save_operation(
-                            id, core_k8s_client, nerdctl_api_pod,
-                            sts_pod_info['container_id'], image_registry, harbor_username, harbor_password,
-                            image_name, image_tag
-                        )
+                    self._start_async_save_task(
+                        id, core_k8s_client, nerdctl_api_pod,
+                        sts_pod_info['container_id'], image_registry, harbor_username, harbor_password,
+                        image_name, image_tag
                     )
+
                     return {
                         "status": "accepted",
                         "message": "容器实例保存操作已开始异步执行",
@@ -240,6 +240,32 @@ class AiInstanceService:
             # 记录日志并重新抛出异常
             print(f"Failed to start save operation for instance {id}: {str(e)}")
             raise Fail(f"Failed to start save operation: {str(e)}")
+
+    def _start_async_save_task(self, id, core_k8s_client, nerdctl_api_pod,
+                                    clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag):
+        """启动后台检查任务"""
+        def _run_task():
+            loop = None
+            try:
+                # 创建新的事件循环（每个线程独立）
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                # 执行检查任务
+                loop.run_until_complete(
+                    self._async_save_operation(
+                        id, core_k8s_client, nerdctl_api_pod,
+                        clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag
+                    )
+                )
+            except Exception as e:
+                LOG.error(f"Background task failed: {str(e)}", exc_info=True)
+            finally:
+                if loop:
+                    loop.close()
+
+        # 使用线程池提交任务
+        task_executor.submit(_run_task)
 
     def sava_ai_instance_to_image_process_status(self, id):
         """
@@ -348,14 +374,16 @@ class AiInstanceService:
 
             # 2. Commit操作
             image = f"{harbor_address}/{image_name}:{image_tag}"
+            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] commit image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] start")
             await self._commit_container(
                 core_k8s_client, nerdctl_api_pod, clean_container_id, image
             )
-            print(f"容器实例[{id}]commit镜像 ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}]完成")
+            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] commit image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] finished")
 
             # 3. Push操作
+            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] push image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] start")
             await self._push_image(core_k8s_client, nerdctl_api_pod, image)
-            print(f"容器实例[{id}] push 镜像 ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}]完成")
+            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] push image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] finished")
         except Exception as e:
             print(f"Async save operation failed for instance {id}: {str(e)}")
         finally:
@@ -744,16 +772,18 @@ class AiInstanceService:
 
     def find_ai_instance_available_ports(self, start_port=30001, end_port=65535, count=3):
         """查找从start_port开始的最小count个可用端口"""
-        available_ports = []
-        current_port = start_port
-        ai_instance_ports_db = AiInstanceSQL.list_ai_instance_ports_info()
-        ports_db = [ports.instance_svc_port for ports in ai_instance_ports_db] if ai_instance_ports_db else []
-        while current_port <= end_port and len(available_ports) < count:
-            if current_port not in ports_db:
-                available_ports.append(current_port)
-            current_port += 1
+        with RedisLock(redis_connection.redis_master_connection, lock_name=f"cci-metallb-port") as lock:
+            if lock:
+                available_ports = []
+                current_port = start_port
+                ai_instance_ports_db = AiInstanceSQL.list_ai_instance_ports_info()
+                ports_db = [ports.instance_svc_port for ports in ai_instance_ports_db] if ai_instance_ports_db else []
+                while current_port <= end_port and len(available_ports) < count:
+                    if current_port not in ports_db:
+                        available_ports.append(current_port)
+                    current_port += 1
 
-        return available_ports
+                return available_ports
 
 
     def _get_service_ip(self, ai_instance_db):
@@ -1734,6 +1764,7 @@ class AiInstanceService:
             # 构建结果字典
             node_stats = {
                 'node_name': node_resource_db.node_name,
+                'less_gpu_pod_total': node_resource_db.less_gpu_pod_total,
                 'less_gpu_pod_count': node_resource_db.less_gpu_pod_count,
                 'gpu_model': None if not node_resource_db.gpu_model else self.find_gpu_display_by_key(node_resource_db.gpu_model),
                 # GPU资源（整数）
