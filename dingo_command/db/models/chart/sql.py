@@ -33,6 +33,8 @@ class RepoSQL:
                 query = query.filter(RepoInfo.is_global == query_params["is_global"])
             if "status" in query_params and query_params["status"]:
                 query = query.filter(RepoInfo.status == query_params["status"])
+            if "type" in query_params and query_params["type"]:
+                query = query.filter(RepoInfo.type == query_params["type"])
             if "name" in query_params and query_params["name"]:
                 query = query.filter(RepoInfo.name.like(f"%{query_params['name']}%"))
             # 总数

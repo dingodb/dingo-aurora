@@ -321,9 +321,9 @@ class ChartService:
                 if r.name == repo.name and r.cluster_id == repo.cluster_id:
                     # 如果查询结果不为空，说明仓库名称已存在+
                     raise ValueError("Repo name already exists")
-                # if r.url == repo.url and r.cluster_id == repo.cluster_id:
-                #     # 如果查询结果不为空，说明仓库地址已存在
-                #     raise ValueError(f"The same repo url already exists, repo name is {r.name}")
+                if r.url == repo.url and r.cluster_id == repo.cluster_id:
+                    # 如果查询结果不为空，说明仓库地址已存在
+                    raise ValueError(f"The same url of repo already exists, repo name is {r.name}")
 
     def convert_repo_db(self, repo: CreateRepoObject, status="creating"):
         repo_info_db = RepoDB()
@@ -1290,7 +1290,7 @@ class ChartService:
             AppSQL.delete_app(app_data)
         except Exception as e:
             # 写入failed的状态
-            if "not found" in str(e):
+            if "not found" in str(e) or "Release name is invalid" in str(e):
                 AppSQL.delete_app(app_data)
                 return
             app_data.status = util.app_status_failed
