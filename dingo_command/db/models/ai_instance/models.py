@@ -13,6 +13,7 @@ class AiK8sConfigs(Base):
     k8s_id = Column(String(length=128), nullable=True, index=True, unique=True)
     k8s_type = Column(String(length=128), nullable=True)
     public_ip = Column(String(length=128), nullable=True)
+    metallb_ip = Column(String(length=128), nullable=True)
     dns_suffix = Column(String(length=128), nullable=True)
     kubeconfig_path = Column(String(length=255), nullable=True)
     kubeconfig_context_name = Column(String(length=128), nullable=True)
@@ -77,6 +78,7 @@ class AccountInfo(Base):
     id = Column(String(length=128), primary_key=True, nullable=False, index=True, unique=True)
     account = Column(String(length=128), nullable=True, comment="账户账号")
     vip = Column(String(length=128), nullable=True, comment="VIP")
+    metallb_ip = Column(String(length=128), nullable=True)
     create_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"), comment="创建时间")
     update_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"), comment="更新时间")
 
