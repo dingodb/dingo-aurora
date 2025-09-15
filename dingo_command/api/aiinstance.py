@@ -256,7 +256,7 @@ async def get_ssh_info_by_id(id: str):
 @router.post("/ai-account/create", summary="创建账户", description="创建账户")
 async def create_ai_account(request: AccountCreateRequest):
     try:
-        return ai_instance_service.create_ai_account(request.account, request.is_vip)
+        return ai_instance_service.create_ai_account(request.account, request.vip, request.metallb_ip)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
@@ -278,7 +278,7 @@ async def delete_ai_account_by_id(id: str):
 @router.post("/ai-account/{id}/update", summary="更新账户", description="根据ID更新账户信息")
 async def update_ai_account_by_id(id: str, request: AccountUpdateRequest):
     try:
-        return ai_instance_service.update_ai_account_by_id(id, request.account, request.vip)
+        return ai_instance_service.update_ai_account_by_id(id, request.account, request.vip, request.metallb_ip)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:

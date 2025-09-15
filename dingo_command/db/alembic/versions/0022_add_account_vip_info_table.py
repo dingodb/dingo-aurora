@@ -25,6 +25,7 @@ def upgrade() -> None:
     sa.Column('id', sa.String(length=128), nullable=False),
     sa.Column('account', sa.String(length=128), nullable=False, comment='账户账号'),
     sa.Column('vip', sa.String(length=128), nullable=False, comment='VIP'),
+    sa.Column('metallb_ip', sa.String(length=128), nullable=False, comment='容器实例服务的Metallb IP'),
     sa.Column('create_time', sa.DateTime(), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP'), comment='创建时间'),
     sa.Column('update_time', sa.DateTime(), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'), comment='更新时间'),
     sa.PrimaryKeyConstraint('id')

@@ -7,6 +7,7 @@ from dingo_command.common.Enum.AIInstanceEnumUtils import AiInstanceStatus
 from dingo_command.common.k8s_common_operate import K8sCommonOperate
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
 from dingo_command.services.redis_connection import RedisLock, redis_connection
+from dingo_command.utils.constant import SYSTEM_DISK_SIZE_DEFAULT
 from dingo_command.utils.k8s_client import get_k8s_core_client
 from dingo_command.db.models.ai_instance.models import AiK8sNodeResourceInfo
 from dingo_command.services.ai_instance import AiInstanceService
@@ -220,11 +221,9 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
                         container.resources.limits['memory'])
                     )
 
-                # 内存
-                if container.resources.limits and 'ephemeral-storage' in container.resources.limits:
-                    total_usage['ephemeral-storage'] += float(ai_instance_service.convert_storage_to_gb(
-                        container.resources.limits['ephemeral-storage'])
-                    )
+                # 存储
+                total_usage['ephemeral-storage'] +=  float(ai_instance_service.convert_storage_to_gb(SYSTEM_DISK_SIZE_DEFAULT))
+
 
                 # GPU
                 if container.resources.limits:

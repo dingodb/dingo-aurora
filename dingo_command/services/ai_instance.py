@@ -2,6 +2,7 @@
 import asyncio
 import copy
 import json
+import os
 import random
 import string
 import uuid
@@ -31,7 +32,8 @@ from dingo_command.utils.constant import CCI_NAMESPACE_PREFIX, RESOURCE_TYPE_KEY
     DEV_TOOL_JUPYTER, \
     SAVE_TO_IMAGE_CCI_PREFIX, GPU_POD_LABEL_KEY, GPU_POD_LABEL_VALUE, CCI_STS_PREFIX, CCI_STS_POD_SUFFIX, INGRESS_SIGN, \
     HYPHEN_SIGN, POINT_SIGN, \
-    CCI_JUPYTER_PREFIX, JUPYTER_INIT_MOUNT_NAME, JUPYTER_INIT_MOUNT_PATH, HARBOR_PULL_IMAGE_SUFFIX
+    CCI_JUPYTER_PREFIX, JUPYTER_INIT_MOUNT_NAME, JUPYTER_INIT_MOUNT_PATH, HARBOR_PULL_IMAGE_SUFFIX, \
+    SYSTEM_DISK_SIZE_DEFAULT
 from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client, get_k8s_networking_client
 from dingo_command.services.custom_exception import Fail
 
@@ -41,7 +43,7 @@ k8s_common_operate = K8sCommonOperate()
 harbor_service = HarborService()
 
 # 全局线程池
-task_executor = ThreadPoolExecutor(max_workers=4)
+task_executor = ThreadPoolExecutor(max_workers=min(32, (os.cpu_count() or 1) * 4))
 
 class AiInstanceService:
 
@@ -120,7 +122,7 @@ class AiInstanceService:
         return {"data": "success", "uuid": id}
 
     # ================= 账户相关 =================
-    def create_ai_account(self, account: str, vip: str):
+    def create_ai_account(self, account: str, vip: str, metallb_ip: str):
         try:
             if not account or not str(account).strip():
                 raise Fail("account is empty", error_message="账户账号不能为空")
@@ -134,7 +136,8 @@ class AiInstanceService:
             account_db = AccountInfo(
                 id=new_id,
                 account=str(account).strip(),
-                vip=str(vip)
+                vip=str(vip),
+                metallb_ip=str(metallb_ip)
             )
             AiInstanceSQL.save_account_info(account_db)
             return {"data": "success", "uuid": new_id}
@@ -163,7 +166,7 @@ class AiInstanceService:
             traceback.print_exc()
             raise e
 
-    def update_ai_account_by_id(self, id: str, account: str = None, vip: str = None):
+    def update_ai_account_by_id(self, id: str, account: str = None, vip: str = None, metallb_ip: str = None):
         try:
             if not id:
                 raise Fail("id is empty", error_message="账户ID不能为空")
@@ -183,6 +186,8 @@ class AiInstanceService:
                 existed.account = account
             if vip:
                 existed.vip = str(vip)
+            if metallb_ip:
+                existed.metallb_ip = str(metallb_ip)
 
             AiInstanceSQL.update_account_info(existed)
             return {"data": "success", "uuid": id}
@@ -625,12 +630,14 @@ class AiInstanceService:
         return results
 
     def _prepare_resource_config(self, instance_config):
-        """准备资源限制配置"""
-        resource_limits = {
-            'cpu': int(instance_config.compute_cpu) if instance_config.compute_cpu else 0,
-            'memory': instance_config.compute_memory + "Gi" if instance_config.compute_memory else "0Gi",
-            # 'ephemeral-storage': instance_config.system_disk_size + "Gi" if instance_config.system_disk_size else SYSTEM_DISK_SIZE_DEFAULT
-        }
+        resource_limits = {}
+        if instance_config.compute_cpu and instance_config.compute_memory:
+            """准备资源限制配置"""
+            resource_limits = {
+                'cpu': int(instance_config.compute_cpu),
+                'memory': instance_config.compute_memory + "Gi",
+                # 'ephemeral-storage': instance_config.system_disk_size + "Gi" if instance_config.system_disk_size else SYSTEM_DISK_SIZE_DEFAULT
+            }
 
         node_selector_gpu = {}
         toleration_gpus = []
@@ -759,7 +766,7 @@ class AiInstanceService:
             is_account = True
             return account_vip_db.vip, k8s_configs_db.dns_suffix, is_account
 
-        return k8s_configs_db.public_ip, k8s_configs_db.dns_suffix, is_account
+        return k8s_configs_db.metallb_ip, k8s_configs_db.dns_suffix, is_account
 
     def _assemble_sts_data(self, ai_instance, ai_instance_db, namespace_name, resource_config, nb_prefix):
         """
@@ -1005,10 +1012,11 @@ class AiInstanceService:
         existing_sts.spec.template.spec.affinity = affinity
         existing_sts.spec.template.spec.containers[0].name = ai_instance_info_db.instance_real_name
         existing_sts.spec.template.spec.containers[0].image = image_name
-        existing_sts.spec.template.spec.containers[0].resources = V1ResourceRequirements(
-            requests=resource_limits,
-            limits=resource_limits
-        )
+        if resource_limits:
+            existing_sts.spec.template.spec.containers[0].resources = V1ResourceRequirements(
+                requests=resource_limits,
+                limits=resource_limits
+            )
 
         return existing_sts
 
@@ -1021,7 +1029,7 @@ class AiInstanceService:
             "dc.com/tenant.app": "CCI",
             "dc.com/product.item": "CCI",
             "dc.com/tenant.source": "user",
-            "dc.com/tenant.user-id": ai_instance_info_db.instance_user_id,
+            "dc.com/params.userId": ai_instance_info_db.instance_user_id,
             "dc.com/params.cciId": ai_instance_info_db.id,
             "dc.com/params.regionId": ai_instance_info_db.instance_region_id,
             "dc.com/params.zoneId": ai_instance_info_db.instance_k8s_id,
@@ -1256,7 +1264,7 @@ class AiInstanceService:
                                     node_resource_db.memory_used = new_memory_used
 
                                 # 累加存储使用量
-                                new_storage_used = self.convert_storage_to_gb(limit_resources.get('ephemeral-storage', '0'))
+                                new_storage_used = self.convert_storage_to_gb(SYSTEM_DISK_SIZE_DEFAULT)
                                 if node_resource_db.storage_used:
                                     # 使用float来处理小数
                                     total_storage = float(node_resource_db.storage_used) + float(new_storage_used)
@@ -1349,7 +1357,8 @@ class AiInstanceService:
             },
             AiInstanceStatus.STOPPING: {
                 K8sStatus.STOPPED: AiInstanceStatus.STOPPED,
-                K8sStatus.RUNNING: AiInstanceStatus.RUNNING
+                # 关机中的状态，不允许装换状态到运行中，说明在保存镜像，底层是RUNNING，ANC要保持STOPPING
+                K8sStatus.RUNNING: AiInstanceStatus.STOPPING
             },
             AiInstanceStatus.STARTING: {
                 K8sStatus.PENDING: AiInstanceStatus.STARTING,
