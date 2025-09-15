@@ -68,11 +68,13 @@ class AutoDeleteRequest(BaseModel):
 # 账户创建请求
 class AccountCreateRequest(BaseModel):
     account: str = Field(..., description="账户账号")
-    is_vip: bool = Field(False, description="是否为VIP账户")
+    vip: str = Field(False, description="VIP")
+    metallb_ip: str = Field(False, description="Metallb IP")
 
 class AccountUpdateRequest(BaseModel):
     account: Optional[str] = Field(None, description="账户账号")
     vip: Optional[str] = Field(None, description="VIP")
+    metallb_ip: str = Field(False, description="Metallb IP")
 
 # 开机请求参数
 class StartInstanceModel(BaseModel):
