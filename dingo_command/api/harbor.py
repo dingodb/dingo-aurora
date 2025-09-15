@@ -14,7 +14,7 @@ harbor_service = HarborService()
     description="获取公共仓库镜像",
 )
 async def get_public_base_image(
-    project_name: str = Query("anc-public", description="项目名称"),
+    project_name: str = Query("alayanew-public", description="项目名称"),
     public_image_name: str = Query("", description="镜像名称"),
     page: int = Query(1, description="页码"),
     page_size: int = Query(10, description="页数量大小"),

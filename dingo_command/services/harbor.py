@@ -133,7 +133,7 @@ class HarborService:
     # 获取公共基础镜像
     def get_public_base_image(
         self,
-        project_name: str = "anc-public",
+        project_name: str = "alayanew-public",
         public_image_name="",
         page: int = 1,
         page_size: int = 100,
