@@ -246,22 +246,22 @@ class HarborService:
                             tags_dic = dict(
                                 tag_name=tag_name, tag_push_time=tag_push_time
                             )
-                        else:
-                            # 没有标签的情况
-                            tags_dic = dict(tag_name="none", tag_push_time="none")
+                        # else:
+                        #     # 没有标签的情况
+                        #     tags_dic = dict(tag_name="none", tag_push_time="none")
 
-                        # 获取并格式化镜像大小
-                        size_bytes = artifact.get("size", 0)
-                        # 根据大小动态选择单位
-                        if size_bytes >= 1024 * 1024 * 1024:  # 大于等于1GB
-                            size_formatted = (
-                                f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
-                            )
-                        else:  # 小于1GB，使用MB
-                            size_formatted = f"{size_bytes / (1024 * 1024):.2f} MB"
+                            # 获取并格式化镜像大小
+                            size_bytes = artifact.get("size", 0)
+                            # 根据大小动态选择单位
+                            if size_bytes >= 1024 * 1024 * 1024:  # 大于等于1GB
+                                size_formatted = (
+                                    f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
+                                )
+                            else:  # 小于1GB，使用MB
+                                size_formatted = f"{size_bytes / (1024 * 1024):.2f} MB"
 
-                        tags_dic.update(dict(size=size_formatted))
-                        tags_list.append(tags_dic)
+                            tags_dic.update(dict(size=size_formatted))
+                            tags_list.append(tags_dic)
 
                     # 更新仓库的标签信息
                     repository.update(dict(tags_list=tags_list))
@@ -314,20 +314,20 @@ class HarborService:
                         tag_name = tags[0]["name"]
                         tag_push_time = tags[0]["push_time"]
                         tags_dic = dict(tag_name=tag_name, tag_push_time=tag_push_time)
-                    else:
-                        # 没有标签的情况
-                        tags_dic = dict(tag_name="none", tag_push_time="none")
+                    # else:
+                    #     # 没有标签的情况
+                    #     tags_dic = dict(tag_name="none", tag_push_time="none")
 
-                    # 获取并格式化镜像大小
-                    size_bytes = artifact.get("size", 0)
-                    # 根据大小动态选择单位
-                    if size_bytes >= 1024 * 1024 * 1024:  # 大于等于1GB
-                        size_formatted = f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
-                    else:  # 小于1GB，使用MB
-                        size_formatted = f"{size_bytes / (1024 * 1024):.2f} MB"
+                        # 获取并格式化镜像大小
+                        size_bytes = artifact.get("size", 0)
+                        # 根据大小动态选择单位
+                        if size_bytes >= 1024 * 1024 * 1024:  # 大于等于1GB
+                            size_formatted = f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
+                        else:  # 小于1GB，使用MB
+                            size_formatted = f"{size_bytes / (1024 * 1024):.2f} MB"
 
-                    tags_dic.update(dict(size=size_formatted))
-                    tags_list.append(tags_dic)
+                        tags_dic.update(dict(size=size_formatted))
+                        tags_list.append(tags_dic)
 
                 # 更新仓库的标签信息
                 repository.update(dict(tags_list=tags_list))
