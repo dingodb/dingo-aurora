@@ -1,3 +1,4 @@
+import re
 import time
 from typing import Union
 import asyncio
@@ -7,7 +8,7 @@ from fastapi import Query
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from dingo_command.api.model.chart import CreateRepoObject, CreateAppObject
 from dingo_command.services.chart import ChartService, create_harbor_repo, create_tag_info
-from dingo_command.db.models.chart.sql import RepoSQL
+from dingo_command.db.models.chart.sql import RepoSQL, AppSQL
 from dingo_command.utils.helm.util import ChartLOG as Log
 from dingo_command.utils.helm.redis_lock import RedisSentinelDistributedLock
 from dingo_command.celery_api import CONF
@@ -48,10 +49,10 @@ asyncio.run(init())
 async def create_repo(repo: CreateRepoObject, background_tasks: BackgroundTasks):
     try:
         # 1、判断参数是否合法
+        repo.url = repo.url.strip()
         await chart_service.check_repo_args(repo)
         Log.info("add repo, repo info %s" % repo)
         # 2、异步处理创建repo仓库的逻辑
-        repo.url = repo.url.strip()
         background_tasks.add_task(chart_service.create_repo, repo, update=False, status="creating")
         return {"success": True, "message": "create repo started, please wait"}
     except Exception as e:
@@ -67,6 +68,7 @@ async def list_repos(background_tasks: BackgroundTasks, cluster_id: str = Query(
                      name: str = Query(None, description="名称"),
                      is_global: bool = Query(None, description="名称"),
                      id: str = Query(None, description="id"),
+                     type: str = Query(None, description="类型"),
                      page: int = Query(1, description="页码"),
                      page_size: int = Query(10, description="页数量大小"),
                      sort_dirs:str = Query(None, description="排序方式"),
@@ -81,6 +83,8 @@ async def list_repos(background_tasks: BackgroundTasks, cluster_id: str = Query(
             query_params['is_global'] = is_global
         if id:
             query_params['id'] = id
+        if type:
+            query_params['type'] = type
         if status:
             query_params['status'] = status
         if cluster_id:
@@ -560,7 +564,7 @@ async def get_chart_version(chart_id: Union[str, int], version: str = Query(None
         raise HTTPException(status_code=400, detail=f"get chart detail with version error: {str(e)}")
 
 @router.delete("/app/{app_id}", summary="删除某个已安装的应用（异步）", description="删除某个已安装的应用（异步）")
-async def get_apps(app_id: Union[str, int], background_tasks: BackgroundTasks):
+async def delete_apps(app_id: Union[str, int], background_tasks: BackgroundTasks):
     try:
         # 删除某个已安装的应用
         Log.info("delete app, app_id %s" % app_id)
@@ -577,6 +581,9 @@ async def get_apps(app_id: Union[str, int], background_tasks: BackgroundTasks):
             raise ValueError("app is updating, please wait")
         if app_data.status == util.app_status_delete:
             raise ValueError("app is deleting, please wait")
+        if app_data.status == util.app_status_failed and "cannot re-use a name" in app_data.status_msg :
+            AppSQL.delete_app(app_data)
+            return {"success": True, "message": "delete app success"}
         background_tasks.add_task(chart_service.delete_app, app_data)
         return {"success": True, "message": "delete app started, please wait"}
     except Exception as e:
@@ -587,11 +594,17 @@ async def get_apps(app_id: Union[str, int], background_tasks: BackgroundTasks):
 
 
 @router.post("/charts/install", summary="安装某个应用（异步）", description="安装某个应用（异步）")
-async def get_apps(create_data: CreateAppObject, background_tasks: BackgroundTasks):
+async def post_apps(create_data: CreateAppObject, background_tasks: BackgroundTasks):
     try:
         Log.info(f"install app {create_data.name}, data info {create_data}")
         if not create_data.namespace:
             create_data.namespace = "default"
+        # 在这里添加对于app的name做校验，让它符合helm安装name的规则
+        pattern = re.compile(r'^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')
+        if not bool(pattern.fullmatch(create_data.name)) or len(create_data.name) > 53:
+            raise ValueError("invalid release name, must match regex "
+                             "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$ "
+                             "and the length must not be longer than 53")
         query_params = {}
         query_params["cluster_id"] = create_data.cluster_id
         data = chart_service.list_apps(query_params, 1, -1, None, None)

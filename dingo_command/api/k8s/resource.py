@@ -14,6 +14,7 @@ from dingo_command.common import k8s_client
 from dingo_command.common.k8s_client import K8sClient  # Adjust the import path as needed
 from dingo_command.services.cluster import ClusterService
 router = APIRouter()
+not_delete_ns = ("default", "kube-node-lease", "kube-public", "kube-system")
 
 class CreateResourceRequest(BaseModel):
     cluster_id: str = "default"
@@ -91,7 +92,7 @@ async def create_resources(
     namespace: str = Path(..., description="Kubernetes 命名空间"),
     resource_type: str = Path(..., description="Kubernetes 资源类型"),
     token: str = Depends(get_token),
-) -> List[Dict[str, Any]]:
+):
     #根据cluster_id获取对应的kubeconfig，然后获取kubeclient
 
     """
@@ -114,7 +115,7 @@ async def create_resources(
     resource: CreateResourceRequest,
     resource_type: str = Path(..., description="Kubernetes 资源类型"),
     token: str = Depends(get_token),
-) -> List[Dict[str, Any]]:
+):
     #根据cluster_id获取对应的kubeconfig，然后获取kubeclient
 
     """
@@ -156,8 +157,8 @@ async def list_resources(
         namespace=namespace,
         search_terms=search_terms_list,
         label_selector=label_selector,
-        page=page,
-        page_size=page_size,
+        page=int(page),
+        page_size=int(page_size),
         sort_by=sort_by,
         sort_order=sort_order
     )
@@ -173,7 +174,7 @@ async def get_resources(
     namespace: str = Path(..., description="Kubernetes 资源名称"),
     resource: str = Path(..., description="Kubernetes 资源类型"),
     token: str = Depends(get_token),
-) -> List[Dict[str, Any]]:
+):
     #根据cluster_id获取对应的kubeconfig，然后获取kubeclient
 
     """
@@ -196,7 +197,7 @@ async def get_resources(
     name: str = Path(..., description="Kubernetes 资源名称"),
     resource: str = Path(..., description="Kubernetes 资源类型"),
     token: str = Depends(get_token),
-) -> List[Dict[str, Any]]:
+):
     #根据cluster_id获取对应的kubeconfig，然后获取kubeclient
 
     """
@@ -219,12 +220,15 @@ async def delete_resources(
     name: str = Path(..., description="Kubernetes 资源名称"),
     resource: str = Path(..., description="Kubernetes 资源类型"),
     token: str = Depends(get_token),
-) -> List[Dict[str, Any]]:
+):
     #根据cluster_id获取对应的kubeconfig，然后获取kubeclient
 
     """
     根据提供的参数查询 Kubernetes 资源。
     """
+    if resource == "namespaces" and name in not_delete_ns:
+        raise HTTPException(status_code=403, detail="The namespace resources automatically created by the k8s cluster "
+                                                    "cannot be deleted")
     k8sclient = get_k8s_client_by_cluster(cluster_id)
     resources = k8sclient.delete_resource(
         resource_type=resource,
@@ -242,7 +246,7 @@ async def delete_resources(
     namespace: str = Path(..., description="Kubernetes 资源名称"),
     resource: str = Path(..., description="Kubernetes 资源类型"),
     token: str = Depends(get_token),
-) -> List[Dict[str, Any]]:
+):
     #根据cluster_id获取对应的kubeconfig，然后获取kubeclient
 
     """
@@ -266,7 +270,7 @@ async def delete_resources(
     name: str = Path(..., description="Kubernetes 资源名称"),
     resource: str = Path(..., description="Kubernetes 资源类型"),
     token: str = Depends(get_token),
-) -> List[Dict[str, Any]]:
+):
     #根据cluster_id获取对应的kubeconfig，然后获取kubeclient
 
     """
@@ -288,7 +292,7 @@ async def update_resources(
     resource_type: str = Path(..., description="Kubernetes 资源名称"),
     name: str = Path(..., description="Kubernetes 资源名称"),
     token: str = Depends(get_token),
-) -> List[Dict[str, Any]]:
+):
     #根据cluster_id获取对应的kubeconfig，然后获取kubeclient
 
     """
@@ -324,7 +328,7 @@ async def update_resources(
     resource_type: str = Path(..., description="Kubernetes 资源类型"),
     name: str = Path(..., description="Kubernetes 资源名称"),
     token: str = Depends(get_token),
-) -> List[Dict[str, Any]]:
+):
     #根据cluster_id获取对应的kubeconfig，然后获取kubeclient
 
     """
