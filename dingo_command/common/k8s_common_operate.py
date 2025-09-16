@@ -803,4 +803,30 @@ class K8sCommonOperate:
                     f"Secret '{secret_name}' already exists in imagePullSecrets of default ServiceAccount in namespace '{namespace}'.")
         except ApiException as e:
             print(f"Failed to patch default ServiceAccount in namespace '{namespace}': {e}")
-            raise
+            if e.status == 404:
+                print(f"Default ServiceAccount in namespace '{namespace}' not ready yet")
+                # 构造 image_pull_secrets
+                image_pull_secrets = [client.V1LocalObjectReference(name=secret_name)]
+
+                # 构造 ServiceAccount 对象
+                body = client.V1ServiceAccount(
+                    metadata=client.V1ObjectMeta(name=secret_name),
+                    image_pull_secrets=image_pull_secrets
+                )
+
+                try:
+                    # 创建 ServiceAccount
+                    api_response = core_v1.create_namespaced_service_account(
+                        namespace=namespace,
+                        body=body
+                    )
+                    print(f"ServiceAccount {secret_name} 创建成功")
+                    return api_response
+                except ApiException as e:
+                    print(f"创建 ServiceAccount 时发生异常: {e}")
+                    if e.status == 409:
+                        print(f"Default ServiceAccount in namespace '{namespace}' ready yet")
+                    raise
+            else:
+                print(f"Failed to patch default ServiceAccount in namespace '{namespace}': {e}")
+                raise

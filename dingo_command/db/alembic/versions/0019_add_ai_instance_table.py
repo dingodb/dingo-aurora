@@ -28,6 +28,7 @@ def upgrade() -> None:
         sa.Column("instance_region_id", sa.String(length=128), nullable=True, comment='计算中心ID'),
         sa.Column("instance_k8s_id", sa.String(length=128), nullable=True, comment='k8s ID'),
         sa.Column("instance_user_id", sa.String(length=128), nullable=True, comment='用户ID'),
+        sa.Column("is_manager", sa.Boolean(), nullable=True, server_default=sa.text('0'), comment='是否主账号'),
         sa.Column("instance_tenant_id", sa.String(length=128), nullable=True, comment='用户所属租户ID'),
         sa.Column("instance_image", sa.String(length=255), nullable=True, comment='镜像信息'),
         sa.Column("stop_time", sa.DateTime(), nullable=True, comment='自动关机时间'),

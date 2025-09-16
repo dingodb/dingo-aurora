@@ -15,8 +15,9 @@ from keystoneclient import client
 from math import ceil
 from kubernetes.client import V1PersistentVolumeClaim, V1ObjectMeta, V1PersistentVolumeClaimSpec, \
     V1ResourceRequirements, V1PodTemplateSpec, V1StatefulSet, V1LabelSelector, V1Container, V1VolumeMount, V1Volume, \
-    V1ConfigMapVolumeSource, V1EnvVar, V1PodSpec, V1StatefulSetSpec, V1ContainerPort, V1Toleration,  V1Affinity, V1PodAffinity, \
-    V1WeightedPodAffinityTerm, V1PodAffinityTerm, V1LabelSelectorRequirement, V1HostPathVolumeSource
+    V1ConfigMapVolumeSource, V1EnvVar, V1PodSpec, V1StatefulSetSpec, V1ContainerPort, V1Toleration, V1Affinity, \
+    V1PodAffinity, \
+    V1WeightedPodAffinityTerm, V1PodAffinityTerm, V1LabelSelectorRequirement, V1HostPathVolumeSource, V1SecurityContext
 from kubernetes import client
 from kubernetes.stream import stream
 from oslo_log import log
@@ -630,6 +631,7 @@ class AiInstanceService:
             instance_region_id=ai_instance.region_id,
             instance_k8s_id=ai_instance.k8s_id,
             instance_user_id=ai_instance.user_id,
+            is_manager=ai_instance.is_manager,
             instance_tenant_id=ai_instance.tenant_id,
             instance_image=ai_instance.image,
             stop_time=datetime.fromtimestamp(ai_instance.stop_time) if ai_instance.stop_time else None,
@@ -905,11 +907,21 @@ class AiInstanceService:
             )
         )
 
+        pod_security_context = V1SecurityContext(
+            run_as_user=0,
+            run_as_group=0
+        )
+        container_security_context = V1SecurityContext(
+            run_as_user=0,
+            run_as_group=0
+        )
+
         # 定义容器
         container = V1Container(
             name=ai_instance_db.instance_real_name,  # 使用实例的真实名称
             image=ai_instance.image,
             image_pull_policy="Always",
+            security_context=container_security_context,
             env=env_list,
             env_from=[
                 client.V1EnvFromSource(
@@ -947,6 +959,7 @@ class AiInstanceService:
                 #                                ai_instance.instance_config.gpu_count),
                 containers=[container],
                 termination_grace_period_seconds = 5,
+                security_context=pod_security_context,
                 volumes=pod_volumes,
                 node_selector=node_selector_gpu,  # 使用传入的GPU节点选择器
                 tolerations=toleration_gpus,  # 使用传入的GPU容忍度
@@ -1079,6 +1092,12 @@ class AiInstanceService:
         existing_sts.spec.template.spec.node_selector = node_selector_gpu
         existing_sts.spec.template.spec.tolerations = toleration_gpus
         existing_sts.spec.template.spec.affinity = affinity
+        # existing_sts.spec.template.spec.node_name = self.choose_k8s_node(ai_instance_db.instance_k8s_id,
+        #                                        int(ai_instance.instance_config.compute_cpu),
+        #                                        int(ai_instance.instance_config.compute_memory),
+        #                                        int(ai_instance.instance_config.system_disk_size),
+        #                                        self.find_gpu_key_by_display(ai_instance.instance_config.gpu_model),
+        #                                        ai_instance.instance_config.gpu_count),
         existing_sts.spec.template.spec.containers[0].name = ai_instance_info_db.instance_real_name
         existing_sts.spec.template.spec.containers[0].image = image_name
         if resource_limits:
@@ -1201,8 +1220,8 @@ class AiInstanceService:
                     )
                 except Exception as e:
                     LOG.error(f"关机失败，实例ID: {id}, 错误: {e}")
-                    ai_instance_info_db.instance_status = AiInstanceStatus.RUNNING.name
-                    ai_instance_info_db.instance_real_status = K8sStatus.RUNNING.value
+                    ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
+                    ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
                     AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
                     raise e
 
@@ -1304,7 +1323,7 @@ class AiInstanceService:
                     # 查询 Pod 状态
                     pod = k8s_common_operate.get_pod_info(core_k8s_client, pod_name, namespace)
 
-                    current_real_status = pod.status.phase
+                    current_real_status, error_msg = self.get_pod_final_status(pod)
                     current_node_name = pod.spec.node_name
 
                     # 如果状态发生变化，更新数据库
@@ -1318,64 +1337,15 @@ class AiInstanceService:
                     if pod_real_status == "Running":
                         print(f"Pod {pod_name} 已正常运行, node name:{current_node_name}")
                         node_name = pod.spec.node_name
-                        node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(k8s_id, node_name)
-                        if node_resource_db:
-                            try:
-                                # 更新资源使用量
-                                limit_resources = pod.spec.containers[0].resources.limits
-                                # 转换并累加CPU使用量
-                                new_cpu_used  = self.convert_cpu_to_core(limit_resources.get('cpu', '0'))
-                                if node_resource_db.cpu_used:
-                                    # 使用float来处理小数
-                                    total_cpu = float(node_resource_db.cpu_used) + float(new_cpu_used)
-                                    node_resource_db.cpu_used = str(total_cpu)
-                                else:
-                                    node_resource_db.cpu_used = new_cpu_used
-
-                                # 转换并累加内存使用量
-                                new_memory_used = self.convert_memory_to_gb(limit_resources.get('memory', '0'))
-                                if node_resource_db.memory_used:
-                                    # 使用float来处理小数
-                                    total_memory = float(node_resource_db.memory_used) + float(new_memory_used)
-                                    node_resource_db.memory_used = str(total_memory)
-                                else:
-                                    node_resource_db.memory_used = new_memory_used
-
-                                # 累加存储使用量
-                                new_storage_used = self.convert_storage_to_gb(SYSTEM_DISK_SIZE_DEFAULT)
-                                if node_resource_db.storage_used:
-                                    # 使用float来处理小数
-                                    total_storage = float(node_resource_db.storage_used) + float(new_storage_used)
-                                    node_resource_db.storage_used = str(total_storage)
-                                else:
-                                    node_resource_db.storage_used = new_storage_used
-
-                                # 处理GPU使用卡数
-                                instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(instance_id)
-                                compute_resource_dict = json.loads(instance_info_db.instance_config) if instance_info_db else {}
-                                if ('gpu_model' in compute_resource_dict and 'gpu_count' in compute_resource_dict and
-                                        compute_resource_dict['gpu_model'] and node_resource_db.gpu_model):
-                                    if node_resource_db.gpu_used:
-                                        total_gpu = int(node_resource_db.gpu_used) + int(compute_resource_dict['gpu_count'])
-                                        node_resource_db.gpu_used = str(total_gpu)
-                                    else:
-                                        node_resource_db.gpu_used = int(compute_resource_dict['gpu_count'])
-
-                                    node_resource_db.gpu_pod_count += 1
-                                else:
-                                    node_resource_db.less_gpu_pod_count += 1
-
-                                AiInstanceSQL.update_k8s_node_resource(node_resource_db)
-                                LOG.info(f"k8s[{k8s_id}] node[{node_name}] resource update success")
-                            except Exception as e:
-                                LOG.error(f"save k8s node resource fail:{e}")
-                                import traceback
-                                traceback.print_exc()
-                        else:
-                            LOG.error(f"Not found k8s[{k8s_id}] node[{node_name}] resource info, can not to update used resource")
+                        self.handle_cci_node_resource_info(instance_id, k8s_id, node_name)
 
                         # 明确退出函数
                         return
+                    else:
+                        if pod.spec.node_name:
+                            print("")
+                            # 处理pod 未运行场景
+                            self.handle_cci_node_resource_info(instance_id, k8s_id, current_node_name)
 
                     # 等待3秒后再次检查
                     await asyncio.sleep(3)
@@ -1388,8 +1358,16 @@ class AiInstanceService:
 
             # 5. 检查是否超时
             if (datetime.now() - start_time).total_seconds() >= timeout:
-                print(f"Pod {pod_name} 状态检查超时(6分钟)")
-                self.update_pod_status_and_node_name_in_db(instance_id, K8sStatus.ERROR.value, pod_located_node_name)
+                print(f"Pod {pod_name} 状态检查超时(5分钟)")
+                # 查询 Pod 状态
+                pod = k8s_common_operate.get_pod_info(core_k8s_client, pod_name, namespace)
+                if pod.spec.node_name:
+                    print("")
+                    # 处理pod 未运行场景
+                    self.handle_cci_node_resource_info(instance_id, k8s_id, pod.spec.node_name)
+                else:
+                    self.update_pod_status_and_node_name_in_db(instance_id, K8sStatus.ERROR.value, pod_located_node_name, "pod create success timeout")
+
                 # 副本数改成0
                 self.set_k8s_sts_replica_by_instance_id(instance_id, 0)
 
@@ -1399,7 +1377,65 @@ class AiInstanceService:
             traceback.print_exc()
             return
 
-    def update_pod_status_and_node_name_in_db(self, id : str, k8s_status: str, node_name: str):
+    def handle_cci_node_resource_info(self, instance_id, k8s_id, node_name):
+        node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(k8s_id, node_name)
+        if node_resource_db:
+            try:
+                # 处理GPU使用卡数
+                instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(instance_id)
+                compute_resource_dict = json.loads(instance_info_db.instance_config) if instance_info_db else {}
+                # 更新资源使用量
+                # limit_resources = pod.spec.containers[0].resources.limits
+                # # 转换并累加CPU使用量
+                # new_cpu_used = self.convert_cpu_to_core(limit_resources.get('cpu', '0'))
+                if node_resource_db.cpu_used:
+                    # 使用float来处理小数
+                    total_cpu = float(node_resource_db.cpu_used) + float(compute_resource_dict['compute_cpu'])
+                    node_resource_db.cpu_used = str(total_cpu)
+                else:
+                    node_resource_db.cpu_used = float(compute_resource_dict['compute_cpu'])
+
+                # 转换并累加内存使用量
+                # new_memory_used = self.convert_memory_to_gb(limit_resources.get('memory', '0'))
+                if node_resource_db.memory_used:
+                    # 使用float来处理小数
+                    total_memory = float(node_resource_db.memory_used) + float(compute_resource_dict['compute_memory'])
+                    node_resource_db.memory_used = str(total_memory)
+                else:
+                    node_resource_db.memory_used = float(compute_resource_dict['compute_memory'])
+
+                # 累加存储使用量
+                # new_storage_used = self.convert_storage_to_gb(SYSTEM_DISK_SIZE_DEFAULT)
+                if node_resource_db.storage_used:
+                    # 使用float来处理小数
+                    total_storage = float(node_resource_db.storage_used) + 50
+                    node_resource_db.storage_used = str(total_storage)
+                else:
+                    node_resource_db.storage_used = 50
+
+                # 处理GPU使用卡数
+                if ('gpu_model' in compute_resource_dict and 'gpu_count' in compute_resource_dict and
+                        compute_resource_dict['gpu_model'] and node_resource_db.gpu_model):
+                    if node_resource_db.gpu_used:
+                        total_gpu = int(node_resource_db.gpu_used) + int(compute_resource_dict['gpu_count'])
+                        node_resource_db.gpu_used = str(total_gpu)
+                    else:
+                        node_resource_db.gpu_used = int(compute_resource_dict['gpu_count'])
+
+                    node_resource_db.gpu_pod_count += 1
+                else:
+                    node_resource_db.less_gpu_pod_count += 1
+
+                AiInstanceSQL.update_k8s_node_resource(node_resource_db)
+                LOG.info(f"k8s[{k8s_id}] node[{node_name}] resource update success")
+            except Exception as e:
+                LOG.error(f"save k8s node resource fail:{e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            LOG.error(f"Not found k8s[{k8s_id}] node[{node_name}] resource info, can not to update used resource")
+
+    def update_pod_status_and_node_name_in_db(self, id : str, k8s_status: str, node_name: str, error_msg: str = None):
         """
         更新数据库中的 Pod 状态
 
@@ -1412,6 +1448,7 @@ class AiInstanceService:
             ai_instance_db.instance_real_status = k8s_status
             ai_instance_db.instance_status = self.map_k8s_to_db_status(k8s_status, ai_instance_db.instance_status)
             ai_instance_db.instance_node_name = node_name
+            ai_instance_db.error_msg = error_msg
             print(f"异步更新容器实例[{ai_instance_db.instance_real_name}] instance_status：{ai_instance_db.instance_status}, node name:{ai_instance_db.instance_node_name}")
             AiInstanceSQL.update_ai_instance_info(ai_instance_db)
         except Exception as e:
@@ -1805,8 +1842,16 @@ class AiInstanceService:
             def calc_remaining(total, used):
                 if total is None:
                     return None
-                used_val = used if used is not None else 0
-                return round(float(total) - float(used_val), 2) if isinstance(total, (int, float)) else total - used_val
+                if total is None:
+                    return None
+
+                    # 处理used为None或非数值的情况，默认为0
+                used_val = float(used) if used is not None else 0.0
+                total_val = float(total)
+
+                # 计算剩余量，并确保结果不小于0
+                remaining = total_val - used_val
+                return round(max(0.0, remaining), 2)
 
             # 构建结果字典
             node_stats = {
@@ -1989,6 +2034,90 @@ class AiInstanceService:
         except Exception as e:
             LOG.error(f"实例设置副本数{replica}失败，实例ID: {id}, 错误: {e}")
 
+    def get_pod_final_status(self, pod) -> str:
+        """
+        获取 Pod 的最终状态和详细信息，规则：
+        - 容器有错误状态 → 返回错误状态和详情
+        - 容器有 Running 状态 → 返回 Running 和详情
+        - 其他情况 → 返回 Pod 原生相位（如 Pending）和详情
+
+        Returns:
+            tuple: (status_str, detail_message)
+        """
+        try:
+            container_statuses = pod.status.container_statuses or []
+            pod_phase = pod.status.phase or "Error"
+
+            # 1. 检查是否有容器处于错误状态
+            for container_status in container_statuses:
+                state = container_status.state
+                container_name = container_status.name
+
+                # 处理 Waiting 状态
+                if state.waiting:
+                    reason = state.waiting.reason
+                    message = state.waiting.message or ""
+                    if reason in ["Error", "CrashLoopBackOff", "ImagePullBackOff", "CreateContainerError", "CreateContainerConfigError"]:
+                        detail_msg = f"Container '{container_name}' waiting: {reason}"
+                        if message:
+                            detail_msg += f" - {message}"
+                        return str(reason), detail_msg
+
+                # 处理 Terminated 状态
+                if state.terminated:
+                    reason = state.terminated.reason
+                    exit_code = state.terminated.exit_code
+                    message = state.terminated.message or ""
+
+                    if reason in ["Error", "OOMKilled", "ContainerCannotRun", "Completed"]:
+                        detail_msg = f"Container '{container_name}' terminated: {reason} (exit code: {exit_code})"
+                        if message:
+                            detail_msg += f" - {message}"
+                        return str(reason), detail_msg
+
+                    # 处理信号终止的情况 (128 + signal number)
+                    # if exit_code >= 128:
+                    #     signal_num = exit_code - 128
+                    #     detail_msg = f"Container '{container_name}' killed by signal {signal_num} (exit code: {exit_code})"
+                    #     if message:
+                    #         detail_msg += f" - {message}"
+                    #     return f"Signal{signal_num}", detail_msg
+
+            # 2. 检查是否有容器处于 Running 状态
+            running_containers = []
+            for container_status in container_statuses:
+                if container_status.state and container_status.state.running:
+                    running_containers.append(container_status.name)
+
+            if running_containers:
+                containers_str = ", ".join(running_containers)
+                return "Running", f"Containers running: {containers_str}"
+
+            # 3. 检查就绪状态
+            ready_containers = []
+            not_ready_containers = []
+            for container_status in container_statuses:
+                if container_status.ready:
+                    ready_containers.append(container_status.name)
+                else:
+                    not_ready_containers.append(container_status.name)
+
+            # if ready_containers and not_ready_containers:
+            #     detail_msg = f"Mixed readiness: ready={ready_containers}, not-ready={not_ready_containers}"
+            #     return "NotReady", detail_msg
+
+            # 4. 无错误且无 Running 容器，返回 Pod 原生相位
+            phase_detail = f"Pod phase: {pod_phase}"
+            if pod.status.message:
+                phase_detail += f" - {pod.status.message}"
+            if pod.status.reason:
+                phase_detail += f" (reason: {pod.status.reason})"
+
+            return pod_phase, phase_detail
+
+        except Exception as e:
+            return "Error", f"Failed to get pod status: {str(e)}"
+
     # 选择可用节点 参数传输的是当前规格的cpu（核）、内存（G）、存储（G）、gpuModel（）gpu（个）
     def choose_k8s_node(self, k8s_id: str, cpu: int, memory: int, disk: int = 50, gpu_model=None, gpu: int = 1):
         # 判断空
@@ -2056,7 +2185,6 @@ class AiInstanceService:
     """
     选择一个 GPU 节点，其剩余 GPU 资源（gpu_total - gpu_used）最小，但仍能满足请求的 gpu 数量。
     """
-
     def choose_gpu_falvor_node(self, node_list: list, gpu: int):
         # 空
         if not node_list or not gpu:
@@ -2080,7 +2208,6 @@ class AiInstanceService:
     """
     过滤匹配的GPU卡的节点。
     """
-
     def filter_node_list_by_gpu_model(self, node_resource_list_db, gpu_model):
         # 空
         if not gpu_model or not node_resource_list_db:
@@ -2096,7 +2223,6 @@ class AiInstanceService:
     """
     从 8C16G 这类格式中提取 CPU 和内存占用值
     """
-
     def parse_gpu_model(self, gpu_cpu_memory: str) -> tuple:
         pattern = r"^(\d+)C(\d+)G$"  # 匹配数字C数字G的格式
         match = re.match(pattern, gpu_cpu_memory)

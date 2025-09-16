@@ -36,6 +36,7 @@ class AiInstanceInfo(Base):
     instance_region_id = Column(String(length=128), nullable=True)
     instance_k8s_id = Column(String(length=128), nullable=True)
     instance_user_id = Column(String(length=128), nullable=True)
+    is_manager = Column(Boolean, nullable=True)
     instance_tenant_id = Column(String(length=128), nullable=True)
     instance_image = Column(String(length=128), nullable=True)
     stop_time = Column(DateTime, nullable=True)
