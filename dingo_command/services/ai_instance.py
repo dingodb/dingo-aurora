@@ -4,6 +4,7 @@ import copy
 import json
 import os
 import random
+import re
 import string
 import time
 import uuid
@@ -25,6 +26,7 @@ from dingo_command.common.Enum.AIInstanceEnumUtils import AiInstanceStatus, K8sS
 from dingo_command.common.k8s_common_operate import K8sCommonOperate
 from dingo_command.db.models.ai_instance.models import AiInstanceInfo, AccountInfo, AiInstancePortsInfo
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
+from dingo_command.db.models.system.sql import SystemSQL
 from dingo_command.services.harbor import HarborService
 from dingo_command.services.redis_connection import redis_connection, RedisLock
 from dingo_command.utils.constant import CCI_NAMESPACE_PREFIX, RESOURCE_TYPE_KEY, PRODUCT_TYPE_CCI, \
@@ -34,7 +36,7 @@ from dingo_command.utils.constant import CCI_NAMESPACE_PREFIX, RESOURCE_TYPE_KEY
     SAVE_TO_IMAGE_CCI_PREFIX, GPU_POD_LABEL_KEY, GPU_POD_LABEL_VALUE, CCI_STS_PREFIX, CCI_STS_POD_SUFFIX, INGRESS_SIGN, \
     HYPHEN_SIGN, POINT_SIGN, \
     CCI_JUPYTER_PREFIX, JUPYTER_INIT_MOUNT_NAME, JUPYTER_INIT_MOUNT_PATH, HARBOR_PULL_IMAGE_SUFFIX, \
-    SYSTEM_DISK_SIZE_DEFAULT
+    SYSTEM_DISK_SIZE_DEFAULT, POD_STORAGE_LIMIT_ANNOTATIONS
 from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client, get_k8s_networking_client
 from dingo_command.services.custom_exception import Fail
 
@@ -267,6 +269,28 @@ class AiInstanceService:
         # 使用线程池提交任务
         task_executor.submit(_run_task)
 
+    def _stop_save_cci_to_image_task(self, id):
+        """启动后台检查任务"""
+        def _run_task():
+            loop = None
+            try:
+                # 创建新的事件循环（每个线程独立）
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                # 执行检查任务
+                loop.run_until_complete(
+                    self.sava_ai_instance_to_image_backup(id)
+                )
+            except Exception as e:
+                LOG.error(f"Background task failed: {str(e)}", exc_info=True)
+            finally:
+                if loop:
+                    loop.close()
+
+        # 使用线程池提交任务
+        task_executor.submit(_run_task)
+
     def sava_ai_instance_to_image_process_status(self, id):
         """
         异步保存AI实例为镜像（立即返回，实际操作在后台执行）
@@ -383,6 +407,7 @@ class AiInstanceService:
             # 3. Push操作
             print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] push image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] start")
             await self._push_image(core_k8s_client, nerdctl_api_pod, image)
+            redis_connection.set_redis_by_key_with_expire(redis_key + "_flag", "true", 3600)
             print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] push image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] finished")
         except Exception as e:
             print(f"Async save operation failed for instance {id}: {str(e)}")
@@ -831,7 +856,8 @@ class AiInstanceService:
         volume_mounts = [
             V1VolumeMount(
                 name=JUPYTER_INIT_MOUNT_NAME,  # 卷名称，需与下面定义的卷匹配
-                mount_path=JUPYTER_INIT_MOUNT_PATH  # 容器内的挂载路径
+                mount_path=JUPYTER_INIT_MOUNT_PATH,  # 容器内的挂载路径
+                read_only = True # 将此挂载设置为只读
             )
         ]
         pod_volumes = [
@@ -895,7 +921,7 @@ class AiInstanceService:
             command=["/anc-init/script/anc-init"],
         )
 
-        # 亲和性
+        # # 亲和性
         affinity = self.create_affinity(node_selector_gpu)
         # pod标签
         pod_template_labels = self.build_pod_template_labels(ai_instance_db, ai_instance_db.product_code, resource_limits)
@@ -904,9 +930,15 @@ class AiInstanceService:
         template = V1PodTemplateSpec(
             metadata=V1ObjectMeta(
                 labels=pod_template_labels,
-                annotations={"dc.com/quota.xfs.size": "50g"}
+                annotations=POD_STORAGE_LIMIT_ANNOTATIONS
             ),
             spec=V1PodSpec(
+                # node_name=self.choose_k8s_node(ai_instance_db.instance_k8s_id,
+                #                                int(ai_instance.instance_config.compute_cpu),
+                #                                int(ai_instance.instance_config.compute_memory),
+                #                                int(ai_instance.instance_config.system_disk_size),
+                #                                self.find_gpu_key_by_display(ai_instance.instance_config.gpu_model),
+                #                                ai_instance.instance_config.gpu_count),
                 containers=[container],
                 termination_grace_period_seconds = 5,
                 volumes=pod_volumes,
@@ -1037,7 +1069,7 @@ class AiInstanceService:
         # 更新existing_sts的各个字段
         existing_sts.metadata.resource_version = None
         existing_sts.spec.replicas = 1
-        existing_sts.spec.template.metadata = V1ObjectMeta(labels=pod_template_labels)
+        existing_sts.spec.template.metadata = V1ObjectMeta(labels=pod_template_labels, annotations = POD_STORAGE_LIMIT_ANNOTATIONS)
         existing_sts.spec.template.spec.node_selector = node_selector_gpu
         existing_sts.spec.template.spec.tolerations = toleration_gpus
         existing_sts.spec.template.spec.affinity = affinity
@@ -1109,13 +1141,7 @@ class AiInstanceService:
                 raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
 
             # 异步保存镜像
-            asyncio.create_task(
-                self.sava_ai_instance_to_image_backup(id)
-            )
-
-            # 标记为 STOPPED
-            ai_instance_info_db.instance_status = AiInstanceStatus.STOPPING.name
-            AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+            self._stop_save_cci_to_image_task(id)
 
             return {"id": id, "status": AiInstanceStatus.STOPPING.name}
         except Fail:
@@ -1132,16 +1158,31 @@ class AiInstanceService:
         try:
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if ai_instance_info_db:
+                # 标记为 STOPPED
+                ai_instance_info_db.instance_status = AiInstanceStatus.STOPPING.name
+                ai_instance_info_db.instance_real_status = None
+                AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+
                 image_name = SAVE_TO_IMAGE_CCI_PREFIX + id
                 harbor_address, harbor_username, harbor_password  = self.get_harbor_info(ai_instance_info_db.instance_k8s_id)
                 core_k8s_client, sts_pod_info = self._get_k8s_sts_pod_info(ai_instance_info_db)
                 nerdctl_api_pod = self._get_nerdctl_api_pod(core_k8s_client, sts_pod_info['node_name'])
-
                 await self._async_save_operation(
                     id, core_k8s_client, nerdctl_api_pod,
                     sts_pod_info['container_id'], harbor_address, harbor_username, harbor_password,
                     image_name, image_tag
                 )
+
+                commit_push_image_flag = redis_connection.get_redis_by_key(SAVE_TO_IMAGE_CCI_PREFIX + id + "_flag")
+                print(f"ai instance[{id}] push image flag: {commit_push_image_flag}")
+                if commit_push_image_flag != "true":
+                    print(
+                        f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] push image image_tag: [{image_name}:{image_tag}] failed")
+                    ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
+                    ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
+                    AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+                    return
+
 
                 app_client = get_k8s_app_client(ai_instance_info_db.instance_k8s_id)
                 body = {"spec": {"replicas": 0}}
@@ -1793,6 +1834,10 @@ class AiInstanceService:
         gpu_card_info = AiInstanceSQL.get_gpu_card_info_by_gpu_key(gpu_key)
         return gpu_card_info.gpu_model_display if gpu_card_info else None
 
+    def find_gpu_key_by_display(self, gpu_display):
+        gpu_card_info = AiInstanceSQL.get_gpu_card_info_by_gpu_model_display(gpu_display)
+        return gpu_card_info.gpu_key if gpu_card_info else None
+
     """计算单个节点的资源统计"""
     def safe_convert(self, value, convert_type=float):
         """安全转换字符串到数值，失败时返回None"""
@@ -1818,17 +1863,25 @@ class AiInstanceService:
             operation_factor = 1 if operation == 'allocate' else -1
             print(f"============compute_resource_dict :{compute_resource_dict}")
             # 处理GPU资源（需要型号匹配）
+            less_gpu_pod = True
             if ('gpu_model' in compute_resource_dict and 'gpu_count' in compute_resource_dict and
                     compute_resource_dict['gpu_model'] and node_resource_db.gpu_model):
                 current_node_gpu = self.safe_float(node_resource_db.gpu_used or '0')
+                current_node_gpu_pod_count = self.safe_float(node_resource_db.gpu_pod_count or '0')
                 pod_resource_gpu = self.safe_float(compute_resource_dict['gpu_count'])
                 node_resource_db.gpu_used = str(max(0, current_node_gpu + operation_factor * pod_resource_gpu))
+                node_resource_db.gpu_pod_count = str(max(0, current_node_gpu_pod_count + operation_factor * 1))
+                less_gpu_pod = False
 
             # 处理CPU资源
             if 'compute_cpu' in compute_resource_dict:
                 current_node_cpu = self.safe_float(node_resource_db.cpu_used or '0')
                 pod_resource_cpu = self.safe_float(compute_resource_dict['compute_cpu'])
                 node_resource_db.cpu_used = str(max(0, current_node_cpu + operation_factor * pod_resource_cpu))
+                if less_gpu_pod:
+                    current_node_less_gpu_pod_count = self.safe_float(node_resource_db.less_gpu_pod_count or '0')
+                    node_resource_db.less_gpu_pod_count = str(max(0, current_node_less_gpu_pod_count + operation_factor * 1))
+
 
             # 处理内存资源
             if 'compute_memory' in compute_resource_dict:
@@ -1929,3 +1982,118 @@ class AiInstanceService:
             )
         except Exception as e:
             LOG.error(f"实例设置副本数{replica}失败，实例ID: {id}, 错误: {e}")
+
+    # 选择可用节点 参数传输的是当前规格的cpu（核）、内存（G）、存储（G）、gpuModel（）gpu（个）
+    def choose_k8s_node(self, k8s_id: str, cpu: int, memory: int, disk: int = 50, gpu_model=None, gpu: int = 1):
+        # 判断空
+        if not k8s_id or not cpu or not memory:
+            print(f"指定的k8s{k8s_id},cpu：{cpu},memory：{memory},disk：{disk}")
+            return None
+        # 查询当前所有可用节点
+        node_list = []
+        try:
+            # 查询当前k8s的所有可用节点
+            node_list = self.get_k8s_node_resource_statistics(k8s_id)
+            # node_list.append(node_resource_list_db)
+        except Exception as e:
+            LOG.error(f"查询不到可用节点, 错误: {e}")
+        # 空
+        if not node_list:
+            return None
+        # 如果是gpu规格对应的节点
+        if gpu_model:
+            return self.choose_gpu_falvor_node(self.filter_node_list_by_gpu_model(node_list, gpu_model), gpu)
+        else:
+            return self.choose_no_gpu_flavor_node(node_list, cpu, memory, disk)
+        # 针对gpu规格查询可用节点 是根据节点的gpu剩余卡数，找剩余卡数满足gpu且剩余卡数是最小的节点
+        # 遍历节点配置计算节点按照当前模式匹配的
+        # 规则判断
+        # 无卡 固定的2核4G pod已使用两数量最大的node
+        # 有卡 找gpu使用量最大的满足条件的node
+        return None
+
+    def choose_no_gpu_flavor_node(self, node_list, cpu: int, memory: int, disk: int):
+        # 判空
+        if not node_list or cpu <= 0 or memory <= 0 or disk <= 0:
+            return None
+        # 可用节点列表
+        available_nodes = []
+        # 遍历
+        for node in node_list:
+            # # 检查节点是否有所需属性
+            # if not all(hasattr(node, attr) for attr in
+            #            ['node_name', 'cpu_total', 'cpu_used', 'gpu_model', 'gpu_used', 'memory_total',
+            #             'memory_used', 'storage_total', 'storage_used']):
+            #     continue
+            gpu_1_cpu = 0
+            gpu_1_memory = 0
+            if node['gpu_model']:
+                config = SystemSQL.get_system_support_config_by_config_key("cci_" + self.find_gpu_key_by_display(node['gpu_model']))
+                if config:
+                    gpu_1_cpu, gpu_1_memory = self.parse_gpu_model(str(config.config_value))
+            # 计算实际可用资源（扣除 GPU 占用的部分）
+            available_cpu = node['cpu_total'] - node['cpu_used'] - node['gpu_used'] * gpu_1_cpu
+            available_memory = node['memory_total'] - node['memory_used'] - node['gpu_used'] * gpu_1_memory
+            available_disk = node['storage_total'] - node['storage_used'] - node['gpu_used'] * 50
+            # 检查是否满足需求
+            if available_cpu >= cpu and available_memory >= memory and available_disk >= disk:
+                available_nodes.append((node, available_cpu))
+        # 没有可用节点
+        if not available_nodes:
+            return None
+        # 选择剩余 CPU 最小的节点（负载最均衡）
+        chosen_node = min(available_nodes, key=lambda x: x[1])[0]
+        print(f"wwb chosen_node:{chosen_node}")
+        # 返回选择好的节点
+        return chosen_node['node_name']
+
+    """
+    选择一个 GPU 节点，其剩余 GPU 资源（gpu_total - gpu_used）最小，但仍能满足请求的 gpu 数量。
+    """
+
+    def choose_gpu_falvor_node(self, node_list: list, gpu: int):
+        # 空
+        if not node_list or not gpu:
+            return None
+        # 筛选出满足 gpu_total - gpu_used >= gpu 的节点
+        available_nodes = [
+            node for node in node_list
+            if hasattr(node, "gpu_total") and hasattr(node, "gpu_used")
+               and (node.gpu_total - node.gpu_used) >= gpu
+        ]
+        if not available_nodes:
+            return None
+        # 找出剩余 GPU 最小的节点
+        chosen_node = min(
+            available_nodes,
+            key=lambda node: node.gpu_total - node.gpu_used
+        )
+        # 返回选择的节点名称
+        return chosen_node.node_name if hasattr(chosen_node, "node_name") else None
+
+    """
+    过滤匹配的GPU卡的节点。
+    """
+
+    def filter_node_list_by_gpu_model(self, node_resource_list_db, gpu_model):
+        # 空
+        if not gpu_model or not node_resource_list_db:
+            return None
+        # 筛选出 gpu_mode 匹配的节点
+        filtered_nodes = [
+            node for node in node_resource_list_db
+            if hasattr(node, "gpu_model") and node.gpu_model == gpu_model
+        ]
+        # 返回
+        return filtered_nodes if filtered_nodes else None
+
+    """
+    从 8C16G 这类格式中提取 CPU 和内存占用值
+    """
+
+    def parse_gpu_model(self, gpu_cpu_memory: str) -> tuple:
+        pattern = r"^(\d+)C(\d+)G$"  # 匹配数字C数字G的格式
+        match = re.match(pattern, gpu_cpu_memory)
+        if match:
+            return int(match.group(1)), int(match.group(2))
+        return 0, 0  # 默认不占用额外资源

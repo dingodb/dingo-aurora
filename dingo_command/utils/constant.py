@@ -43,6 +43,8 @@ GPU_POD_LABEL_VALUE = "true"
 POINT_SIGN = "."
 HYPHEN_SIGN  = "-"
 HARBOR_PULL_IMAGE_SUFFIX = "-harbor-pull-image"
+# POD 存储限制注解
+POD_STORAGE_LIMIT_ANNOTATIONS = {"dc.com/quota.xfs.size": "50g"}
 
 # excel的目录文件
 EXCEL_TEMP_DIR = "/home/dingo_command/temp_excel/"
