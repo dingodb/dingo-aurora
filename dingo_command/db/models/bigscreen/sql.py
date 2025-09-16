@@ -8,8 +8,6 @@ from dingo_command.db.models.bigscreen.models import BigscreenMetricsConfig, Big
 from datetime import datetime
 
 #链接数据库，可以使用配置文件进行定义
-# engine = create_engine("mysql+pymysql://root:HworLIIDvmTRsPfQauNskuJF8PcoTuULfu3dEHFg@10.220.56.254:3306/dingoops?charset=utf8mb3", echo=True)
-
 class BigscreenSQL:
     # 数据库操作添加
     @classmethod

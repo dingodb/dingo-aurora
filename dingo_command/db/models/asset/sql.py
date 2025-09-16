@@ -14,7 +14,6 @@ from dingo_command.db.models.asset_resoure_relation.models import AssetResourceR
 from dingo_command.utils.constant import asset_part_type_dict
 
 #链接数据库，可以使用配置文件进行定义
-# engine = create_engine("mysql+pymysql://root:HworLIIDvmTRsPfQauNskuJF8PcoTuULfu3dEHFg@10.220.56.254:3306/dingoops?charset=utf8mb3", echo=True)
 # 资产排序字段字典
 asset_dir_dic= {"asset_type":AssetBasicInfo.asset_type, "frame_position":AssetPositionsInfo.frame_position, "u_position":AssetPositionsInfo.u_position, "cabinet_position":AssetPositionsInfo.cabinet_position,
                 "asset_status":AssetBasicInfo.asset_status, "asset_name":AssetBasicInfo.name, "id": AssetBasicInfo.id, "equipment_number":AssetBasicInfo.equipment_number, "asset_number":AssetBasicInfo.asset_number,
