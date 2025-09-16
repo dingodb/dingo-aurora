@@ -55,3 +55,9 @@ class SystemSQL:
         session = get_session()
         with session.begin():
             return session.query(SystemCommonConfig).all()
+
+    @classmethod
+    def get_system_support_config_by_config_key(cls, config_key):
+        session = get_session()
+        with session.begin():
+            return session.query(SystemCommonConfig).filter(SystemCommonConfig.config_key == config_key).first()
