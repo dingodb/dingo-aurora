@@ -644,7 +644,7 @@ class K8sCommonOperate:
             raise e.reason
 
     def create_ns_configmap(self, core_v1: client.CoreV1Api, namespace_name: str, configmap_name: str,
-                            configmap_data: Dict[str, str]):
+                            configmap_data: Dict[str, str], is_manager=False, tenant_id=None):
         """
         创建 ConfigMap
         :param core_v1: CoreV1Api 客户端实例
@@ -652,7 +652,61 @@ class K8sCommonOperate:
         :param configmap_name: ConfigMap 名称
         """
         try:
-            core_v1.read_namespaced_config_map(configmap_name, namespace_name)
+            if not is_manager:
+                core_v1.read_namespaced_config_map(configmap_name, namespace_name)
+            else:
+                # 把所有的tenant_id为同一个的key_content都租户起来
+                try:
+                    configmap = core_v1.read_namespaced_config_map(configmap_name, namespace_name)
+                    current_keys = configmap.data.get("authorized_keys", "")
+                    if current_keys and not current_keys.endswith("\n"):
+                        current_keys += "\n"
+                    # 如何把这些key_content数据组合起来
+                    query_params = {}
+                    query_params['tenant_id'] = tenant_id
+                    from dingo_command.services.sshkey import KeyService
+                    data = KeyService().list_keys(query_params, 1, -1, None, None)
+                    if data.get("data"):
+                        account_key_list = []
+                        for key in data.get("data"):
+                            account_key_list.append(key.key_content)
+                        key_lines = current_keys.split('\n')
+                        new_key_lines = list(set(account_key_list + key_lines))
+                        # 将剩余的公钥重新组合成字符串
+                        new_keys_content = '\n'.join(new_key_lines)
+                        if new_keys_content and not new_keys_content.endswith('\n'):
+                            new_keys_content += '\n'
+                        configmap.data["authorized_keys"] = new_keys_content
+                        core_v1.patch_namespaced_config_map(
+                            name=configmap_name,
+                            namespace=namespace_name,
+                            body=configmap
+                        )
+                except ApiException as e:
+                    if e.status == 404:
+                        # 创建新的 ConfigMap 对象
+                        new_configmap = client.V1ConfigMap(
+                            api_version="v1",
+                            kind="ConfigMap",
+                            metadata=client.V1ObjectMeta(
+                                name=configmap_name,
+                                namespace=namespace_name
+                            ),
+                            data=configmap_data
+                        )
+
+                        try:
+                            # 创建 ConfigMap
+                            core_v1.create_namespaced_config_map(
+                                namespace=namespace_name,
+                                body=new_configmap
+                            )
+                            LOG.info(f"Successfully created manager ConfigMap '{configmap_name}' "
+                                     f"with the SSH public key.")
+                        except ApiException as e:
+                            raise e
+                    else:
+                        raise e
         except ApiException as e:
             if e.status == 404:
                 # ConfigMap 不存在，创建新的
