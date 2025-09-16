@@ -25,6 +25,7 @@ class AiInstanceApiModel(BaseModel):
     instance_id: Optional[str] = Field(None, description="容器实例ID，由云上服务bs传下来")
     product_code: Optional[str] = Field(None, description="产品Code")
     user_id: Optional[str] = Field(None, description="用户id")
+    is_manager: Optional[bool] = Field(None, description="是否主账号")
     tenant_id: Optional[str] = Field(None, description="租户ID")
     region_id: Optional[str] = Field(None, description="region id")
     k8s_id: Optional[str] = Field(None, description="K8S id")
