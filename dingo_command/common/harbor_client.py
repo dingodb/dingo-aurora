@@ -1276,7 +1276,7 @@ class HarborAPI:
                 "with_tag": "true",
                 "with_scan_overview": "false",
                 "with_sbom_overview": "false",
-                "with_label": "false",
+                "with_label": "true",
                 "with_immutable_status": "false",
                 "with_accessory": "false",
                 "page_size": 100,

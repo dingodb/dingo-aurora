@@ -234,9 +234,14 @@ class HarborService:
                     )
 
                     tags_list = []
+                    labels_list = []
                     # 处理每个镜像标签
                     for artifact in public_project_artifacts["data"]:
                         tags = artifact.get("tags", [])
+                        labels = artifact.get("labels", [])
+                        if labels:
+                            for label in labels:
+                                labels_list.append(label.get("name"))
                         tags_dic = {}
 
                         if tags:
@@ -263,8 +268,9 @@ class HarborService:
                             tags_dic.update(dict(size=size_formatted))
                             tags_list.append(tags_dic)
 
-                    # 更新仓库的标签信息
+                    # 更新仓库的标签与labels信息
                     repository.update(dict(tags_list=tags_list))
+                    repository.update(dict(labels_list=labels_list))
                     project_repositories_list.append(repository)
 
             return self.return_response(
@@ -304,9 +310,14 @@ class HarborService:
                 )
 
                 tags_list = []
+                labels_list = []
                 # 处理每个镜像标签
                 for artifact in public_project_artifacts["data"]:
                     tags = artifact.get("tags", [])
+                    labels = artifact.get("labels", [])
+                    if labels:
+                        for label in labels:
+                            labels_list.append(label.get("name"))
                     tags_dic = {}
 
                     if tags:
@@ -329,8 +340,9 @@ class HarborService:
                         tags_dic.update(dict(size=size_formatted))
                         tags_list.append(tags_dic)
 
-                # 更新仓库的标签信息
+                # 更新仓库的标签与labels信息
                 repository.update(dict(tags_list=tags_list))
+                repository.update(dict(labels_list=labels_list))
                 project_repositories_list.append(repository)
 
             # return self.return_response(
