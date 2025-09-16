@@ -234,9 +234,9 @@ class HarborService:
                     )
 
                     tags_list = []
-                    labels_list = []
                     # 处理每个镜像标签
                     for artifact in public_project_artifacts["data"]:
+                        labels_list = []
                         tags = artifact.get("tags", [])
                         labels = artifact.get("labels", [])
                         if labels:
@@ -249,7 +249,9 @@ class HarborService:
                             tag_name = tags[0]["name"]
                             tag_push_time = tags[0]["push_time"]
                             tags_dic = dict(
-                                tag_name=tag_name, tag_push_time=tag_push_time
+                                tag_name=tag_name, 
+                                tag_push_time=tag_push_time,
+                                labels_list=labels_list
                             )
                         # else:
                         #     # 没有标签的情况
@@ -270,7 +272,6 @@ class HarborService:
 
                     # 更新仓库的标签与labels信息
                     repository.update(dict(tags_list=tags_list))
-                    repository.update(dict(labels_list=labels_list))
                     project_repositories_list.append(repository)
 
             return self.return_response(
@@ -310,9 +311,9 @@ class HarborService:
                 )
 
                 tags_list = []
-                labels_list = []
                 # 处理每个镜像标签
                 for artifact in public_project_artifacts["data"]:
+                    labels_list = []
                     tags = artifact.get("tags", [])
                     labels = artifact.get("labels", [])
                     if labels:
@@ -324,7 +325,11 @@ class HarborService:
                         # 获取标签信息
                         tag_name = tags[0]["name"]
                         tag_push_time = tags[0]["push_time"]
-                        tags_dic = dict(tag_name=tag_name, tag_push_time=tag_push_time)
+                        tags_dic = dict(
+                            tag_name=tag_name, 
+                            tag_push_time=tag_push_time,
+                            labels_list=labels_list
+                        )
                     # else:
                     #     # 没有标签的情况
                     #     tags_dic = dict(tag_name="none", tag_push_time="none")
@@ -342,7 +347,6 @@ class HarborService:
 
                 # 更新仓库的标签与labels信息
                 repository.update(dict(tags_list=tags_list))
-                repository.update(dict(labels_list=labels_list))
                 project_repositories_list.append(repository)
 
             # return self.return_response(

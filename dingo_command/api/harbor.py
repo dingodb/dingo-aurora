@@ -41,11 +41,17 @@ async def get_public_base_image(
 async def add_harbor_user(
     username: str = Body(..., description="用户名"),
     password: str = Body(..., description="密码"),
-    email: str = Body(..., description="邮箱"),
-    realname: str = Body(..., description="真实姓名"),
-    comment: str = Body(..., description="备注"),
+    email: str = Body("", description="邮箱"),
+    realname: str = Body("", description="真实姓名"),
+    comment: str = Body("", description="备注"),
 ):
     try:
+        if not email:
+            email = f"{username}@zetyun01.com"
+        if not realname:
+            realname = username
+        if not comment:
+            comment = "接口添加"
         result = harbor_service.add_harbor_user(
             username=username,
             password=password,
