@@ -41,7 +41,7 @@ def auto_actions_tick():
 
 # 将任务注册到 scheduler（与 fetch_ai_instance_info 同步周期一样或独立间隔）
 def start():
-    ai_instance_scheduler.add_job(fetch_ai_instance_info, 'interval', seconds=60*10, next_run_time=datetime.now(), misfire_grace_time=300,coalesce=True, max_instances=1)
+    ai_instance_scheduler.add_job(fetch_ai_instance_info, 'interval', seconds=300, next_run_time=datetime.now(), misfire_grace_time=150,coalesce=True, max_instances=1)
     # ai_instance_scheduler.add_job(auto_actions_tick, 'interval', seconds=60*30, next_run_time=datetime.now())
     ai_instance_scheduler.start()
 
@@ -271,8 +271,7 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
             continue
 
         # 确定实例状态
-        k8s_status = determine_instance_real_status(sts, pod)
-        # # 实例使用镜像
+        k8s_status, error_msg = ai_instance_service.get_pod_final_status(pod)
         # k8s_image = extract_image_info(sts)
         # 环境变量、错误信息等
         pod_details = extract_pod_details(pod)

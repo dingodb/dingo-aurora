@@ -254,13 +254,33 @@ class AiInstanceService:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
 
-                # 执行检查任务
                 loop.run_until_complete(
-                    self._async_save_operation(
-                        id, core_k8s_client, nerdctl_api_pod,
-                        clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag
+                    # 执行检查任务
+                    asyncio.wait_for(
+                        self._async_save_operation(
+                            id, core_k8s_client, nerdctl_api_pod,
+                            clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag
+                        ),
+                        timeout=600.0
                     )
                 )
+            except asyncio.TimeoutError:
+                print(f"ai instance[{id}]超过10分钟未完成保存镜像操作")
+                ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
+                ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
+                ai_instance_info_db.error_msg ="start cci timeout"
+                AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+
+                # 释放pod 所在节点node资源
+                node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(
+                    ai_instance_info_db.instance_k8s_id, ai_instance_info_db.instance_node_name)
+                if node_resource_db and ai_instance_info_db.instance_config:
+                    instance_config_dict = json.loads(ai_instance_info_db.instance_config)
+                    self.update_node_resources(node_resource_db, instance_config_dict, "release")
+
+                # 副本数改成0
+                self.set_k8s_sts_replica_by_instance_id(id, 0)
+
             except Exception as e:
                 LOG.error(f"Background task failed: {str(e)}", exc_info=True)
             finally:
@@ -279,10 +299,28 @@ class AiInstanceService:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
 
-                # 执行检查任务
                 loop.run_until_complete(
-                    self.sava_ai_instance_to_image_backup(id)
+                    # 执行检查任务
+                    asyncio.wait_for(
+                        self.sava_ai_instance_to_image_backup(id), timeout = 600.0
+                    )
                 )
+            except asyncio.TimeoutError:
+                print(f"ai instance[{id}]超过10分钟未完成保存镜像操作")
+                ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
+                ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
+                ai_instance_info_db.error_msg = "start cci timeout"
+                AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+
+                # 释放pod 所在节点node资源
+                node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(
+                    ai_instance_info_db.instance_k8s_id, ai_instance_info_db.instance_node_name)
+                if node_resource_db and ai_instance_info_db.instance_config:
+                    instance_config_dict = json.loads(ai_instance_info_db.instance_config)
+                    self.update_node_resources(node_resource_db, instance_config_dict, "release")
+
+                # 副本数改成0
+                self.set_k8s_sts_replica_by_instance_id(id, 0)
             except Exception as e:
                 LOG.error(f"Background task failed: {str(e)}", exc_info=True)
             finally:
@@ -478,7 +516,7 @@ class AiInstanceService:
         )
 
         if returncode != 0:
-            raise Exception(f"Container id {clean_container_id} Commit failed: {output}")
+            raise Exception(f"Container id {clean_container_id} Commit returncode:{returncode}, failed: {output}")
 
     async def _push_image(self, core_k8s_client, nerdctl_api_pod, image_name):
         """执行push操作"""
@@ -492,7 +530,7 @@ class AiInstanceService:
         )
 
         if returncode != 0:
-            raise Exception(f"Image {image_name} Push failed: {output}")
+            raise Exception(f"Image {image_name} Push returncode:{returncode}, failed: {output}")
 
     def get_ai_instance_info_by_id(self, id):
         ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
@@ -1307,7 +1345,7 @@ class AiInstanceService:
                                                        instance_id: str,
                                                        pod_name: str,
                                                        namespace: str,
-                                                       timeout: int = 300
+                                                       timeout: int = 600
                                                        ):
         """
         异步检查 Pod 状态并更新数据库
