@@ -98,15 +98,26 @@ async def create_resources(
     """
     根据提供的参数查询 Kubernetes 资源。
     """
-    k8sclient = get_k8s_client_by_cluster(resource.cluster_id)
-    resources = k8sclient.create_resource(
-        resource_body=resource.template,
-        resource_type=resource_type,
-        namespace=namespace,
-        
-    )
-    if resources is None:
-        raise HTTPException(status_code=500, detail=f"创建资源 '{resource_type}' 失败。")
+    try:
+        k8sclient = get_k8s_client_by_cluster(resource.cluster_id)
+        resources = k8sclient.create_resource(
+            resource_body=resource.template,
+            resource_type=resource_type,
+            namespace=namespace,
+            
+        )
+    except Exception as e:
+        traceback.print_exc()
+        response_body = getattr(getattr(e, 'response', None), 'body', str(e))
+        match = re.search(r"HTTP response body: b?['\"]?(.*?)[\"']?\\n", response_body, re.DOTALL)
+        if match:
+            body_str = match.group(1)
+            # 处理转义字符
+            body_str = body_str.encode('utf-8').decode('unicode_escape')
+            # 解析 JSON
+            body_json = json.loads(body_str)
+            raise HTTPException(status_code=500, detail=f"{body_json}")
+        raise HTTPException(status_code=500, detail=f"{response_body}")
     return JSONResponse(content=jsonable_encoder(resources)) # 确保复杂对象可以被序列化
 
 
@@ -121,14 +132,25 @@ async def create_resources(
     """
     根据提供的参数查询 Kubernetes 资源。
     """
-    k8sclient = get_k8s_client_by_cluster(resource.cluster_id)
-    resources = k8sclient.create_resource(
-        resource_body=resource.template,
-        resource_type=resource_type,
-        
-    )
-    if resources is None:
-        raise HTTPException(status_code=500, detail=f"查询资源 '{resource_type}' 失败。")
+    try:
+        k8sclient = get_k8s_client_by_cluster(resource.cluster_id)
+        resources = k8sclient.create_resource(
+            resource_body=resource.template,
+            resource_type=resource_type,
+            
+        )
+    except Exception as e:
+        traceback.print_exc()
+        response_body = getattr(getattr(e, 'response', None), 'body', str(e))
+        match = re.search(r"HTTP response body: b?['\"]?(.*?)[\"']?\\n", response_body, re.DOTALL)
+        if match:
+            body_str = match.group(1)
+            # 处理转义字符
+            body_str = body_str.encode('utf-8').decode('unicode_escape')
+            # 解析 JSON
+            body_json = json.loads(body_str)
+            raise HTTPException(status_code=500, detail=f"{body_json}")
+        raise HTTPException(status_code=500, detail=f"{response_body}")
     return JSONResponse(content=jsonable_encoder(resources)) # 确保复杂对象可以被序列化
 
 @router.get("/k8s/{resource}/list", summary="查询资源列表", description="查询资源列表")

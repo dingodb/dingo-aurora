@@ -9,6 +9,7 @@ from dingo_command.common.k8s.resource import ResourceClientFactory
 logger = logging.getLogger(__name__)
 
 libc = ctypes.CDLL("libc.so.6")
+
 def set_netns(netns_name):
     """
     将当前线程切换到指定的网络命名空间。
@@ -16,7 +17,9 @@ def set_netns(netns_name):
     """
     netns_path = f"/run/netns/{netns_name}"
     if not os.path.exists(netns_path):
-        raise FileNotFoundError(f"网络命名空间 {netns_name} 不存在于 {netns_path}")
+        #raise FileNotFoundError(f"网络命名空间 {netns_name} 不存在于 {netns_path}")
+        print(f"网络命名空间 {netns_name} 不存在于 {netns_path}")
+        return
     fd = os.open(netns_path, os.O_RDONLY)
     try:
         if libc.setns(fd, 0) == -1:
@@ -24,6 +27,7 @@ def set_netns(netns_name):
         print(f"已切换到网络命名空间: {netns_name}")
     finally:
         os.close(fd)
+        
 class K8sClient:
     """
     一个统一的 Kubernetes API 客户端，支持查询、创建内置资源和自定义资源。
