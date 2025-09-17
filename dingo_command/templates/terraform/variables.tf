@@ -226,6 +226,12 @@ variable "bastion_fips" {
   default     = []
 }
 
+variable "pod_cidr" {
+  description = "Subnet CIDR block."
+  type        = string
+  default     = "10.233.64.0/18"
+}
+
 variable "floatingip_pool" {
   description = "name of the floating ip pool to use"
   default     = "external"
@@ -527,4 +533,9 @@ variable "pushgateway_pass" {
   description = "URL of the Pushgateway for monitoring"
   type        = string
   default     = ""
+}
+variable "attached_router" {
+  description = ""
+  type        = bool
+  default     = false
 }

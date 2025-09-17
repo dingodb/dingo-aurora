@@ -146,6 +146,7 @@ class ClusterTFVarsObject(BaseModel):
     pushgateway_pass: Optional[str] = Field("", description="Prometheus Pushgateway的密码")
     image_master_uuid: Optional[str] = Field(None, description="master节点的镜像uuid")
     flavor_k8s_master: Optional[str] = Field(None, description="K8s master节点的规格")
+    attached_router: Optional[bool] = Field(False, description="是否已将子网连接到路由器")  
 
 def replace_ansi_with_single_newline(text):
     ansi_pattern = re.compile(r'\x1b\[[\d;]*[a-zA-Z]')
@@ -253,8 +254,19 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
         router = neutron_api.get_router_by_name(CONF.DEFAULT.cluster_router_name, cluster.tenant_id)
         if router is not None:
             cluster.router_id = router.get("id", "")
+            ports = neutron_api.list_ports(device_id=cluster.router_id)
+        
+            for port in ports:
+                fixed_ips = port.get('fixed_ips', [])
+                for fixed_ip in fixed_ips:
+                    if fixed_ip.get('subnet_id') == cluster.admin_subnet_id:
+                        print(f"Found internal fixed IP {fixed_ip.get('ip_address')} in admin subnet {cluster.admin_subnet_id}")
+                        cluster.attached_router = True
+                        break
         else:
             cluster.router_id = ""
+         # 获取router的所有端口
+       
 
         cluster.group_vars_path = os.path.join(cluster_dir, "group_vars")
         tfvars_str = json.dumps(cluster, default=lambda o: o.__dict__, indent=2)
@@ -1225,7 +1237,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             TaskSQL.insert(task_info)
 
         #调用keystoneclient的get_app_credential方法获取应用凭证，如果没有则用create_app_credential方法创建
-        keystoneclient = KeystoneClient(token=cluster_tfvars.token)
+        keystoneclient = KeystoneClient(token=cluster_tfvars.token, project_id=cluster.project_id)
 
         app_credential = keystoneclient.create_app_credential(user_id=cluster.user_id, name=cluster.name)
         #cluster_tfvars.app_credential_id = app_credential.get("id")
@@ -1393,7 +1405,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             raise Exception(f"Ansible kubernetes deployment failed: {ansible_result[1]}")
         # 阻塞线程，直到ansible_client.get_playbook_result()返回结果
         # 获取集群的kube_config
-        kube_config = get_cluster_kubeconfig(cluster_tfvars,lb_ip,master_ip,float_ip,ssh_port)
+        kube_config = get_cluster_kubeconfig(cluster_tfvars,lb_ip,master_ip,float_ip,ssh_port,netns)
         # 更新集群状态为running
         query_params = {}
         query_params["id"] = cluster_dict["id"]

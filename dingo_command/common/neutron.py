@@ -104,7 +104,29 @@ class API:
             # 处理子网不存在或其他错误的情况
             print(f"获取子网信息失败: {str(e)}")
             return {}
+    def list_ports(self, neutron_client: neutron_client.Client = None, **kwargs) -> List[Dict[str, Any]]:
+        """
+        查询端口列表
         
+        参数:
+            neutron_client: Neutron客户端实例，如果未提供则自动创建
+            **kwargs: 查询参数，如 device_id, network_id, status 等
+        
+        返回:
+            List[Dict[str, Any]]: 端口列表
+        """
+        if neutron_client is None:
+            neutron_client = self.get_neutron_client(CONF)
+        
+        try:
+            # 查询端口
+            ports = neutron_client.list_ports(**kwargs)
+            return ports.get('ports', [])
+            
+        except Exception as e:
+            # 处理查询失败的情况
+            print(f"查询端口失败: {str(e)}")
+            return []
 
     def list_router(self, name: str, tenant_id: str,neutron_client: neutron_client.Client = None, **kwargs)-> Dict[str, Any]:
         if neutron_client is None:

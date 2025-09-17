@@ -170,6 +170,10 @@ resource "openstack_networking_port_v2" "masters_port" {
   security_group_ids    = [openstack_networking_secgroup_v2.secgroup.id]
   #port_security_enabled = var.force_null_port_security ? null : var.port_security_enabled
   #no_security_groups    = var.port_security_enabled ? null : false
+  # 添加可用地址对配置
+  allowed_address_pairs {
+    ip_address = var.pod_cidr
+  }
   dynamic "fixed_ip" {
     for_each = var.private_subnet_id == "" ? [] : [true]
     content {
@@ -235,6 +239,9 @@ resource "openstack_networking_port_v2" "nodes_port" {
   security_group_ids    = [openstack_networking_secgroup_v2.secgroup.id]
   #port_security_enabled = var.force_null_port_security ? null : var.port_security_enabled
   #no_security_groups    = var.port_security_enabled ? null : false
+  allowed_address_pairs {
+    ip_address = var.pod_cidr
+  }
   dynamic "fixed_ip" {
     for_each = var.private_subnet_id == "" ? [] : [true]
     content {

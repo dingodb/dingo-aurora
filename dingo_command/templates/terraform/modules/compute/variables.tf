@@ -287,3 +287,7 @@ variable "pushgateway_url" {}
 
 variable "pushgateway_user" {}
 variable "pushgateway_pass" {}
+
+variable "pod_cidr" {
+  type = string
+}
