@@ -27,9 +27,10 @@ from dingo_command.celery_api.celery_app import celery_app
 from dingo_command.celery_api import CONF
 from dingo_command.db.engines.mysql import get_engine, get_session
 from dingo_command.db.models.cluster.sql import ClusterSQL, TaskSQL
-from dingo_command.common import CONF as CommonConf, keystone_client
+from dingo_command.common import CONF as CommonConf
 from dingo_command.services import CONF as ServiceConf
 from dingo_command.common.nova_client import NovaClient
+from dingo_command.common.keystone_client import KeystoneClient
 from dingo_command.common import neutron
 from dingo_command.common.network import init_cluster_network 
 from dingo_command.common.cinder_client import CinderClient
@@ -495,8 +496,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None, n
             'region': cluster.region_name,
             "project_id": cluster.project_id,
 #            "project_name": cluster.kube_info.kube_proxy_mode,
-            "user_domain_name": cluster.domain_name,
-            "user_domain_id": cluster.domain_id,
+            "user_domain_name": "Default",
             "app_credential_name": app_credential_name,
             "app_credential_id": app_credential_id,
             "app_credential_secret": app_credential_secret,
@@ -537,7 +537,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None, n
                     host =  event['event_data'].get('host')
                     task_status = event['event'].split('_')[-1]  # 例如 runner_on_ok -> ok
                     # 处理 etcd 任务的特殊逻辑
-                    # print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
+                    #print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
                     if task_name == runtime_task_name and host is not None:
                         if not runtime_bool:
                             runtime_bool = True
@@ -770,7 +770,7 @@ def scale_kubernetes(cluster_id, scale_nodes, task_id, netns: str = None, app_cr
         return False, str(e)
 
 
-def get_cluster_kubeconfig(cluster: ClusterTFVarsObject, lb_ip, master_ip, float_ip,ssh_port):
+def get_cluster_kubeconfig(cluster: ClusterTFVarsObject, lb_ip, master_ip, float_ip,ssh_port, netns: str = None):
     """获取集群的kubeconfig配置"""
 
     print(f"lb_ip: {lb_ip}, master_ip: {master_ip}, float_ip: {float_ip}")
@@ -784,6 +784,7 @@ def get_cluster_kubeconfig(cluster: ClusterTFVarsObject, lb_ip, master_ip, float
 
             result = subprocess.run(
                 [
+                    "ip", "netns", "exec", str(netns),
                     "ssh",
                     "-o", "StrictHostKeyChecking=no",
                     "-p", str(ssh_port),
@@ -799,6 +800,7 @@ def get_cluster_kubeconfig(cluster: ClusterTFVarsObject, lb_ip, master_ip, float
             key_file_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "id_rsa")
             result = subprocess.run(
                 [
+                    "ip", "netns", "exec", str(netns),
                     "ssh",
                     "-o", "StrictHostKeyChecking=no",
                     "-i", key_file_path,  # SSH私钥路径
@@ -1223,9 +1225,10 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             TaskSQL.insert(task_info)
 
         #调用keystoneclient的get_app_credential方法获取应用凭证，如果没有则用create_app_credential方法创建
-        app_credential = keystone_client.get_app_credential(user_id=task_info.user_id, name=task_info.cluster_id)
-        if not app_credential:
-            app_credential = keystone_client.create_app_credential(user_id=task_info.user_id, name=task_info.cluster_id)
+        keystoneclient = KeystoneClient(token=cluster_tfvars.token)
+        # app_credential = keystoneclient.get_app_credential(user_id=cluster.user_id, name=cluster.name)
+        # if not app_credential:
+        #     app_credential = keystoneclient.create_app_credential(user_id=cluster.user_id, name=cluster.name)
         #cluster_tfvars.app_credential_id = app_credential.get("id")
         #cluster_tfvars.app_credential_secret = app_credential.get("secret")
         

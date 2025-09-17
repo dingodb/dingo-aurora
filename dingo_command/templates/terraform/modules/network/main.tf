@@ -57,19 +57,6 @@ resource "openstack_networking_subnet_v2" "bussiness" {
 // 获取路由器信息用于检查external_fixed_ip
 locals {
   router_id = var.router_id != null && var.router_id != "" ? var.router_id : (
-    length(data.openstack_networking_router_v2.cluster) > 0 ? 
-    data.openstack_networking_router_v2.cluster[0].id : 
-    openstack_networking_router_v2.cluster[0].id
-  )
-}
-
-data "openstack_networking_router_v2" "router_detail" {
-  count = var.use_neutron == 1 ? 1 : 0
-  router_id = local.router_id
-}
-// 获取路由器信息用于检查external_fixed_ip
-locals {
-  router_id = var.router_id != null && var.router_id != "" ? var.router_id : (
     length(data.openstack_networking_router_v2.cluster) > 0 ?
     data.openstack_networking_router_v2.cluster[0].id :
     openstack_networking_router_v2.cluster[0].id
@@ -100,4 +87,11 @@ resource "openstack_networking_router_interface_v2" "cluster_interface" {
   count     = local.should_create_interface ? 1 : 0
   router_id = local.router_id
   subnet_id = var.admin_subnet_id
+}
+
+// 如果subnet不在路由器的external_fixed_ip中，则将其绑定到路由器
+resource "openstack_networking_router_interface_v2" "cluster_interface" {
+  count     = var.use_existing_network ? 0 : 1
+  router_id = local.router_id
+  subnet_id = resource.openstack_networking_subnet_v2.cluster[0].id
 }
