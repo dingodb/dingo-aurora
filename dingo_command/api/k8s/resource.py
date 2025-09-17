@@ -159,11 +159,11 @@ async def list_resources(
     namespace:str = Query(None, description="集群id"),
     resource: str = Path(..., description="Kubernetes 资源类型"),
     label_selector: str = Query(None, description="标签选择器"),
-    search_terms: str = Query(None, description="搜索关键词"),
+    name: str = Query(None, description="搜索关键词"),
     page: str = Query(None, description="页码"),
     page_size: str = Query(None, description="每页大小"),
-    sort_by: str = Query(None, description="排序字段"),
-    sort_order: str = Query(None, description="排序顺序"),
+    sort_keys: str = Query(None, description="排序字段"),
+    sort_dirs: str = Query(None, description="排序顺序"),
     token: str = Depends(get_token),
 ):
     #根据cluster_id获取对应的kubeconfig，然后获取kubeclient
@@ -173,7 +173,7 @@ async def list_resources(
     """
     k8sclient = get_k8s_client_by_cluster(cluster_id)
     #将search_terms按照逗号分开
-    search_terms_list = search_terms.split(",") if search_terms else []
+    search_terms_list = [f"name={name}"] if name else []
     resources = k8sclient.list_resource(
         resource_type=resource,
         namespace=namespace,
@@ -181,8 +181,8 @@ async def list_resources(
         label_selector=label_selector,
         page=int(page),
         page_size=int(page_size),
-        sort_by=sort_by,
-        sort_order=sort_order
+        sort_by=sort_keys,
+        sort_order=sort_dirs
     )
     if resources is None:
         raise HTTPException(status_code=500, detail=f"查询资源 '{resource}' 失败。")

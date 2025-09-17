@@ -27,6 +27,7 @@ from dingo_command.services.cluster import ClusterService
 from dingo_command.services import CONF
 from dingo_command.utils.helm import util
 from dingo_command.utils.helm.util import ChartLOG as Log
+from dingo_command.common.k8s_client import set_netns
 
 WORK_DIR = CONF.DEFAULT.cluster_work_dir
 auth_url = CONF.DEFAULT.auth_url
@@ -1093,6 +1094,8 @@ class ChartService:
         with open(kube_config, "w") as f :
             f.write(res_cluster.kube_info.kube_config)
             # f.write(yaml.dump(json.loads(res_cluster.kube_info.kube_config)))
+        netns = "qdhcp-" + str(res_cluster.network_config.admin_network_id)
+        set_netns(netns)
         return kube_config, helm_cache_dir
 
     def convert_app_db(self, create_data: ChartDB, create_info: CreateAppObject, update=False):

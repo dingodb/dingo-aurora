@@ -161,6 +161,7 @@ class ResourceClientFactory:
         """
         return [resource_type for resource_type, client_class in self._client_classes.items() 
                 if client_class is not None]
+
     def list(
         self, 
         items: List[Dict[str, Any]],
@@ -178,7 +179,7 @@ class ResourceClientFactory:
         resource_list = items
         # 获取对应的资源客户端
         client = self.get_client(resource_type)
-        
+
         try:
             resource_list = client.list(
                 items=items,
@@ -187,7 +188,6 @@ class ResourceClientFactory:
                 namespace=namespace,
                 match_all=match_all
             )
-
             return resource_list
         except Exception as e:
             logger.error(f"调用 {resource_type} 客户端的 list 方法失败: {e}")

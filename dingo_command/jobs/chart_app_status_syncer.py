@@ -15,6 +15,7 @@ from dingo_command.api.model.chart import CreateRepoObject, CreateAppObject
 from dingo_command.utils.helm import util
 from dingo_command.celery_api import CONF
 from dingo_command.utils.helm.redis_lock import RedisSentinelDistributedLock
+from dingo_command.common.k8s_client import set_netns
 
 
 config_dir = "/tmp/kube_config_dir"
@@ -105,6 +106,8 @@ def check_app_status():
             if count < 1:
                 continue
             # 1、先获取cluster_id，然后获取kube_config文件
+            netns = "qdhcp-" + str(clusters[0].admin_network_id)
+            set_netns(netns)
             kube_config = json.loads(clusters[0].kube_info).get("kube_config")
             if not kube_config:
                 continue
