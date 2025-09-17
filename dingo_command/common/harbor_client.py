@@ -1432,7 +1432,7 @@ class HarborAPI:
                     "metadata": {
                         "public": f"{public}",
                     },
-                    "storage_limit": storage_limit * 1024 * 1024 * 1024,
+                    "storage_limit": storage_limit,
                 },
             )
             if response.status_code == 201:
@@ -1612,6 +1612,32 @@ class HarborAPI:
                     False,
                     response.status_code,
                     f"自定义镜像仓库删除失败: {project_name}",
+                    response.json().get("errors", "未知错误"),
+                )
+        except Exception as e:
+            return self.return_response(False, 500, f"删除自定义镜像仓库异常: {str(e)}")
+
+    # 删除自定义仓库镜像TAG
+    def delete_custom_projects_images_tag(self, project_name: str, repository_name: str,digest: str) -> Dict[str, Any]:
+        if "/" in repository_name:
+            encoded_repo = quote(quote(repository_name, safe=""), safe="")
+        else:
+            encoded_repo = repository_name
+
+        try:
+            url = f"{self.base_url}/api/v2.0/projects/{project_name}/repositories/{encoded_repo}/artifacts/{digest}"
+            response = self.request("DELETE", url)
+            if response.status_code == 200:
+                return self.return_response(
+                    True,
+                    response.status_code,
+                    f"自定义镜像仓库Tag删除成功: {repository_name}",
+                )
+            else:
+                return self.return_response(
+                    False,
+                    response.status_code,
+                    f"自定义镜像仓库Tag删除失败: {repository_name}",
                     response.json().get("errors", "未知错误"),
                 )
         except Exception as e:
