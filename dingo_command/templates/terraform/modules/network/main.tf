@@ -90,7 +90,7 @@ resource "openstack_networking_router_interface_v2" "cluster_interface" {
 }
 
 // 如果subnet不在路由器的external_fixed_ip中，则将其绑定到路由器
-resource "openstack_networking_router_interface_v2" "cluster_interface" {
+resource "openstack_networking_router_interface_v2" "cluster_interface_n" {
   count     = var.use_existing_network ? 0 : 1
   router_id = local.router_id
   subnet_id = resource.openstack_networking_subnet_v2.cluster[0].id
