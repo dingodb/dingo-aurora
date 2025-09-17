@@ -685,15 +685,7 @@ class AiInstanceService:
         return results
 
     def _prepare_resource_config(self, instance_config):
-        resource_limits = {}
-        if instance_config.compute_cpu and instance_config.compute_memory:
-            """准备资源限制配置"""
-            resource_limits = {
-                'cpu': int(instance_config.compute_cpu),
-                'memory': instance_config.compute_memory + "Gi",
-                # 'ephemeral-storage': instance_config.system_disk_size + "Gi" if instance_config.system_disk_size else SYSTEM_DISK_SIZE_DEFAULT
-            }
-
+        resource_limits = []
         node_selector_gpu = {}
         toleration_gpus = []
 
@@ -701,14 +693,18 @@ class AiInstanceService:
             gpu_card_info = AiInstanceSQL.get_gpu_card_info_by_gpu_model_display(instance_config.gpu_model)
             if not gpu_card_info:
                 raise Fail(f"GPU card mapping not found for model: {instance_config.gpu_model}")
-            resource_limits[gpu_card_info.gpu_key] = instance_config.gpu_count
-            node_selector_gpu['nvidia.com/gpu.product'] = gpu_card_info.gpu_node_label
+
+            resource_limits = {'cpu': int(instance_config.compute_cpu), 'memory': instance_config.compute_memory + "Gi",
+                               gpu_card_info.gpu_key: instance_config.gpu_count}
+            # node_selector_gpu['nvidia.com/gpu.product'] = gpu_card_info.gpu_node_label
             # 容忍度
-            toleration_gpus.append(V1Toleration(
-                key=gpu_card_info.gpu_node_label,
-                operator="Exists",
-                effect="NoSchedule"
-            ))
+            # toleration_gpus.append(V1Toleration(
+            #     key=gpu_card_info.gpu_node_label,
+            #     operator="Exists",
+            #     effect="NoSchedule"
+            # ))
+        elif instance_config.compute_cpu:
+            resource_limits= {"dc.com/cpu-pod-slot": int(instance_config.compute_cpu)}
 
         return {
             'resource_limits': resource_limits,
@@ -908,12 +904,12 @@ class AiInstanceService:
         )
 
         pod_security_context = V1SecurityContext(
-            run_as_user=0,
-            run_as_group=0
+            run_as_user=0, # 指定容器内的进程以 root 用户（UID 0）的身份运行。
+            run_as_group=0 # 指定容器内的进程以 root 用户组（GID 0）的身份运行
         )
         container_security_context = V1SecurityContext(
-            run_as_user=0,
-            run_as_group=0
+            run_as_user=0, # 指定容器内的进程以 root 用户（GID 0）的身份运行
+            run_as_group=0 # 指定容器内的进程以 root 用户组（GID 0）的身份运行
         )
 
         # 定义容器
@@ -939,8 +935,8 @@ class AiInstanceService:
             command=["/anc-init/script/anc-init"],
         )
 
-        # # 亲和性
-        affinity = self.create_affinity(node_selector_gpu)
+        # 亲和性
+        # affinity = self.create_affinity(node_selector_gpu)
         # pod标签
         pod_template_labels = self.build_pod_template_labels(ai_instance_db, ai_instance_db.product_code, resource_limits)
 
@@ -957,13 +953,14 @@ class AiInstanceService:
                 #                                int(ai_instance.instance_config.system_disk_size),
                 #                                self.find_gpu_key_by_display(ai_instance.instance_config.gpu_model),
                 #                                ai_instance.instance_config.gpu_count),
+                scheduler_name = "volcano",
                 containers=[container],
                 termination_grace_period_seconds = 5,
                 security_context=pod_security_context,
                 volumes=pod_volumes,
-                node_selector=node_selector_gpu,  # 使用传入的GPU节点选择器
-                tolerations=toleration_gpus,  # 使用传入的GPU容忍度
-                affinity=affinity
+                # node_selector=node_selector_gpu,  # 使用传入的GPU节点选择器
+                # tolerations=toleration_gpus,  # 使用传入的GPU容忍度
+                # affinity=affinity
             )
         )
 
@@ -1012,7 +1009,10 @@ class AiInstanceService:
             # 原sts 数据
             existing_sts = k8s_common_operate.read_sts_info(app_k8s_client, real_name, namespace_name)
 
-            resource_config = self._prepare_resource_config(request.instance_config) if request and request.instance_config else {}
+            if request and request.instance_config:
+                resource_config = self._prepare_resource_config(request.instance_config)
+            else:
+                resource_config = self._prepare_resource_config(json.loads(ai_instance_info_db.instance_config))
 
             if request and request.image:
                 image_name = request.image
@@ -1033,8 +1033,10 @@ class AiInstanceService:
 
 
             # 设置下发参数
-            ai_instance_info_db.product_code = request.product_code if request and request.product_code else None
-            ai_instance_info_db.instance_config = json.dumps(request.instance_config.dict()) if request and request.instance_config else None
+            if request and request.product_code:
+                ai_instance_info_db.product_code = request.product_code
+            if request and request.instance_config:
+                ai_instance_info_db.instance_config = json.dumps(request.instance_config.dict())
             ai_instance_info_db.instance_image = image_name
             ai_instance_info_db.error_msg = None
             AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
@@ -1080,18 +1082,18 @@ class AiInstanceService:
         toleration_gpus = resource_config.get('toleration_gpus', [])
 
         # 创建亲和性配置
-        affinity = self.create_affinity(node_selector_gpu)
+        # affinity = self.create_affinity(node_selector_gpu)
 
         # 构建Pod模板标签
-        pod_template_labels = self.build_pod_template_labels(ai_instance_info_db, request.product_code if request and request.product_code else None, resource_limits)
+        pod_template_labels = self.build_pod_template_labels(ai_instance_info_db, request.product_code if request and request.product_code else ai_instance_info_db.product_code, resource_limits)
 
         # 更新existing_sts的各个字段
         existing_sts.metadata.resource_version = None
         existing_sts.spec.replicas = 1
         existing_sts.spec.template.metadata = V1ObjectMeta(labels=pod_template_labels, annotations = POD_STORAGE_LIMIT_ANNOTATIONS)
-        existing_sts.spec.template.spec.node_selector = node_selector_gpu
-        existing_sts.spec.template.spec.tolerations = toleration_gpus
-        existing_sts.spec.template.spec.affinity = affinity
+        # existing_sts.spec.template.spec.node_selector = node_selector_gpu
+        # existing_sts.spec.template.spec.tolerations = toleration_gpus
+        # existing_sts.spec.template.spec.affinity = affinity
         # existing_sts.spec.template.spec.node_name = self.choose_k8s_node(ai_instance_db.instance_k8s_id,
         #                                        int(ai_instance.instance_config.compute_cpu),
         #                                        int(ai_instance.instance_config.compute_memory),
@@ -1125,9 +1127,9 @@ class AiInstanceService:
         # 添加产品代码（如果存在）
         if product_code:
             labels["dc.com/params.productCode"] = product_code
-        # 检查是否为GPU实例并添加相应标签
-        if any(key.startswith('nvidia.com/') for key in resource_limits):
-            labels[GPU_POD_LABEL_KEY] = GPU_POD_LABEL_VALUE
+        # # 检查是否为GPU实例并添加相应标签
+        # if any(key.startswith('nvidia.com/') for key in resource_limits):
+        #     labels[GPU_POD_LABEL_KEY] = GPU_POD_LABEL_VALUE
 
         return labels
 
@@ -1341,11 +1343,7 @@ class AiInstanceService:
 
                         # 明确退出函数
                         return
-                    else:
-                        if pod.spec.node_name:
-                            print("")
-                            # 处理pod 未运行场景
-                            self.handle_cci_node_resource_info(instance_id, k8s_id, current_node_name)
+
 
                     # 等待3秒后再次检查
                     await asyncio.sleep(3)
@@ -1385,9 +1383,8 @@ class AiInstanceService:
                 instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(instance_id)
                 compute_resource_dict = json.loads(instance_info_db.instance_config) if instance_info_db else {}
                 # 更新资源使用量
-                # limit_resources = pod.spec.containers[0].resources.limits
-                # # 转换并累加CPU使用量
-                # new_cpu_used = self.convert_cpu_to_core(limit_resources.get('cpu', '0'))
+
+                #  转换并累加CPU使用量
                 if node_resource_db.cpu_used:
                     # 使用float来处理小数
                     total_cpu = float(node_resource_db.cpu_used) + float(compute_resource_dict['compute_cpu'])
@@ -1396,7 +1393,6 @@ class AiInstanceService:
                     node_resource_db.cpu_used = float(compute_resource_dict['compute_cpu'])
 
                 # 转换并累加内存使用量
-                # new_memory_used = self.convert_memory_to_gb(limit_resources.get('memory', '0'))
                 if node_resource_db.memory_used:
                     # 使用float来处理小数
                     total_memory = float(node_resource_db.memory_used) + float(compute_resource_dict['compute_memory'])
@@ -1405,10 +1401,9 @@ class AiInstanceService:
                     node_resource_db.memory_used = float(compute_resource_dict['compute_memory'])
 
                 # 累加存储使用量
-                # new_storage_used = self.convert_storage_to_gb(SYSTEM_DISK_SIZE_DEFAULT)
                 if node_resource_db.storage_used:
                     # 使用float来处理小数
-                    total_storage = float(node_resource_db.storage_used) + 50
+                    total_storage = float(node_resource_db.storage_used) + float(self.convert_storage_to_gb(SYSTEM_DISK_SIZE_DEFAULT))
                     node_resource_db.storage_used = str(total_storage)
                 else:
                     node_resource_db.storage_used = 50

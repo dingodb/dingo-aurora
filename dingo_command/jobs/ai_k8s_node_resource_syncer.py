@@ -209,21 +209,8 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
         # 汇总所有POD的资源使用量
         for pod in pods:
             for container in pod.spec.containers:
-                # CPU
-                if container.resources.limits and 'cpu' in container.resources.limits:
-                    total_usage['cpu'] += float(ai_instance_service.convert_cpu_to_core(
-                        container.resources.limits['cpu'])
-                    )
-
-                # 内存
-                if container.resources.limits and 'memory' in container.resources.limits:
-                    total_usage['memory'] += float(ai_instance_service.convert_memory_to_gb(
-                        container.resources.limits['memory'])
-                    )
-
                 # 存储
                 total_usage['ephemeral-storage'] +=  float(ai_instance_service.convert_storage_to_gb(SYSTEM_DISK_SIZE_DEFAULT))
-
 
                 # GPU
                 if container.resources.limits:
@@ -232,6 +219,21 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
                             total_usage['gpu'] += int(value)
                             gpu_model = key
                             total_usage['gpu_pod_count'] += 1
+                            # CPU
+                            if 'cpu' in container.resources.limits:
+                                total_usage['cpu'] += float(ai_instance_service.convert_cpu_to_core(
+                                    container.resources.limits['cpu'])
+                                )
+
+                            # 内存
+                            if 'memory' in container.resources.limits:
+                                total_usage['memory'] += float(ai_instance_service.convert_memory_to_gb(
+                                    container.resources.limits['memory'])
+                                )
+                        elif 'dc.com/cpu-pod-slot':
+                            total_usage['cpu'] += int(value)
+                            total_usage['memory'] += int(value) * 2
+
 
         # 更新数据库中的已使用量
         node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(k8s_id, node_name)
