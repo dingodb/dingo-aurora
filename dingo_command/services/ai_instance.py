@@ -464,7 +464,7 @@ class AiInstanceService:
         )
 
         if returncode != 0:
-            raise Exception(f"Harbor login failed: {output}")
+            raise Exception(f"Harbor login returncode:{returncode}, failed: {output}")
 
     async def _commit_container(self, core_k8s_client, nerdctl_api_pod, clean_container_id, image_name):
         """执行commit操作"""
@@ -704,7 +704,9 @@ class AiInstanceService:
             #     effect="NoSchedule"
             # ))
         elif instance_config.compute_cpu:
-            resource_limits= {"dc.com/cpu-pod-slot": int(instance_config.compute_cpu)}
+            resource_limits= {"dc.com/cpu-pod-slot": int(instance_config.compute_cpu),
+                              "cpu": int(instance_config.compute_cpu),
+                              'memory': instance_config.compute_memory + "Gi"}
 
         return {
             'resource_limits': resource_limits,
@@ -1204,7 +1206,7 @@ class AiInstanceService:
                 print(f"ai instance[{id}] push image flag: {commit_push_image_flag}")
                 if commit_push_image_flag != "true":
                     print(
-                        f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] push image image_tag: [{image_name}:{image_tag}] failed")
+                        f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] commit or push image image_tag: [{image_name}:{image_tag}] failed")
                     ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
                     ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
                     AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
