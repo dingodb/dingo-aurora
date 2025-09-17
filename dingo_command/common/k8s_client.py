@@ -27,7 +27,8 @@ def set_netns(netns_name):
         print(f"已切换到网络命名空间: {netns_name}")
     finally:
         os.close(fd)
-        
+
+
 class K8sClient:
     """
     一个统一的 Kubernetes API 客户端，支持查询、创建内置资源和自定义资源。
@@ -92,6 +93,7 @@ class K8sClient:
             print(f"获取 Kubernetes 版本信息失败: {e}")
             # 默认假设为较新版本
             return "1.25"
+
     def _infer_kind_from_resource_type(self, resource_type: str) -> str:
         """
         根据资源类型（复数形式）推断对应的 Kind（单数形式）。
@@ -343,7 +345,15 @@ class K8sClient:
                 keys = path.split('.')
                 value = obj
                 for key in keys:
-                    if isinstance(value, dict):
+                    if key == "create_time":
+                        key = "creationTimestamp"
+                    if key in ("status", "creationTimestamp", "labels", "name"):
+                        if isinstance(value, dict):
+                            if key == "status":
+                                value = value.get("status").get("phase")
+                                continue
+                            value = value.get("metadata").get(key)
+                    elif isinstance(value, dict):
                         value = value.get(key)
                     else:
                         return None
@@ -354,7 +364,6 @@ class K8sClient:
         def sort_key(item: Dict[str, Any]):
             """排序键函数"""
             value = get_nested_value(item, sort_by)
-            
             # 处理不同类型的值
             if value is None:
                 return ""
@@ -369,7 +378,7 @@ class K8sClient:
                 return str(value).lower()
 
         try:
-            reverse = sort_order.lower() == 'desc'
+            reverse = sort_order.lower() == 'descend'
             return sorted(items, key=sort_key, reverse=reverse)
         except Exception as e:
             print(f"排序时发生错误: {e}")
@@ -585,6 +594,7 @@ class K8sClient:
                 filtered_items.append(item)
         
         return filtered_items
+
     def _paginate_items(self, items: List[Dict[str, Any]], page: int, page_size: int) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
         对资源列表进行分页处理。
@@ -632,6 +642,7 @@ class K8sClient:
         }
         
         return paginated_items, pagination_metadata
+
     def _convert_k8s_object_to_dict(self, obj: Any) -> Dict[str, Any]:
         """
         将 K8s 对象安全地转换为字典格式，确保包含 apiVersion 和 kind。
@@ -664,6 +675,7 @@ class K8sClient:
         if 'kind' not in result or not result.get('kind'):
             result['kind'] = obj.get('kind', 'Pod')  # 默认值为 Pod
         return result
+
     def list_resource(
             self,
             resource_type: str,
@@ -703,31 +715,28 @@ class K8sClient:
 
             # 获取资源列表
             items = resource_list.items if hasattr(resource_list, 'items') else []
-            
+
             # 转换为字典格式
             items_dict = []
             for item in items:
                 items_dict.append(self._convert_k8s_object_to_dict(item))
-            
             # 创建资源工厂
             factory = ResourceClientFactory(self)
             items_dict = factory.list(items_dict, resource_type = resource_type, namespace=namespace, label_selector=label_selector, field_selector=field_selector, filters=search_terms)
-        #    # 应用多个自定义过滤器
-        #     if search_terms:
-        #         for term in search_terms:
-        #             # 这里假设 term 是一个简单的字符串，可以是字段名或值
-        #             if '=' in term:
-        #                 key, value = term.split('=', 1)
-        #                 items_dict = self._filter_by_key_value(items, key.strip(), value.strip())
-        #             else:
-        #                 # 如果没有 '=', 则默认按 name 过滤
-        #                 items_dict = self._filter_by_key_value(items, 'name', term.strip())
-                    
-                        
-                            
-                    #result['total_count'] = len(result['items'])
-                
-                # 应用排序
+           # 应用多个自定义过滤器
+            if search_terms:
+                tmp_items_dict = []
+                for term in search_terms:
+                    # 这里假设 term 是一个简单的字符串，可以是字段名或值
+                    if '=' in term:
+                        key, value = term.split('=', 1)
+                        if key == "name":
+                            for item in items_dict:
+                                if value.lower() in item.get('metadata', {}).get('name', '').lower():
+                                    tmp_items_dict.append(item)
+                items_dict = tmp_items_dict
+
+            # 应用排序
             if sort_by:
                 items_dict = self._sort_resources(items_dict, sort_by, sort_order)
             # 应用客户端分页
@@ -771,7 +780,6 @@ class K8sClient:
                 'metadata': {'error': str(e)},
                     'total_count': 0
                 }
-
 
     def create_resource(
         self,
@@ -1090,6 +1098,7 @@ class K8sClient:
             propagation_policy=propagation_policy,
             dry_run=dry_run
         )
+
     def update_resource(
         self,
         resource_body: Dict[str, Any],
