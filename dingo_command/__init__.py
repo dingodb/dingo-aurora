@@ -43,4 +43,4 @@ def init_openstack_project_and_network():
             }
         })
 # 初始化时自动调用
-init_openstack_project_and_network()
+#init_openstack_project_and_network()
