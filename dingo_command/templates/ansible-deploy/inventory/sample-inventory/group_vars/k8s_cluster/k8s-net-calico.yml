@@ -91,10 +91,10 @@ calico_network_backend: bird
 
 # IP in IP and VXLAN is mutually exclusive modes.
 # set IP in IP encapsulation mode: "Always", "CrossSubnet", "Never"
-#calico_ipip_mode: 'CrossSubnet'
+calico_ipip_mode: 'CrossSubnet'
 
 # set VXLAN encapsulation mode: "Always", "CrossSubnet", "Never"
-calico_vxlan_mode: 'CrossSubnet'
+calico_vxlan_mode: 'Never'
 
 # set VXLAN port and VNI
 # calico_vxlan_vni: 4096

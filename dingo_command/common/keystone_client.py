@@ -3,10 +3,18 @@ from keystoneclient.v3 import client as keystone_client
 from dingo_command.common import CONF
 
 class KeystoneClient:
-    def __init__(self, token):
+    def __init__(self, token, project_id=None):
         # 使用 keystoneauth1 session 初始化 keystoneclient
         loader = loading.get_plugin_loader('token')
-        auth = loader.load_from_options(token=token, auth_url=CONF.nova.auth_url)
+        auth_kwargs = {
+            'token': token,
+            'auth_url': CONF.nova.auth_url
+        }
+        
+        # 添加项目信息以获取完整的服务目录
+        if project_id:
+            auth_kwargs['project_id'] = project_id
+        auth = loader.load_from_options(**auth_kwargs)
         sess = session.Session(auth=auth)
         self.client = keystone_client.Client(session=sess)
 

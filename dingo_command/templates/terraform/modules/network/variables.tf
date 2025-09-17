@@ -21,6 +21,10 @@ variable "port_security_enabled" {
   type = bool
 }
 
+variable "attached_router" {
+  type = bool
+}
+
 variable "subnet_cidr" {}
 
 variable "use_neutron" {}

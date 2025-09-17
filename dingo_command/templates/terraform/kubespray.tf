@@ -25,6 +25,7 @@ module "network" {
   token = var.token
   auth_url = var.auth_url
   tenant_id = var.tenant_id
+  attached_router = var.attached_router
 }
 
 module "compute" {
@@ -69,8 +70,8 @@ module "compute" {
   flavor_gfs_node                              = var.flavor_gfs_node
   bus_network_name                             = var.bus_network_name
   admin_network_name                           = var.admin_network_name
-
-  #bus_network_id                               = module.network.bus_network_id
+  pod_cidr                                     = var.pod_cidr
+  #bus_network_id                              = module.network.bus_network_id
   network_router_id                            = module.network.router_id
   admin_network_id                             = module.network.admin_network_id
   flavor_bastion                               = var.flavor_bastion
