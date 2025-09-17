@@ -172,9 +172,11 @@ async def delete_custom_projects(
 )
 async def get_custom_projects_images(
     project_name: str = Query(..., embed=True, description="项目名称"),
+    page: int = Query(1, description="页码"),
+    page_size: int = Query(10, description="页数量大小"),
 ):
     try:
-        result = harbor_service.get_custom_projects_images(project_name=project_name)
+        result = harbor_service.get_custom_projects_images(project_name=project_name, page=page, page_size=page_size)
         return result
     except Exception as e:
         import traceback
@@ -207,3 +209,24 @@ async def delete_custom_projects_images(
         raise HTTPException(
             status_code=400, detail=f"delete custom projects images error: {str(e)}"
         )
+
+# 删除自定义镜像仓库镜像TAG
+@router.post(
+    "/harbor/custom/project/images/tag/delete",
+    summary="删除自定义镜像仓库镜像TAG",
+    description="删除自定义镜像仓库镜像TAG",
+)
+async def delete_custom_projects_images_tag(
+    project_name: str = Body(..., description="项目名称"),
+    repository_name: str = Body(..., description="镜像仓库名称"),
+    digest: str = Body(..., description="镜像TAG"),
+):  
+    try:
+        result = harbor_service.delete_custom_projects_images_tag(
+            project_name=project_name, repository_name=repository_name, digest=digest
+        )
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"delete custom projects images tag error: {str(e)}")

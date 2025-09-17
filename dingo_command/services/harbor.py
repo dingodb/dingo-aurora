@@ -239,6 +239,7 @@ class HarborService:
                         labels_list = []
                         tags = artifact.get("tags", [])
                         labels = artifact.get("labels", [])
+                        digest = artifact.get("digest", "")
                         if labels:
                             for label in labels:
                                 labels_list.append(label.get("name"))
@@ -251,7 +252,8 @@ class HarborService:
                             tags_dic = dict(
                                 tag_name=tag_name, 
                                 tag_push_time=tag_push_time,
-                                labels_list=labels_list
+                                labels_list=labels_list,
+                                digest=digest
                             )
                         # else:
                         #     # 没有标签的情况
@@ -316,6 +318,7 @@ class HarborService:
                     labels_list = []
                     tags = artifact.get("tags", [])
                     labels = artifact.get("labels", [])
+                    digest = artifact.get("digest", "")
                     if labels:
                         for label in labels:
                             labels_list.append(label.get("name"))
@@ -328,7 +331,8 @@ class HarborService:
                         tags_dic = dict(
                             tag_name=tag_name, 
                             tag_push_time=tag_push_time,
-                            labels_list=labels_list
+                            labels_list=labels_list,
+                            digest=digest
                         )
                     # else:
                     #     # 没有标签的情况
@@ -356,6 +360,174 @@ class HarborService:
                 "status": True,
                 "code": 200,
                 "message": "获取公共仓库镜像成功",
+                "page_size": repo_count,
+                "data": project_repositories_list,
+            }
+
+    # 获取私有基础镜像
+    def get_private_base_image(
+        self,
+        project_name: str = "alayanew-public",
+        image_name="",
+        page: int = 1,
+        page_size: int = 100,
+    ) -> dict:
+        repo_count = 0
+        if image_name:
+            project_repositories = self.harbor.get_project_repositories(
+                project_name, page=page, page_size=page_size, get_all=True
+            )
+            if not project_repositories["status"]:
+                return project_repositories
+
+            project_repositories_list = []
+            repo_count = len(project_repositories["data"])
+            # 处理每个镜像仓库
+            for repository in project_repositories["data"]:
+                # 提取仓库名称（去除项目前缀）
+                repository_name = repository["name"].replace(
+                    f"{project_name}/", "", 1
+                )  # 只替换第一个
+
+                if image_name in repository_name:
+                    # 更新仓库信息
+                    repository.update(dict(repository_name=repository_name))
+                    repository.update(dict(project_name=project_name))
+                    repository.update(
+                        dict(
+                            pull_command=f"docker pull {clean_url}/{project_name}/{repository_name}"
+                        )
+                    )
+                    repository.update(dict(image_url=clean_url))
+
+                    # 获取镜像仓库的标签和详细信息
+                    public_project_artifacts = self.harbor.get_repository_artifacts(
+                        project_name, repository_name
+                    )
+
+                    tags_list = []
+                    # 处理每个镜像标签
+                    for artifact in public_project_artifacts["data"]:
+                        labels_list = []
+                        tags = artifact.get("tags", [])
+                        labels = artifact.get("labels", [])
+                        digest = artifact.get("digest", "")
+                        if labels:
+                            for label in labels:
+                                labels_list.append(label.get("name"))
+                        tags_dic = {}
+
+                        if tags:
+                            # 获取标签信息
+                            tag_name = tags[0]["name"]
+                            tag_push_time = tags[0]["push_time"]
+                            tags_dic = dict(
+                                tag_name=tag_name, 
+                                tag_push_time=tag_push_time,
+                                labels_list=labels_list,
+                                digest=digest
+                            )
+                        # else:
+                        #     # 没有标签的情况
+                        #     tags_dic = dict(tag_name="none", tag_push_time="none")
+
+                            # 获取并格式化镜像大小
+                            size_bytes = artifact.get("size", 0)
+                            # 根据大小动态选择单位
+                            if size_bytes >= 1024 * 1024 * 1024:  # 大于等于1GB
+                                size_formatted = (
+                                    f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
+                                )
+                            else:  # 小于1GB，使用MB
+                                size_formatted = f"{size_bytes / (1024 * 1024):.2f} MB"
+
+                            tags_dic.update(dict(size=size_formatted))
+                            tags_list.append(tags_dic)
+
+                    # 更新仓库的标签与labels信息
+                    repository.update(dict(tags_list=tags_list))
+                    project_repositories_list.append(repository)
+
+            return self.return_response(
+                True, 200, "获取镜像成功", project_repositories_list
+            )
+
+        else:
+            project_repositories = self.harbor.get_project_repositories(
+                project_name, page=page, page_size=page_size, get_all=False
+            )
+            if not project_repositories["status"]:
+                return project_repositories
+            repo_count = len(project_repositories["data"])
+            project_repositories_list = []
+
+            # 处理每个镜像仓库
+            for repository in project_repositories["data"]:
+                # 提取仓库名称（去除项目前缀）
+                repository_name = repository["name"].replace(
+                    f"{project_name}/", "", 1
+                )  # 只替换第一个
+
+                # 更新仓库信息
+                repository.update(dict(repository_name=repository_name))
+                repository.update(dict(project_name=project_name))
+                repository.update(
+                    dict(
+                        pull_command=f"docker pull {clean_url}/{project_name}/{repository_name}"
+                    )
+                )
+                repository.update(dict(image_url=clean_url))
+
+                # 获取镜像仓库的标签和详细信息
+                public_project_artifacts = self.harbor.get_repository_artifacts(
+                    project_name, repository_name
+                )
+
+                tags_list = []
+                # 处理每个镜像标签
+                for artifact in public_project_artifacts["data"]:
+                    labels_list = []
+                    tags = artifact.get("tags", [])
+                    labels = artifact.get("labels", [])
+                    digest = artifact.get("digest", "")
+                    if labels:
+                        for label in labels:
+                            labels_list.append(label.get("name"))
+                    tags_dic = {}
+
+                    if tags:
+                        # 获取标签信息
+                        tag_name = tags[0]["name"]
+                        tag_push_time = tags[0]["push_time"]
+                        tags_dic = dict(
+                            tag_name=tag_name, 
+                            tag_push_time=tag_push_time,
+                            labels_list=labels_list,
+                            digest=digest
+                        )
+                    # else:
+                    #     # 没有标签的情况
+                    #     tags_dic = dict(tag_name="none", tag_push_time="none")
+
+                        # 获取并格式化镜像大小
+                        size_bytes = artifact.get("size", 0)
+                        # 根据大小动态选择单位
+                        if size_bytes >= 1024 * 1024 * 1024:  # 大于等于1GB
+                            size_formatted = f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
+                        else:  # 小于1GB，使用MB
+                            size_formatted = f"{size_bytes / (1024 * 1024):.2f} MB"
+
+                        tags_dic.update(dict(size=size_formatted))
+                        tags_list.append(tags_dic)
+
+                # 更新仓库的标签与labels信息
+                repository.update(dict(tags_list=tags_list))
+                project_repositories_list.append(repository)
+
+            return {
+                "status": True,
+                "code": 200,
+                "message": "获取私有仓库镜像成功",
                 "page_size": repo_count,
                 "data": project_repositories_list,
             }
@@ -814,7 +986,7 @@ class HarborService:
         return delete_custom_projects_response
 
     # 获取指定自定义仓库镜像
-    def get_custom_projects_images(self, project_name: str) -> dict:
+    def get_custom_projects_images(self, project_name: str, page: int = 1, page_size: int = 100) -> dict:
         """
         获取指定自定义仓库项目中的所有镜像信息
 
@@ -862,12 +1034,10 @@ class HarborService:
                 print(f"获取失败: {result['message']}")
 
         Note:
-            - 该方法复用了get_public_base_image的逻辑
-            - 返回的数据结构与get_public_base_image一致
             - 镜像大小会自动格式化为GB或MB单位
             - 如果镜像没有标签，tag_name和tag_push_time将显示为'none'
         """
-        get_custom_projects_images_response = self.get_public_base_image(project_name)
+        get_custom_projects_images_response = self.get_private_base_image(project_name, page=page, page_size=page_size)
         return get_custom_projects_images_response
 
     # 删除指定自定义仓库镜像
@@ -930,3 +1100,11 @@ class HarborService:
             project_name, repository_name
         )
         return delete_project_repository_response
+
+
+    # 删除指定自定义仓库镜像TAG
+    def delete_custom_projects_images_tag(self, project_name: str, repository_name: str,digest: str) -> dict:
+        delete_custom_projects_images_tag_response = self.harbor.delete_custom_projects_images_tag(
+            project_name, repository_name, digest
+        )
+        return delete_custom_projects_images_tag_response
