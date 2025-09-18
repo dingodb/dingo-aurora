@@ -36,9 +36,8 @@ from dingo_command.utils.constant import CCI_NAMESPACE_PREFIX, RESOURCE_TYPE_KEY
     APP_LABEL, AI_INSTANCE_CM_MOUNT_PATH_SSHKEY, AI_INSTANCE_CM_MOUNT_PATH_SSHKEY_SUB_PATH, CONFIGMAP_PREFIX, \
     DEV_TOOL_JUPYTER, \
     SAVE_TO_IMAGE_CCI_PREFIX, GPU_POD_LABEL_KEY, GPU_POD_LABEL_VALUE, CCI_STS_PREFIX, CCI_STS_POD_SUFFIX, INGRESS_SIGN, \
-    HYPHEN_SIGN, POINT_SIGN, \
-    CCI_JUPYTER_PREFIX, JUPYTER_INIT_MOUNT_NAME, JUPYTER_INIT_MOUNT_PATH, HARBOR_PULL_IMAGE_SUFFIX, \
-    SYSTEM_DISK_SIZE_DEFAULT, POD_STORAGE_LIMIT_ANNOTATIONS, CPU_OVER_COMMIT, MIN_CPU_REQUEST
+    HYPHEN_SIGN, POINT_SIGN, JUPYTER_INIT_MOUNT_NAME, JUPYTER_INIT_MOUNT_PATH, HARBOR_PULL_IMAGE_SUFFIX, \
+    CPU_OVER_COMMIT, MIN_CPU_REQUEST, CPU_POD_SLOT_KEY
 from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client, get_k8s_networking_client
 from dingo_command.services.custom_exception import Fail
 
@@ -524,6 +523,7 @@ class AiInstanceService:
         )
 
         if returncode != 0:
+            print(f"Harbor login returncode:{returncode}, failed: {output}")
             raise Exception(f"Harbor login returncode:{returncode}, failed: {output}")
 
     @_create_retry_decorator()  # 应用装饰器工厂
@@ -539,6 +539,7 @@ class AiInstanceService:
         )
 
         if returncode != 0:
+            print(f"Container id {clean_container_id} Commit returncode:{returncode}, failed: {output}")
             raise Exception(f"Container id {clean_container_id} Commit returncode:{returncode}, failed: {output}")
 
     def is_retryable_error(self, exception):
@@ -579,6 +580,7 @@ class AiInstanceService:
         )
 
         if returncode != 0:
+            print(f"Image {image_name} Push returncode:{returncode}, failed: {output}")
             raise Exception(f"Image {image_name} Push returncode:{returncode}, failed: {output}")
 
     def get_ai_instance_info_by_id(self, id):
@@ -773,6 +775,7 @@ class AiInstanceService:
 
     def _prepare_resource_config(self, instance_config):
         resource_limits = []
+        resource_requests = []
         node_selector_gpu = {}
         toleration_gpus = []
 
@@ -784,7 +787,7 @@ class AiInstanceService:
             resource_limits = {'cpu': int(instance_config.compute_cpu), 'memory': instance_config.compute_memory + "Gi",
                                gpu_card_info.gpu_key: instance_config.gpu_count, 'ephemeral-storage': f"{int(instance_config.system_disk_size) * 1024 + 100}Mi"}
             # 定义资源requests
-            resource_requests = {'cpu': self.safe_divide(instance_config.compute_cpu), 'memory': instance_config.compute_memory + "Gi",
+            resource_requests = {'cpu': int(instance_config.compute_cpu), 'memory': instance_config.compute_memory + "Gi",
                                gpu_card_info.gpu_key: instance_config.gpu_count, 'ephemeral-storage': f"{int(instance_config.system_disk_size) * 1024 + 100}Mi"}
             # node_selector_gpu['nvidia.com/gpu.product'] = gpu_card_info.gpu_node_label
             # 容忍度
@@ -794,12 +797,18 @@ class AiInstanceService:
             #     effect="NoSchedule"
             # ))
         elif instance_config.compute_cpu:
-            resource_limits= {"dc.com/cpu-pod-slot": int(instance_config.compute_cpu),
+            # 定义资源requests
+            resource_requests = {'cpu': self.safe_divide(instance_config.compute_cpu),
+                                 'memory': instance_config.compute_memory + "Gi",
+                                 'ephemeral-storage': f"{int(instance_config.system_disk_size) * 1024 + 100}Mi"}
+            resource_limits= {CPU_POD_SLOT_KEY: int(instance_config.compute_cpu),
                               "cpu": int(instance_config.compute_cpu),
-                              'memory': instance_config.compute_memory + "Gi"}
+                              'memory': instance_config.compute_memory + "Gi",
+                              'ephemeral-storage': f"{int(instance_config.system_disk_size) * 1024 + 100}Mi"}
 
         return {
             'resource_limits': resource_limits,
+            'resource_requests': resource_requests,
             'node_selector_gpu': node_selector_gpu,
             'toleration_gpus': toleration_gpus,
             "system_disk_size": instance_config.system_disk_size
@@ -935,6 +944,7 @@ class AiInstanceService:
         """
         # 解包资源配置
         resource_limits = resource_config['resource_limits']
+        resource_requests = resource_config['resource_requests']
         node_selector_gpu = resource_config['node_selector_gpu']
         toleration_gpus = resource_config['toleration_gpus']
 
@@ -1021,7 +1031,7 @@ class AiInstanceService:
             ],
             ports=[V1ContainerPort(container_port=22), V1ContainerPort(container_port=8888), V1ContainerPort(container_port=9001), V1ContainerPort(container_port=9002)],  # 固定端口
             resources=V1ResourceRequirements(
-                requests=resource_limits,
+                requests=resource_requests,
                 limits=resource_limits
             ),
             volume_mounts=volume_mounts,
@@ -1161,7 +1171,7 @@ class AiInstanceService:
             raise Fail(f"ai instance[{instance_id}] is not found", error_message=f"容器实例[{instance_id}找不到]")
 
         # 检查实例状态，只有 stopped 状态的实例才能开机
-        if ai_instance_info_db.instance_status != AiInstanceStatus.STOPPED.name:
+        if ai_instance_info_db.instance_status != AiInstanceStatus.STOPPED.name and ai_instance_info_db.instance_status != AiInstanceStatus.ERROR.name:
             raise Fail(f"ai instance[{instance_id}] status is {ai_instance_info_db.instance_status}, cannot start",
                        error_message=f" 容器实例[{instance_id}]状态为{ai_instance_info_db.instance_status}，无法开机")
 
@@ -1260,6 +1270,7 @@ class AiInstanceService:
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if not ai_instance_info_db:
                 raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
+            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} start to stop ai instance[{id}]")
 
             # 异步保存镜像
             self._stop_save_cci_to_image_task(id)
@@ -1428,6 +1439,12 @@ class AiInstanceService:
                         pod_located_node_name = current_node_name
                         self.update_pod_status_and_node_name_in_db(instance_id, pod_real_status, pod_located_node_name)
                         print(f"Pod {pod_name} 状态/node name更新为: {pod_real_status}_{pod_located_node_name}")
+                        if current_real_status in ["Error", "CrashLoopBackOff", "ImagePullBackOff", "CreateContainerError",
+                                                   "CreateContainerConfigError", "OOMKilled", "ContainerCannotRun", "Completed", "Failed"]:
+                            # 副本数改成0
+                            self.set_k8s_sts_replica_by_instance_id(instance_id, 0)
+                            return
+
 
                     # 如果 Pod 处于 Running 状态，退出循环
                     if pod_real_status == "Running":
@@ -1947,6 +1964,8 @@ class AiInstanceService:
                 'node_name': node_resource_db.node_name,
                 'less_gpu_pod_total': node_resource_db.less_gpu_pod_total,
                 'less_gpu_pod_count': node_resource_db.less_gpu_pod_count,
+                'cpu_slot_total': node_resource_db.cpu_slot_total,
+                'cpu_slot_used': node_resource_db.cpu_slot_used,
                 'gpu_model': None if not node_resource_db.gpu_model else self.find_gpu_display_by_key(node_resource_db.gpu_model),
                 # GPU资源（整数）
                 'gpu_total': int(gpu_total) if gpu_total else 0,
