@@ -1,8 +1,13 @@
+import uuid
+from datetime import datetime
 from re import S
 from dingo_command.common.harbor_client import HarborAPI
 from typing import Any
 
 from dingo_command.common import CONF
+from dingo_command.db.models.harbor.models import TenantHarborRelation
+from dingo_command.db.models.harbor.sql import HarborRelationSQL
+from dingo_command.services.custom_exception import Fail
 
 base_url = CONF.harbor.base_url
 clean_url = base_url.split("://", 1)[-1]
@@ -1108,3 +1113,59 @@ class HarborService:
             project_name, repository_name, digest
         )
         return delete_custom_projects_images_tag_response
+
+
+    # 添加租户与harbor的关联关系
+    def add_custom_harbor_relation(self, tenant_id: str, harbor_name: str, harbor_password: str):
+        """
+        开通自定义镜像仓库
+        该方法会执行以下操作：
+        1. 关联租户与harbor的关系
+        """
+        # 空
+        if not tenant_id or not harbor_name or not harbor_password:
+            return None
+        # 已存在
+        relation = self.get_custom_harbor_relation(tenant_id)
+        if relation:
+            raise Fail("custom harbor service already exists", "租户的私有仓库已存在")
+        # 声明relation对象
+        relation = TenantHarborRelation(
+            id=uuid.uuid4().hex,
+            tenant_id=tenant_id,
+            harbor_name=harbor_name,
+            harbor_password=harbor_password,
+            create_time=datetime.now(),
+        )
+        # 入库
+        HarborRelationSQL.create_harbor_relation(relation)
+
+    # 删除租户与harbor的关联关系
+    def delete_custom_harbor_relation(self, tenant_id: str):
+        """
+        开通自定义镜像仓库
+        该方法会执行以下操作：
+        1. 删除关联租户与harbor的关系
+        """
+        # 空
+        if not tenant_id:
+            raise Fail("param error", "参数错误")
+        # 查库
+        relation = self.get_custom_harbor_relation(tenant_id)
+        # 不存在
+        if not relation:
+            raise Fail("custom harbor service not exists", "租户的私有仓库不存在")
+        # 入库
+        HarborRelationSQL.delete_harbor_relation_by_id(relation.id)
+        # 调用harbor的自定义仓库接口？？？
+
+    # 查询租户与harbor的关联关系
+    def get_custom_harbor_relation(self, tenant_id: str):
+        """
+        查询自定义镜像仓库，根据租户的id返回，如果存在返回数据数据，不存在返回None
+        """
+        # 空
+        if not tenant_id:
+            return None
+        # 返回数据
+        return HarborRelationSQL.get_harbor_relation_by_tenant_id(tenant_id)

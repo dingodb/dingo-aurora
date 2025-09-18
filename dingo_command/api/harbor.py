@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from fastapi import Query, Body, Header, Depends
+
+from dingo_command.services.custom_exception import Fail
 from dingo_command.services.harbor import HarborService
 from datetime import datetime
 
@@ -230,3 +232,62 @@ async def delete_custom_projects_images_tag(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"delete custom projects images tag error: {str(e)}")
+
+@router.post(
+    "/harbor/custom/service/relation/add",
+    summary="租户私有镜像仓库功能建立关联关系",
+    description="租户私有镜像仓库功能建立关联关系",
+)
+async def add_custom_harbor_relation(
+    tenant_id: str = Body(..., description="租户id"),
+    harbor_name: str = Body(..., description="仓库用户名"),
+    harbor_password: str = Body(..., description="仓库密码"),
+):
+    try:
+        result = harbor_service.add_custom_harbor_relation(
+            tenant_id=tenant_id,
+            harbor_name=harbor_name,
+            harbor_password=harbor_password,
+        )
+        return result
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=400, detail=f"open custom harbor error: {str(e)}"
+        )
+
+@router.post(
+    "/harbor/custom/service/relation/{tenant_id}/delete",
+    summary="租户私有镜像仓库功能删除关联关系",
+    description="租户私有镜像仓库功能删除关联关系",
+)
+async def delete_custom_harbor_relation(tenant_id: str,):
+    try:
+        return harbor_service.delete_custom_harbor_relation(tenant_id)
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=400, detail=f"open custom harbor error: {str(e)}"
+        )
+
+# 获取自定义镜像仓库镜像
+@router.get(
+    "/harbor/custom/service/relation/{tenant_id}",
+    summary="获取租户的私有仓库关联信息",
+    description="根据租户id获取租户的私有仓库关联信息",
+)
+async def get_custom_harbor_relation(tenant_id: str,):
+    try:
+        return harbor_service.get_custom_harbor_relation(tenant_id=tenant_id)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=400, detail=f"get custom harbor error: {str(e)}"
+        )
