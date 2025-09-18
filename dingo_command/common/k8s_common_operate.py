@@ -643,75 +643,64 @@ class K8sCommonOperate:
             print(f"查询Node失败: {e.reason} (状态码: {e.status})")
             raise e.reason
 
-    def create_ns_configmap(self, core_v1: client.CoreV1Api, namespace_name: str, configmap_name: str,
-                            configmap_data: Dict[str, str], is_manager=False, tenant_id=None):
+    def create_ns_configmap(self, core_v1: client.CoreV1Api, namespace_name: str, configmap_name: str, ai_instance_db,
+                            configmap_data: Dict[str, str]):
         """
         创建 ConfigMap
         :param core_v1: CoreV1Api 客户端实例
         :param namespace_name: 命名空间名称
         :param configmap_name: ConfigMap 名称
         """
-        try:
-            if not is_manager:
-                core_v1.read_namespaced_config_map(configmap_name, namespace_name)
-            else:
-                # 把所有的tenant_id为同一个的key_content都租户起来
-                try:
-                    configmap = core_v1.read_namespaced_config_map(configmap_name, namespace_name)
-                    current_keys = configmap.data.get("authorized_keys", "")
-                    if current_keys and not current_keys.endswith("\n"):
-                        current_keys += "\n"
-                    # 如何把这些key_content数据组合起来
-                    query_params = {}
-                    query_params['tenant_id'] = tenant_id
-                    from dingo_command.services.sshkey import KeyService
-                    data = KeyService().list_keys(query_params, 1, -1, None, None)
-                    if data.get("data"):
-                        account_key_list = []
-                        for key in data.get("data"):
-                            account_key_list.append(key.key_content)
-                        key_lines = current_keys.split('\n')
-                        new_key_lines = list(set(account_key_list + key_lines))
-                        # 将剩余的公钥重新组合成字符串
-                        new_keys_content = '\n'.join(new_key_lines)
-                        if new_keys_content and not new_keys_content.endswith('\n'):
-                            new_keys_content += '\n'
-                        configmap.data["authorized_keys"] = new_keys_content
-                        core_v1.patch_namespaced_config_map(
-                            name=configmap_name,
-                            namespace=namespace_name,
-                            body=configmap
-                        )
-                except ApiException as e:
-                    if e.status == 404:
-                        # 创建新的 ConfigMap 对象
-                        new_configmap = client.V1ConfigMap(
-                            api_version="v1",
-                            kind="ConfigMap",
-                            metadata=client.V1ObjectMeta(
-                                name=configmap_name,
-                                namespace=namespace_name
-                            ),
-                            data=configmap_data
-                        )
+        from dingo_command.services.sshkey import KeyService
+        # 如何把这些key_content数据组合起来
+        query_params = {}
+        query_params['user_id'] = ai_instance_db.instance_user_id
+        query_params['tenant_id'] = ai_instance_db.instance_tenant_id
+        data = KeyService().list_keys(query_params, 1, -1, None, None)
+        key_content_list = []
+        if data.get("data"):
+            for key in data.get("data"):
+                key_content_list.append(key.key_content)
+            key_content_list = list(set(key_content_list))
+        else:
+            configmap_data = configmap_data
 
-                        try:
-                            # 创建 ConfigMap
-                            core_v1.create_namespaced_config_map(
-                                namespace=namespace_name,
-                                body=new_configmap
-                            )
-                            LOG.info(f"Successfully created manager ConfigMap '{configmap_name}' "
-                                     f"with the SSH public key.")
-                        except ApiException as e:
-                            raise e
-                    else:
-                        raise e
+        if ai_instance_db.is_manager:
+            if key_content_list:
+                configmap_data = {
+                    "authorized_keys": "\n".join(key_content_list)
+                }
+        else:
+            # 把所有的tenant_id为同一个的key_content都租户起来
+            query_params['tenant_id'] = ai_instance_db.instance_tenant_id
+            query_params['is_manager'] = ai_instance_db.is_manager
+            data = KeyService().list_keys(query_params, 1, -1, None, None)
+            key_content_tmp_list = []
+            if data.get("data"):
+                for key in data.get("data"):
+                    key_content_tmp_list.append(key.key_content)
+                key_content_total_list = list(set(key_content_tmp_list + key_content_list))
+                configmap_data = {
+                    "authorized_keys": "\n".join(key_content_total_list)
+                }
+            else:
+                if key_content_list:
+                    configmap_data = {
+                        "authorized_keys": "\n".join(key_content_list)
+                    }
+        try:
+            # 如果有就修改
+            configmap = core_v1.read_namespaced_config_map(configmap_name, namespace_name)
+            configmap.data["authorized_keys"] = configmap_data["authorized_keys"]
+            core_v1.patch_namespaced_config_map(
+                name=configmap_name,
+                namespace=namespace_name,
+                body=configmap
+            )
         except ApiException as e:
             if e.status == 404:
                 # ConfigMap 不存在，创建新的
-                LOG.info(f"ConfigMap '{configmap_name}' not found in namespace '{namespace_name}'. Creating new one.")
-
+                LOG.info("ConfigMap %s not found in namespace %s. Creating new one.", configmap_name, namespace_name)
                 # 创建新的 ConfigMap 对象
                 new_configmap = client.V1ConfigMap(
                     api_version="v1",
@@ -728,7 +717,7 @@ class K8sCommonOperate:
                         namespace=namespace_name,
                         body=new_configmap
                     )
-                    LOG.info(f"Successfully created new ConfigMap '{configmap_name}' with the SSH public key.")
+                    LOG.info("Successfully created new ConfigMap %s with the SSH public key.", configmap_name)
                 except ApiException as e:
                     raise e
             else:

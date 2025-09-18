@@ -29,6 +29,8 @@ class KeySQL:
                 query = query.filter(KeyInfo.tenant_id == query_params["tenant_id"])
             if "user_id" in query_params and query_params["user_id"]:
                 query = query.filter(KeyInfo.user_id == query_params["user_id"])
+            if "is_manager" in query_params and query_params["is_manager"]:
+                query = query.filter(KeyInfo.is_manager == query_params["is_manager"])
             if "user_name" in query_params and query_params["user_name"]:
                 query = query.filter(KeyInfo.user_name.like(f"%{query_params['user_name']}%"))
             # 总数

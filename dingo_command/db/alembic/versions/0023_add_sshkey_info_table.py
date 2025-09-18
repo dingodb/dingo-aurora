@@ -29,6 +29,7 @@ def upgrade() -> None:
     sa.Column('status', sa.String(length=256), nullable=True),
     sa.Column('status_msg', mysql.LONGTEXT(), nullable=True),
     sa.Column('key_content', mysql.LONGTEXT(), nullable=True),
+    sa.Column("is_manager", sa.Boolean(), nullable=True),
     sa.Column('namespace', sa.String(length=256), nullable=True),
     sa.Column('user_id', sa.String(length=256), nullable=True),
     sa.Column('user_name', sa.String(length=256), nullable=True),
