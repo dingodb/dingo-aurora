@@ -38,7 +38,7 @@ from dingo_command.utils.constant import CCI_NAMESPACE_PREFIX, RESOURCE_TYPE_KEY
     SAVE_TO_IMAGE_CCI_PREFIX, GPU_POD_LABEL_KEY, GPU_POD_LABEL_VALUE, CCI_STS_PREFIX, CCI_STS_POD_SUFFIX, INGRESS_SIGN, \
     HYPHEN_SIGN, POINT_SIGN, \
     CCI_JUPYTER_PREFIX, JUPYTER_INIT_MOUNT_NAME, JUPYTER_INIT_MOUNT_PATH, HARBOR_PULL_IMAGE_SUFFIX, \
-    SYSTEM_DISK_SIZE_DEFAULT, POD_STORAGE_LIMIT_ANNOTATIONS
+    SYSTEM_DISK_SIZE_DEFAULT, POD_STORAGE_LIMIT_ANNOTATIONS, CPU_OVER_COMMIT, MIN_CPU_REQUEST
 from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client, get_k8s_networking_client
 from dingo_command.services.custom_exception import Fail
 
@@ -782,7 +782,10 @@ class AiInstanceService:
                 raise Fail(f"GPU card mapping not found for model: {instance_config.gpu_model}")
 
             resource_limits = {'cpu': int(instance_config.compute_cpu), 'memory': instance_config.compute_memory + "Gi",
-                               gpu_card_info.gpu_key: instance_config.gpu_count}
+                               gpu_card_info.gpu_key: instance_config.gpu_count, 'ephemeral-storage': f"{int(instance_config.system_disk_size) * 1024 + 100}Mi"}
+            # 定义资源requests
+            resource_requests = {'cpu': self.safe_divide(instance_config.compute_cpu), 'memory': instance_config.compute_memory + "Gi",
+                               gpu_card_info.gpu_key: instance_config.gpu_count, 'ephemeral-storage': f"{int(instance_config.system_disk_size) * 1024 + 100}Mi"}
             # node_selector_gpu['nvidia.com/gpu.product'] = gpu_card_info.gpu_node_label
             # 容忍度
             # toleration_gpus.append(V1Toleration(
@@ -2315,3 +2318,16 @@ class AiInstanceService:
         if match:
             return int(match.group(1)), int(match.group(2))
         return 0, 0  # 默认不占用额外资源
+
+
+    def safe_divide(self, cpu_str, divisor=CPU_OVER_COMMIT):
+        try:
+            # 转换为数字
+            cpu_num = float(cpu_str)
+            # 除超分倍数
+            result = cpu_num / divisor
+            # 最小返回0.5 保留两位小数
+            return max(MIN_CPU_REQUEST, round(result, 2))
+        except Exception as e:
+            LOG.error(e)
+            return MIN_CPU_REQUEST  # 默认安全值
