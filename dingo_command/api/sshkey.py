@@ -22,7 +22,7 @@ async def create_key(key: CreateKeyObject):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        Log.error(f"create key error: {str(e)}")
+        Log.error("create key error: %s", str(e))
         raise HTTPException(status_code=400, detail=f"create key error: {str(e)}")
 
 
@@ -59,7 +59,7 @@ async def list_keys(status: str = Query(None, description="status状态"),
     except Exception as e:
         import traceback
         traceback.print_exc()
-        Log.error(f"list keys error: {str(e)}")
+        Log.error("list keys error: %s", str(e))
         raise HTTPException(status_code=400, detail=f"list keys error: {str(e)}")
 
 
@@ -72,7 +72,7 @@ async def delete_key(sshkey_id: str):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        Log.error(f"delete key error: {str(e)}")
+        Log.error("delete key error: %s", str(e))
         raise HTTPException(status_code=400, detail=f"delete key error: {str(e)}")
 
 
@@ -94,5 +94,5 @@ async def get_key(sshkey_id: str):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        Log.error(f"get key error: {str(e)}")
+        Log.error("get key error: %s", str(e))
         raise HTTPException(status_code=400, detail=f"get key error: {str(e)}")

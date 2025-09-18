@@ -658,12 +658,11 @@ class K8sCommonOperate:
         query_params['tenant_id'] = ai_instance_db.instance_tenant_id
         data = KeyService().list_keys(query_params, 1, -1, None, None)
         key_content_list = []
+        configmap_data = configmap_data
         if data.get("data"):
             for key in data.get("data"):
                 key_content_list.append(key.key_content)
             key_content_list = list(set(key_content_list))
-        else:
-            configmap_data = configmap_data
 
         if ai_instance_db.is_manager:
             if key_content_list:
@@ -672,6 +671,7 @@ class K8sCommonOperate:
                 }
         else:
             # 把所有的tenant_id为同一个的key_content都租户起来
+            query_params = {}
             query_params['tenant_id'] = ai_instance_db.instance_tenant_id
             query_params['is_manager'] = ai_instance_db.is_manager
             data = KeyService().list_keys(query_params, 1, -1, None, None)
