@@ -33,6 +33,7 @@ def upgrade() -> None:
         sa.Column("harbor_address", sa.String(length=128), nullable=True, comment='k8s集群使用harbor仓库地址'),
         sa.Column("harbor_username", sa.String(length=128), nullable=True, comment='k8s集群使用harbor仓库用户名'),
         sa.Column("harbor_password", sa.String(length=128), nullable=True,  comment='k8s集群使用harbor仓库密码'),
+        sa.Column("cpu_overcommit_ratio", sa.String(length=128), nullable=True,  comment='CPU超分比'),
         sa.Column("create_time", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP"), comment='创建时间'),
         sa.Column("update_time", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"), comment='更新时间'),
 

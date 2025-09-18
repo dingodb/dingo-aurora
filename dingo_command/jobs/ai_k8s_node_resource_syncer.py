@@ -7,7 +7,7 @@ from dingo_command.common.Enum.AIInstanceEnumUtils import AiInstanceStatus
 from dingo_command.common.k8s_common_operate import K8sCommonOperate
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
 from dingo_command.services.redis_connection import RedisLock, redis_connection
-from dingo_command.utils.constant import SYSTEM_DISK_SIZE_DEFAULT
+from dingo_command.utils.constant import CPU_POD_SLOT_KEY
 from dingo_command.utils.k8s_client import get_k8s_core_client
 from dingo_command.db.models.ai_instance.models import AiK8sNodeResourceInfo
 from dingo_command.services.ai_instance import AiInstanceService
@@ -146,14 +146,26 @@ def sync_node_resource_total(k8s_id, k8s_node):
             LOG.warning(f"Node {k8s_node.metadata.name} has no allocatable resources")
             return False
         internal_ips  = [item.address for item in k8s_node.status.addresses if item.type == 'InternalIP']
+        print(f"sync k8s: {k8s_id} node name:{k8s_node.metadata.name}")
+
+        node_status = "UnReady"
+        # 检查 Node 的状态条件
+        for condition in k8s_node.status.conditions:
+            # 寻找类型为 'Ready' 且状态为 'True' 的条件
+            if condition.type == 'Ready' and condition.status == 'True':
+                node_status = "Ready"
+                break
+
         # 构建资源字典
         node_resource  = {
             'node_name': k8s_node.metadata.name,
             'node_ip': internal_ips[0] if internal_ips else None,
+            'node_status': node_status,
             'standard_resources': {
                 'cpu': ai_instance_service.convert_cpu_to_core(allocatable.get('cpu', '0')),
                 'memory': ai_instance_service.convert_memory_to_gb(allocatable.get('memory', '0Ki')),
-                'ephemeral_storage': ai_instance_service.convert_storage_to_gb(allocatable.get('ephemeral-storage', '0'))
+                'ephemeral_storage': ai_instance_service.convert_storage_to_gb(allocatable.get('ephemeral-storage', '0')),
+                'dc.com/cpu-pod-slot': str(allocatable.get('dc.com/cpu-pod-slot', '0'))
             },
             'extended_resources': {}
         }
@@ -202,7 +214,8 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
             'memory': 0,
             'ephemeral-storage': 0,
             'gpu': 0,
-            'gpu_pod_count': 0
+            'gpu_pod_count': 0,
+            'cpu_slot_used': 0
         }
         gpu_model = None
 
@@ -237,6 +250,7 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
                                     container.resources.limits['memory'])
                                 )
                         elif 'dc.com/cpu-pod-slot' in key:
+                            total_usage['cpu_slot_used'] += int(value)
                             total_usage['cpu'] += int(value)
                             total_usage['memory'] += int(value) * 2
 
@@ -246,6 +260,7 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
         if node_resource_db:
             node_resource_db.less_gpu_pod_count = len(pods) - total_usage['gpu_pod_count']
             node_resource_db.gpu_pod_count = total_usage['gpu_pod_count']
+            node_resource_db.cpu_slot_used = total_usage['cpu_slot_used']
             node_resource_db.cpu_used = str(total_usage['cpu'])
             node_resource_db.memory_used = str(total_usage['memory'])
             node_resource_db.storage_used = str(total_usage['ephemeral-storage'])
@@ -281,6 +296,7 @@ def process_node_total_resource(k8s_id, node_resource):
         existing.cpu_total = node_resource['standard_resources']['cpu']
         existing.memory_total = node_resource['standard_resources']['memory']
         existing.storage_total = node_resource['standard_resources']['ephemeral_storage']
+        existing.cpu_slot_total = node_resource['standard_resources'][CPU_POD_SLOT_KEY]
         existing.gpu_model = gpu_model
         existing.gpu_total = gpu_total
         existing.node_ip = node_resource['node_ip']
@@ -295,7 +311,8 @@ def process_node_total_resource(k8s_id, node_resource):
             memory_total=node_resource['standard_resources']['memory'],
             storage_total=node_resource['standard_resources']['ephemeral_storage'],
             gpu_model=gpu_model,
-            gpu_total=gpu_total
+            gpu_total=gpu_total,
+            cpu_slot_total=node_resource['standard_resources'][CPU_POD_SLOT_KEY]
         )
         ai_k8s_node_resource_db.id = uuid.uuid4().hex
         LOG.info(f"Creating new resource for node {node_name}")
