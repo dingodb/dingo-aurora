@@ -41,6 +41,7 @@ async def get_public_base_image(
 # 添加harbor用户
 @router.post("/harbor/user/add", summary="添加harbor用户", description="添加harbor用户")
 async def add_harbor_user(
+    tenant_id: str = Body(..., description="租户id"),
     username: str = Body(..., description="用户名"),
     password: str = Body(..., description="密码"),
     email: str = Body("", description="邮箱"),
@@ -55,6 +56,7 @@ async def add_harbor_user(
         if not comment:
             comment = "接口添加"
         result = harbor_service.add_harbor_user(
+            tenant_id=tenant_id,
             username=username,
             password=password,
             email=email,
@@ -303,7 +305,13 @@ async def delete_custom_harbor_relation(tenant_id: str,):
 )
 async def get_custom_harbor_relation(tenant_id: str,):
     try:
-        return harbor_service.get_custom_harbor_relation(tenant_id=tenant_id)
+        harbor_relation = harbor_service.get_custom_harbor_relation(tenant_id=tenant_id)
+        return {
+            "status": True,
+            "code": 200,
+            "message": "查询租户与harbor的关联关系成功",
+            "data": harbor_relation,
+        }
     except Exception as e:
         import traceback
         traceback.print_exc()
