@@ -56,14 +56,14 @@ resource "openstack_networking_subnet_v2" "bussiness" {
 
 // 如果subnet不在路由器的external_fixed_ip中，则将其绑定到路由器
 resource "openstack_networking_router_interface_v2" "cluster_interface" {
-  count     = var.use_existing_network && !var.attached_router && var.admin_subnet_id ！= None && var.admin_subnet_id != ""? 1 : 0
-  router_id = local.router_id
+  count     = var.use_existing_network && !var.attached_router && var.admin_subnet_id != None && var.admin_subnet_id != ""? 1 : 0
+  router_id = var.router_id
   subnet_id = var.admin_subnet_id
 }
 
 // 如果subnet不在路由器的external_fixed_ip中，则将其绑定到路由器
 resource "openstack_networking_router_interface_v2" "cluster_interface_n" {
   count     = var.use_existing_network ? 0 : 1
-  router_id = local.router_id
+  router_id = var.router_id
   subnet_id = resource.openstack_networking_subnet_v2.cluster[0].id
 }

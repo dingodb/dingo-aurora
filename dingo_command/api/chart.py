@@ -252,6 +252,8 @@ async def sync_repo(repo_id: Union[str, int], background_tasks: BackgroundTasks)
             raise ValueError("repo is updating, please wait")
         if repo_data.status == util.repo_status_sync:
             raise ValueError("repo is syncing, please wait")
+        if repo_data.status == util.repo_status_stop:
+            raise ValueError("repo is unavailable, only available repo can be sync")
         data = chart_service.get_repo_from_name(repo_id)
         if data.get("data"):
             chart_service.delete_charts_repo_id(data.get("data"))
