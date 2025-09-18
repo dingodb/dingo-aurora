@@ -297,6 +297,7 @@ def process_node_total_resource(k8s_id, node_resource):
         existing.memory_total = node_resource['standard_resources']['memory']
         existing.storage_total = node_resource['standard_resources']['ephemeral_storage']
         existing.cpu_slot_total = node_resource['standard_resources'][CPU_POD_SLOT_KEY]
+        existing.node_status = node_resource['node_status']
         existing.gpu_model = gpu_model
         existing.gpu_total = gpu_total
         existing.node_ip = node_resource['node_ip']
@@ -306,6 +307,7 @@ def process_node_total_resource(k8s_id, node_resource):
         ai_k8s_node_resource_db = AiK8sNodeResourceInfo(
             k8s_id=k8s_id,
             node_name=node_name,
+            node_status=node_resource['node_status'],
             node_ip=node_resource['node_ip'],
             cpu_total=node_resource['standard_resources']['cpu'],
             memory_total=node_resource['standard_resources']['memory'],
