@@ -540,6 +540,7 @@ class HarborService:
     # 添加harbor用户
     def add_harbor_user(
         self,
+        tenant_id: str,
         username: str,
         password: str,
         email: str,
@@ -612,15 +613,21 @@ class HarborService:
             - 建议在生产环境中使用强密码策略
             - 用户创建成功后需要手动分配项目权限
         """
-        result = self.harbor.create_user(
-            username=username,
-            email=email,
-            password=password,
-            realname=realname,
-            comment=comment,
-            admin=False,
-        )
-        return result
+        # 检查用户是否存在
+        get_custom_harbor_relation_response = self.get_custom_harbor_relation(tenant_id)
+        if not get_custom_harbor_relation_response:
+            self.add_custom_harbor_relation(tenant_id, username, password)
+            result = self.harbor.create_user(
+                username=username,
+                email=email,
+                password=password,
+                realname=realname,
+                comment=comment,
+                admin=False,
+            )
+            return result
+        else:
+            return self.return_response(False, 409, f"用户已存在: {username}")
 
     # 添加自定义镜像仓库
     def add_custom_projects(
