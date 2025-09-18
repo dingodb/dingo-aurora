@@ -867,8 +867,7 @@ class AiInstanceService:
         # 4、创建sshkey的configmap（如果有就跳过，没有就创建）
         configmap_name = CONFIGMAP_PREFIX + ai_instance.user_id
         k8s_common_operate.create_ns_configmap(
-            self.core_k8s_client, namespace_name, configmap_name, {"authorized_keys": ""},
-            ai_instance_db
+            self.core_k8s_client, namespace_name, configmap_name, ai_instance_db, {"authorized_keys": ""}
         )
 
 
@@ -1433,7 +1432,7 @@ class AiInstanceService:
                     if current_real_status != pod_real_status or current_node_name != pod_located_node_name:
                         pod_real_status = current_real_status
                         pod_located_node_name = current_node_name
-                        self.update_pod_status_and_node_name_in_db(instance_id, pod_real_status, pod_located_node_name)
+                        self.update_pod_status_and_node_name_in_db(instance_id, pod_real_status, pod_located_node_name, error_msg)
                         print(f"Pod {pod_name} 状态/node name更新为: {pod_real_status}_{pod_located_node_name}")
                         if current_real_status in ["Error", "CrashLoopBackOff", "ImagePullBackOff", "CreateContainerError",
                                                    "CreateContainerConfigError", "OOMKilled", "ContainerCannotRun", "Completed", "Failed"]:
