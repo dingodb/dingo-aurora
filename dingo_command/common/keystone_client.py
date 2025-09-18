@@ -54,6 +54,7 @@ class KeystoneClient:
             name=name,
             roles=roles or []
         )
+    
     def get_app_credential(self, user_id, name):
         """
         根据用户 ID 和应用凭证名称查询应用凭证

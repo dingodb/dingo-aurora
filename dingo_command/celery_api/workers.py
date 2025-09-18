@@ -1236,10 +1236,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                                  msg=TaskService.TaskScaleNodeMessage.scale_pre_install.name)
             TaskSQL.insert(task_info)
 
-        #调用keystoneclient的get_app_credential方法获取应用凭证，如果没有则用create_app_credential方法创建
-        keystoneclient = KeystoneClient(token=cluster_tfvars.token, project_id=cluster.project_id)
-
-        app_credential = keystoneclient.create_app_credential(user_id=cluster.user_id, name=cluster.name)
+        
         #cluster_tfvars.app_credential_id = app_credential.get("id")
         #cluster_tfvars.app_credential_secret = app_credential.get("secret")
         
@@ -1398,8 +1395,11 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         # 2. 使用Ansible部署K8s集群
         cluster.id = cluster_tf_dict["id"]
         if scale:
-            ansible_result = scale_kubernetes(cluster.id, scale_nodes, task_id, netns, app_credential.id, app_credential.secret, app_credential.name)
+            ansible_result = scale_kubernetes(cluster.id, scale_nodes, task_id, netns)
         else:
+            #调用keystoneclient的get_app_credential方法获取应用凭证，如果没有则用create_app_credential方法创建
+            keystoneclient = KeystoneClient(token=cluster_tfvars.token, project_id=cluster.project_id)
+            app_credential = keystoneclient.create_app_credential(user_id=cluster.user_id, name=cluster_tfvars.id)
             ansible_result = deploy_kubernetes(cluster, lb_ip, task_id, netns, app_credential.id, app_credential.secret, app_credential.name)
         if not ansible_result[0]:
             raise Exception(f"Ansible kubernetes deployment failed: {ansible_result[1]}")

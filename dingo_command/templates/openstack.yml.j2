@@ -14,12 +14,12 @@
 # openstack_lbaas_monitor_delay: "1m"
 # openstack_lbaas_monitor_timeout: "30s"
 # openstack_lbaas_monitor_max_retries: "3"
-external_openstack_lbaas_enabled: "{{ external_openstack_lbaas_enabled | default(true) }}"
-external_openstack_lbaas_floating_network_id: "{{ external_openstack_lbaas_floating_network_id | default('') }}"
-external_openstack_lbaas_floating_subnet_id:  "{{ external_openstack_lbaas_floating_subnet_id | default('') }}"
+external_openstack_lbaas_enabled: ${external_openstack_lbaas_enabled}
+external_openstack_lbaas_floating_network_id: ${external_openstack_lbaas_floating_network_id}
+external_openstack_lbaas_floating_subnet_id:  ${external_openstack_lbaas_floating_subnet_id}
 # external_openstack_lbaas_method: ROUND_ROBIN
 external_openstack_lbaas_provider: amphora
-external_openstack_lbaas_subnet_id: "{{ external_openstack_lbaas_subnet_id | default('') }}"
+external_openstack_lbaas_subnet_id: ${external_openstack_lbaas_subnet_id}
 ## Values for the external OpenStack Cloud Controller
 # external_openstack_lbaas_enabled: true
 # external_openstack_lbaas_floating_network_id: "Neutron network ID to get floating IP from"
@@ -42,17 +42,17 @@ external_openstack_lbaas_subnet_id: "{{ external_openstack_lbaas_subnet_id | def
 ## Application credentials to authenticate against Keystone API
 ## Those settings will take precedence over username and password that might be set your environment
 ## All of them are required
-external_openstack_auth_url: "{{ auth_url }}"
-external_openstack_username: "{{ username }}"
-external_openstack_password: "{{ password }}"
-external_openstack_region: "{{ region }}"
-external_openstack_tenant_id: "{{ project_id }}"
-external_openstack_tenant_name: "{{ project_name }}"
-external_openstack_domain_name: "{{ user_domain_name }}"
+external_openstack_auth_url: ${auth_url}
+external_openstack_username: ${username}
+external_openstack_password: ${password}
+external_openstack_region: ${region}
+external_openstack_tenant_id: ${project_id}
+external_openstack_tenant_name: ${project_name}
+external_openstack_domain_name: ${user_domain_name}
 
-external_openstack_application_credential_name:  "{{ app_credential_name }}"
-external_openstack_application_credential_id: "{{ app_credential_id }}"
-external_openstack_application_credential_secret: "{{ app_credential_secret }}"
+external_openstack_application_credential_name:  ${app_credential_name}
+external_openstack_application_credential_id: ${app_credential_id}
+external_openstack_application_credential_secret: ${app_credential_secret}
 
 ## Tags for the Cinder CSI images
 ## registry.k8s.io/sig-storage/csi-attacher
