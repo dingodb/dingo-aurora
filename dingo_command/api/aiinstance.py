@@ -33,7 +33,7 @@ async def sava_ai_instance_to_image(id: str, request: AiInstanceSavaImageApiMode
         # 容器实例保存为镜像
         return ai_instance_service.sava_ai_instance_to_image(id, request.image_registry, request.image_name, request.image_tag)
     except Fail as e:
-        raise HTTPException(status_code=400, detail=e.error_message)
+        raise HTTPException(status_code=400, detail=f"容器实例[{id}]保存为镜像失败:{e}")
     except Exception as e:
         import traceback
         traceback.print_exc()

@@ -1474,8 +1474,8 @@ class AiInstanceService:
                     print("")
                     # 处理pod 未运行场景
                     self.handle_cci_node_resource_info(instance_id, k8s_id, pod.spec.node_name)
-                else:
-                    self.update_pod_status_and_node_name_in_db(instance_id, K8sStatus.ERROR.value, pod_located_node_name, "pod create success timeout")
+
+                self.update_pod_status_and_node_name_in_db(instance_id, K8sStatus.ERROR.value, pod_located_node_name, "pod create success timeout")
 
                 # 副本数改成0
                 self.set_k8s_sts_replica_by_instance_id(instance_id, 0)
@@ -1502,6 +1502,11 @@ class AiInstanceService:
                     node_resource_db.cpu_used = str(total_cpu)
                 else:
                     node_resource_db.cpu_used = float(compute_resource_dict['compute_cpu'])
+
+                # 处理slot
+                node_resource_db.cpu_slot_used = str((float(
+                    node_resource_db.cpu_slot_used) if node_resource_db.cpu_slot_used else 0) + float(
+                    compute_resource_dict['compute_cpu']))
 
                 # 转换并累加内存使用量
                 if node_resource_db.memory_used:
@@ -2040,6 +2045,9 @@ class AiInstanceService:
                 if less_gpu_pod:
                     current_node_less_gpu_pod_count = self.safe_float(node_resource_db.less_gpu_pod_count or '0')
                     node_resource_db.less_gpu_pod_count = str(max(0, current_node_less_gpu_pod_count + operation_factor * 1))
+
+                node_resource_db.cpu_slot_used = str(max(0, float(node_resource_db.cpu_slot_used) if node_resource_db.cpu_slot_used else 0)
+                                                     + operation_factor + float(compute_resource_dict['compute_cpu']))
 
 
             # 处理内存资源
