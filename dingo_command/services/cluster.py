@@ -96,8 +96,8 @@ class ClusterService:
                     instance_db.user = node.user
                     instance_db.password = node.password
                     instance_db.security_group = cluster.name
-                    instance_db.flavor_id = cpu
-                    instance_db.image_id = node.flavor_id
+                    instance_db.flavor_id = node.flavor_id
+                    instance_db.image_id = node.image
                     instance_db.status = "creating"
                     instance_db.status_msg = ""
                     instance_db.floating_forward_ip = ""
@@ -165,7 +165,8 @@ class ClusterService:
                         port_forwards=cluster_new.port_forwards,
                         use_local_disk = node.use_local_disk,
                         volume_size=node.volume_size,
-                        volume_type=node.volume_type
+                        volume_type=node.volume_type,
+                        data_volumes=node.data_volumes if hasattr(node, 'data_volumes') and node.data_volumes else []
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
@@ -841,7 +842,8 @@ class ClusterService:
                         port_forwards=cluster_new.port_forwards,
                         use_local_disk = node.use_local_disk,
                         volume_size=node.volume_size,
-                        volume_type=node.volume_type
+                        volume_type=node.volume_type,
+                        data_volumes=node.data_volumes if hasattr(node, 'data_volumes') and node.data_volumes else []
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
