@@ -81,7 +81,7 @@ class KeyService:
         except Exception as e:
             raise ValueError(f"ssh key format error: {str(e)}")
         query_params = {}
-        query_params['name'] = name
+        query_params['full_name'] = name
         query_params['user_id'] = user_id
         query_params['tenant_id'] = tenant_id
         data = self.list_keys(query_params, 1, -1, None, None)
