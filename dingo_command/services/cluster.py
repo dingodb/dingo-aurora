@@ -473,7 +473,30 @@ class ClusterService:
             traceback.print_exc()
             raise e
 
-    def check_cluster_param(self, cluster: ClusterObject):
+    def _check_cidr_overlap(self, cidr1: str, cidr2: str) -> bool:
+        """
+        检查两个CIDR网段是否有重叠
+
+        Args:
+            cidr1: 第一个CIDR网段
+            cidr2: 第二个CIDR网段
+
+        Returns:
+            bool: True表示有重叠，False表示无重叠
+        """
+        import ipaddress
+
+        try:
+            net1 = ipaddress.ip_network(cidr1, strict=False)
+            net2 = ipaddress.ip_network(cidr2, strict=False)
+
+            # 检查是否有重叠
+            return net1.overlaps(net2)
+        except ValueError:
+            # 如果CIDR格式不正确，返回True表示有错误
+            return True
+
+    def check_cluster_param(self, cluster: ClusterObject, neutron_api=None):
         # 判断名称是否重复、判断是否有空值、判断是否有重复的节点配置
         query_params = {}
         query_params["exact_name"] = cluster.name
@@ -506,6 +529,46 @@ class ClusterService:
                 if not port_info.protocol:
                     raise Fail(error_code=405, error_message="The protocol for node port forwarding rules "
                                                              "must be tcp or udp")
+
+        # 检查 CIDR 网段是否重叠
+        cidr_list = []
+        cidr_names = []
+
+        # 获取 pod_cidr 和 service_cidr
+        if cluster.kube_info:
+            if cluster.kube_info.pod_cidr:
+                cidr_list.append(cluster.kube_info.pod_cidr)
+                cidr_names.append("Pod CIDR")
+
+            if cluster.kube_info.service_cidr:
+                cidr_list.append(cluster.kube_info.service_cidr)
+                cidr_names.append("Service CIDR")
+
+        # 如果指定了 admin_subnet_id，获取子网CIDR
+        if cluster.network_config and cluster.network_config.admin_subnet_id:
+            try:
+                # 如果没有传入 neutron_api，则创建新的实例
+                if neutron_api is None:
+                    neutron_api = neutron.API()
+
+                subnet_info = neutron_api.get_subnet_by_id(cluster.network_config.admin_subnet_id)
+
+                if subnet_info and 'cidr' in subnet_info:
+                    admin_cidr = subnet_info['cidr']
+                    cidr_list.append(admin_cidr)
+                    cidr_names.append("Admin Subnet CIDR")
+                else:
+                    raise Fail(error_code=405, error_message=f"无法获取子网 {cluster.network_config.admin_subnet_id} 的CIDR信息")
+            except Exception as e:
+                raise Fail(error_code=405, error_message=f"获取管理子网信息失败: {str(e)}")
+
+        # 检查所有CIDR之间是否有重叠
+        for i in range(len(cidr_list)):
+            for j in range(i + 1, len(cidr_list)):
+                if self._check_cidr_overlap(cidr_list[i], cidr_list[j]):
+                    raise Fail(error_code=405, error_message=f"{cidr_names[i]} 和 {cidr_names[j]} 不能重叠. "
+                                                             f"{cidr_names[i]}: {cidr_list[i]}, {cidr_names[j]}: {cidr_list[j]}")
+
         return True
     
     def generate_random_cidr(self):
@@ -536,9 +599,9 @@ class ClusterService:
     def create_cluster(self, cluster: ClusterObject, token):
         # 验证token
         # 数据校验 todo
-        self.check_cluster_param(cluster)
         try:
             neutron_api = neutron.API()  # 创建API类的实例
+            self.check_cluster_param(cluster, neutron_api)
             external_net = neutron_api.list_external_networks()
 
             lb_enbale = False
