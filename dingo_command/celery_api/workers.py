@@ -88,6 +88,9 @@ class PortForwards(BaseModel):
     external_port: Optional[int] = Field(None, description="转发的外部端口")
     protocol: Optional[str] = Field(None, description="协议")
 
+class DataVolumes(BaseModel):
+    volume_type: Optional[str] = Field(None, description="卷类型")
+    volume_size: Optional[int] = Field(None, description="卷大小")
 
 class NodeGroup(BaseModel):
     az: Optional[str] = Field(None, description="可用域")
@@ -99,6 +102,7 @@ class NodeGroup(BaseModel):
     use_local_disk: Optional[bool] = Field(None, description="实例id")
     volume_type: Optional[str] = Field(None, description="卷类型")
     volume_size: Optional[int] = Field(None, description="卷大小")
+    data_volumes: Optional[List[DataVolumes]] = Field(None, description="数据卷配置")
 
 class ClusterTFVarsObject(BaseModel):
     id: Optional[str] = Field(None, description="集群id")

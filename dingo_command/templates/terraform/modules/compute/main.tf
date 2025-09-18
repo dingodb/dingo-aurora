@@ -140,6 +140,7 @@ locals {
         "image_id"       = node.image_id != null ? node.image_id : local.image_to_use_node,
         "volume_size"    = node.volume_size,
         "volume_type"    = node.volume_type,
+        "data_volumes"   = node.data_volumes != null ? node.data_volumes : [],
         #"admin_network_id"   = node.network_id != null ? node.network_id : (var.use_existing_network ? data.openstack_networking_network_v2.admin_network[0].id : var.admin_network_id)
         #"bus_network_id"     = node.network_id != null ? node.network_id : (var.use_existing_network && var.bus_network_id != "" ? data.openstack_networking_network_v2.bus_network[0].id : var.bus_network_id)
         #"server_group"   = node.server_group != null ? node.server_group : openstack_compute_servergroup_v2.secgroup[0].id
@@ -195,22 +196,24 @@ resource "openstack_compute_instance_v2" "masters" {
   name              = "${var.cluster_name}-${each.key}"
   availability_zone = each.value.az
   config_drive      = true             # 启用 config_drive
-  image_id          = local.masters_settings[each.key].use_local_disk == true ? null: local.masters_settings[each.key].image_id
+  image_id          = local.masters_settings[each.key].image_id
   flavor_id         = each.value.flavor
   key_pair          = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : ""
   user_data         = data.cloudinit_config.masters-cloudinit[each.key].rendered
-  dynamic "block_device" {
-    for_each = local.masters_settings[each.key].use_local_disk == true ? [local.masters_settings[each.key].image_id] : []
-    content {
-      uuid                  = block_device.value
-      source_type           = "image"
-      volume_size           = local.masters_settings[each.key].volume_size
-      volume_type           = local.masters_settings[each.key].volume_type
-      boot_index            = 0
-      destination_type      = "volume"
-      delete_on_termination = true
-    }
-  }
+  # Master 节点启动盘配置
+  # 注意：此配置已被注释，master 节点使用 flavor 默认磁盘启动
+  # dynamic "block_device" {
+  #   for_each = local.masters_settings[each.key].use_local_disk == true ? [local.masters_settings[each.key].image_id] : []
+  #   content {
+  #     uuid                  = block_device.value
+  #     source_type           = "image"
+  #     volume_size           = local.masters_settings[each.key].volume_size
+  #     volume_type           = local.masters_settings[each.key].volume_type
+  #     boot_index            = 0
+  #     destination_type      = "volume"
+  #     delete_on_termination = true
+  #   }
+  # }
   tags = ["kubernetes control"]
   security_groups        = [openstack_networking_secgroup_v2.secgroup.name]
   network {
@@ -318,12 +321,13 @@ resource "openstack_compute_instance_v2" "nodes" {
   name              = "${var.cluster_name}-${each.key}"
   availability_zone = each.value.az
   config_drive      = true             # 启用 config_drive
-  image_id          = local.nodes_settings[each.key].use_local_disk == true ? null: local.nodes_settings[each.key].image_id
+  image_id          = local.nodes_settings[each.key].use_local_disk == true ? local.nodes_settings[each.key].image_id : null
   flavor_id         = each.value.flavor
   key_pair          = length(openstack_compute_keypair_v2.key_pair) > 0 ? openstack_compute_keypair_v2.key_pair[0].name : ""
   user_data         = data.cloudinit_config.nodes_cloudinit[each.key].rendered
+  # 启动盘
   dynamic "block_device" {
-    for_each = local.nodes_settings[each.key].use_local_disk == true ? [local.nodes_settings[each.key].image_id] : []
+    for_each = local.nodes_settings[each.key].use_local_disk == false ? [local.nodes_settings[each.key].image_id] : []
     content {
       uuid                  = block_device.value
       source_type           = "image"
@@ -334,6 +338,20 @@ resource "openstack_compute_instance_v2" "nodes" {
       delete_on_termination = true
     }
   }
+  
+  # 数据盘
+  dynamic "block_device" {
+    for_each = local.nodes_settings[each.key].data_volumes
+    content {
+      source_type           = "blank"
+      destination_type      = "volume"
+      volume_size           = block_device.value.volume_size
+      volume_type           = block_device.value.volume_type
+      boot_index            = local.nodes_settings[each.key].use_local_disk == true ? block_device.key : block_device.key + 1
+      delete_on_termination = true
+    }
+  }
+
   tags = var.number_of_k8s_masters == 0 ? ["worker node"] : ["kubernetes worker node"]
   security_groups        = [openstack_networking_secgroup_v2.secgroup.name]
   network {
@@ -406,4 +424,3 @@ resource "openstack_networking_portforwarding_v2" "pf_multi" {
     openstack_compute_instance_v2.nodes
   ]
 }
- 

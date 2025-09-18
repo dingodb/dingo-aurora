@@ -162,6 +162,10 @@ variable "nodes" {
       })), [])
       netplan_critical_dhcp_interface = optional(string, "")
     }))
+    data_volumes           = optional(list(object({
+      volume_size = number
+      volume_type = string
+    })), [])
   }))
 }
 

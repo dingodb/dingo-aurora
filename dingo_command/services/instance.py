@@ -201,7 +201,8 @@ class InstanceService:
                         port_forwards=[PortForwards(**forward) for forward in forward_rules_new],
                         use_local_disk=node.use_local_disk,
                         volume_size=node.volume_size,
-                        volume_type=node.volume_type
+                        volume_type=node.volume_type,
+                        data_volumes=node.data_volumes if hasattr(node, 'data_volumes') and node.data_volumes else []
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())

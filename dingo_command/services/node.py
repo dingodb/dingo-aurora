@@ -192,7 +192,8 @@ class NodeService:
                         port_forwards=[PortForwards(**forward) for forward in forward_rules_new],
                         use_local_disk=node.use_local_disk,
                         volume_size=node.volume_size,
-                        volume_type=node.volume_type
+                        volume_type=node.volume_type,
+                        data_volumes=node.data_volumes if hasattr(node, 'data_volumes') and node.data_volumes else []
                     )
                     scale_nodes.append(f"{cluster_info.name}-node-{int(node_index)}")
                     instance_db = InstanceDB()
@@ -449,6 +450,7 @@ class NodeService:
 
             cluster_info_db = self.convert_clusterinfo_todb(cluster_info.id, cluster_info.name)
             k8s_nodes = content["nodes"]
+            k8s_masters = content.get("masters") if content.get("masters") is not None else {}  # 读取现有 master 节点，null 时返回空对象
             scale_nodes = []
             subnet_cidr = content.get("subnet_cidr")
             image_uuid = content.get("image_uuid")
@@ -478,7 +480,7 @@ class NodeService:
                 cluster_name=cluster_info.name,
                 image_uuid=image_uuid,
                 nodes=k8s_nodes,
-                masters=k8s_masters,
+                masters=k8s_masters,  # 添加现有 master 节点，防止被删除
                 subnet_cidr=subnet_cidr,
                 floatingip_pool=floatingip_pool,
                 public_floatingip_pool=public_floatingip_pool,
