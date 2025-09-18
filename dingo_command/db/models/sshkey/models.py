@@ -13,6 +13,7 @@ class KeyInfo(Base):
     id = Column(String(length=256), primary_key= True, nullable=False, index=True, unique=True)
     name = Column(String(length=256), nullable=False)
     tenant_id = Column(String(length=256), nullable=True)
+    is_manager = Column(Boolean, nullable=True)
     description = Column(String(length=256), nullable=True)
     create_time = Column(DateTime, nullable= True)
     update_time = Column(DateTime, nullable= True)

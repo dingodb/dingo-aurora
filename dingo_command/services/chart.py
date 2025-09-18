@@ -89,7 +89,7 @@ async def create_harbor_repo(repo_name=util.repo_global_name, url=harbor_url, us
     except Exception as e:
         import traceback
         traceback.print_exc()
-        Log.error("add global repo with harbor failed, reason %s" % str(e))
+        Log.error("add global repo with harbor failed, reason %s", str(e))
         raise e
 
 def create_tag_info():
@@ -665,12 +665,12 @@ class ChartService:
                     time.sleep(3)
                 except HTTPStatusError as e:
                     e_object = e
-                    Log.error(f"Harbor API请求失败: {e}")
+                    Log.error("Harbor API请求失败: %s", str(e))
                     try_times += 1
                     time.sleep(3)
                 except Exception as e:
                     e_object = e
-                    Log.error(f"other failed: {e}")
+                    Log.error("other failed: %s", str(e))
                     try_times += 1
                     time.sleep(3)
             if try_times >= util.try_times:
@@ -679,7 +679,7 @@ class ChartService:
         except Exception as e:
             import traceback
             traceback.print_exc()
-            Log.error("add global repo with harbor failed, reason %s" % str(e))
+            Log.error("add global repo with harbor failed, reason %s", str(e))
             raise e
 
     async def create_repo(self, repo: CreateRepoObject, update=False, status="creating"):
@@ -691,11 +691,11 @@ class ChartService:
             repo_info_db.update_time = datetime.now()
             RepoSQL.update_repo(repo_info_db)
         if not update:
-            Log.info("add repo started, repo id %s, name %s, url %s" % (repo_info_db.id,  repo.name, repo.url))
+            Log.info("add repo started, repo id %s, name %s, url %s", repo_info_db.id,  repo.name, repo.url)
         elif status == "updating":
-            Log.info("update repo started, repo id %s, name %s, url %s" % (repo_info_db.id,  repo.name, repo.url))
+            Log.info("update repo started, repo id %s, name %s, url %s", repo_info_db.id,  repo.name, repo.url)
         else:
-            Log.info("sync repo started, repo id %s, name %s, url %s" % (repo_info_db.id,  repo.name, repo.url))
+            Log.info("sync repo started, repo id %s, name %s, url %s", repo_info_db.id,  repo.name, repo.url)
         try:
             chart_list = []
             if repo.type == util.repo_type_http:
@@ -757,18 +757,18 @@ class ChartService:
                 # 处理oci类型的repo仓库，并添加repo的chart到数据库中
                 await self.handle_oci_repo(repo_info_db)
             if not update:
-                Log.info("add repo success, repo id %s, name %s, url %s" % (repo_info_db.id, repo.name, repo.url))
+                Log.info("add repo success, repo id %s, name %s, url %s", repo_info_db.id, repo.name, repo.url)
             elif status == "updating":
-                Log.info("update repo success, repo id %s, name %s, url %s" % (repo_info_db.id, repo.name, repo.url))
+                Log.info("update repo success, repo id %s, name %s, url %s", repo_info_db.id, repo.name, repo.url)
             else:
-                Log.info("sync repo success, repo id %s, name %s, url %s" % (repo_info_db.id, repo.name, repo.url))
+                Log.info("sync repo success, repo id %s, name %s, url %s", repo_info_db.id, repo.name, repo.url)
         except Exception as e:
             import traceback
             traceback.print_exc()
             repo_info_db.status = "failed"
             repo_info_db.status_msg = str(e)
             RepoSQL.update_repo(repo_info_db)
-            Log.error("add or update or sync repo failed, reason %s" % str(e))
+            Log.error("add or update or sync repo failed, reason %s", str(e))
             raise e
 
     async def create_repo_list(self, repo_list: List[CreateRepoObject], update=False, status="creating"):
@@ -1138,7 +1138,7 @@ class ChartService:
                 "--password", password,
                 "--registry-config", config
             ]
-            Log.info("helm cmd: %s" % " ".join(cmd_list))
+            Log.info("helm cmd: %s", " ".join(cmd_list))
             result = subprocess.run(cmd_list, capture_output=True, text=True)
             if result.returncode != 0:
                 raise ValueError(result.stderr)
@@ -1186,7 +1186,7 @@ class ChartService:
                 "--namespace", namespace,
                 "-f", value_yaml
             ]
-        Log.info("helm cmd: %s" % " ".join(helm_command))
+        Log.info("helm cmd: %s", " ".join(helm_command))
         try:
             # 执行命令并捕获输出
             result = subprocess.run(
@@ -1254,10 +1254,10 @@ class ChartService:
             AppSQL.update_app(app_info_db)
             # 清理缓存文件，删除目录等等操作
             if update:
-                Log.error(f"update app error: {str(e)}")
+                Log.error("update app error: %s ", str(e))
                 raise ValueError(f"update app error: {str(e)}")
             else:
-                Log.error(f"install app error: {str(e)}")
+                Log.error("install app error: %s ", str(e))
                 raise ValueError(f"install app error: {str(e)}")
 
     def uninstall_chart_app(self, name, kube_config, namespace):
@@ -1343,7 +1343,7 @@ class ChartService:
                     k8s_resources_dict[key] = doc
             return k8s_resources_dict
         except subprocess.CalledProcessError as e:
-            Log.error(f"Error fetching manifest for release {release_name}: {e}")
+            Log.error("Error fetching manifest for release %s: %s", release_name, str(e))
             raise ValueError(f"Error fetching manifest for release {release_name}: {e}")
 
     def get_app_detail(self, app_data: AppDB):

@@ -17,7 +17,7 @@ key_service = KeyService()
 @router.post("/sshkey", summary="创建sshkey", description="创建sshkey")
 async def create_key(key: CreateKeyObject):
     try:
-        Log.info("add key, key info %s" % key)
+        Log.info("add key, key info %s", key)
         return key_service.create_key(key)
     except Exception as e:
         import traceback
@@ -67,7 +67,7 @@ async def list_keys(status: str = Query(None, description="status状态"),
 async def delete_key(sshkey_id: str):
     try:
         # 删除某个key以及它的数据信息
-        Log.info("delete key, sshkey_id info %s" % sshkey_id)
+        Log.info("delete key, sshkey_id info %s", sshkey_id)
         return key_service.delete_key(sshkey_id)
     except Exception as e:
         import traceback
@@ -80,7 +80,7 @@ async def delete_key(sshkey_id: str):
 async def get_key(sshkey_id: str):
     try:
         # 获取某个key以及它的数据信息
-        Log.info("get key, sshkey_id info %s" % sshkey_id)
+        Log.info("get key, sshkey_id info %s", sshkey_id)
         # 声明查询条件的dict
         query_params = {}
         # 查询条件组装

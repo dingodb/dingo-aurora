@@ -51,7 +51,7 @@ async def create_repo(repo: CreateRepoObject, background_tasks: BackgroundTasks)
         # 1、判断参数是否合法
         repo.url = repo.url.strip()
         await chart_service.check_repo_args(repo)
-        Log.info("add repo, repo info %s" % repo)
+        Log.info("add repo, repo info %s", str(repo))
         # 2、异步处理创建repo仓库的逻辑
         background_tasks.add_task(chart_service.create_repo, repo, update=False, status="creating")
         return {"success": True, "message": "create repo started, please wait"}
@@ -133,7 +133,7 @@ async def update_repo(repo_id: Union[str, int], repo_data: CreateRepoObject, bac
     try:
         # 更新repo仓库的配置
         # 先从数据库中看看有没有repo_id这个数据，如果没有直接返回404
-        Log.info("update repo, repo id %s" % repo_id)
+        Log.info("update repo, repo id %s", str(repo_id))
         query_params = {}
         query_params["id"] = repo_id
         data = chart_service.list_repos(query_params, 1, -1, None, None)
@@ -498,7 +498,7 @@ async def put_app(app_id: Union[str, int], update_data: CreateAppObject, backgro
     try:
         # 编辑或更新已安装应用
         # 获取app的id，然后添加到update_data
-        Log.info(f"update app, app_id %s" % app_id)
+        Log.info(f"update app, app_id %s", str(app_id))
         query_params = {}
         query_params["id"] = app_id
         data = chart_service.list_apps(query_params, 1, -1, None, None)
@@ -569,7 +569,7 @@ async def get_chart_version(chart_id: Union[str, int], version: str = Query(None
 async def delete_apps(app_id: Union[str, int], background_tasks: BackgroundTasks):
     try:
         # 删除某个已安装的应用
-        Log.info("delete app, app_id %s" % app_id)
+        Log.info("delete app, app_id %s ", str(app_id))
         query_params = {}
         query_params["id"] = app_id
         data = chart_service.list_apps(query_params, 1, -1, None, None)
@@ -598,7 +598,7 @@ async def delete_apps(app_id: Union[str, int], background_tasks: BackgroundTasks
 @router.post("/charts/install", summary="安装某个应用（异步）", description="安装某个应用（异步）")
 async def post_apps(create_data: CreateAppObject, background_tasks: BackgroundTasks):
     try:
-        Log.info(f"install app {create_data.name}, data info {create_data}")
+        Log.info("install app %s", create_data.name)
         if not create_data.namespace:
             create_data.namespace = "default"
         # 在这里添加对于app的name做校验，让它符合helm安装name的规则
@@ -620,7 +620,7 @@ async def post_apps(create_data: CreateAppObject, background_tasks: BackgroundTa
     except Exception as e:
         import traceback
         traceback.print_exc()
-        Log.error(f"install app {create_data.name} failed, reason: {str(e)}")
+        Log.error("install app %s failed, reason: %s", create_data.name, str(e))
         raise HTTPException(status_code=400, detail=f"install app error: {str(e)}")
 
 

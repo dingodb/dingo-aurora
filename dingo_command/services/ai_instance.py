@@ -866,15 +866,11 @@ class AiInstanceService:
 
         # 4、创建sshkey的configmap（如果有就跳过，没有就创建）
         configmap_name = CONFIGMAP_PREFIX + ai_instance.user_id
-        if ai_instance_db.is_manager:
-            k8s_common_operate.create_ns_configmap(
-                self.core_k8s_client, namespace_name, configmap_name, {"authorized_keys": ""},
-                is_manager=True, tenant_id=ai_instance_db.instance_tenant_id
-            )
-        else:
-            k8s_common_operate.create_ns_configmap(
-                self.core_k8s_client, namespace_name, configmap_name, {"authorized_keys": ""}
-            )
+        k8s_common_operate.create_ns_configmap(
+            self.core_k8s_client, namespace_name, configmap_name, {"authorized_keys": ""},
+            ai_instance_db
+        )
+
 
         # 5、挂载jupyter config
         nb_init_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
