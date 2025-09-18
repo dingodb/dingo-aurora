@@ -454,9 +454,12 @@ class NodeService:
             image_uuid = content.get("image_uuid")
             ssh_user = content.get("ssh_user")
             password = content.get("password")
+            k8s_masters = content.get("masters")
+            admin_network_id = content.get("admin_network_id")
+            admin_subnet_id = content.get("admin_subnet_id")
+            use_existing_network = content.get("use_existing_network")
             forward_float_ip_id = content.get("forward_float_ip_id")
             lb_enbale = content.get("k8s_master_loadbalancer_enabled")
-            number_of_k8s_masters_no_floating_ip = content.get("number_of_k8s_masters_no_floating_ip")
             neutron_api = neutron.API()  # 创建API类的实例
             external_net = neutron_api.list_external_networks()
             (floatingip_pool, public_floatingip_pool, public_subnetids,
@@ -475,22 +478,25 @@ class NodeService:
                 cluster_name=cluster_info.name,
                 image_uuid=image_uuid,
                 nodes=k8s_nodes,
+                masters=k8s_masters,
                 subnet_cidr=subnet_cidr,
                 floatingip_pool=floatingip_pool,
                 public_floatingip_pool=public_floatingip_pool,
                 public_subnetids=public_subnetids,
                 external_subnetids=external_subnetids,
                 external_net=external_net_id,
-                use_existing_network=False,
+                use_existing_network=use_existing_network,
                 ssh_user=ssh_user,
                 k8s_master_loadbalancer_enabled=lb_enbale,
-                number_of_k8s_masters=1,
-                number_of_k8s_masters_no_floating_ip=number_of_k8s_masters_no_floating_ip,
+                number_of_k8s_masters=0,
+                number_of_k8s_masters_no_floating_ip=0,
                 token=token,
                 auth_url=auth_url,
                 tenant_id=cluster_info.project_id,
                 forward_float_ip_id=forward_float_ip_id,
                 image_master=image_master,
+                admin_network_id=admin_network_id,
+                admin_subnet_id=admin_subnet_id
             )
             if cluster.node_config[0].auth_type == "password":
                 tfvars.password = cluster.node_config[0].password
