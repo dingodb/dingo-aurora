@@ -561,7 +561,7 @@ class HarborAPI:
             page_size = 100
             all_quotas = []
             while True:
-                url = f"{self.base_url}/api/v2.0/quotas?page={page}&page_size={page_size}"
+                url = f"{self.base_url}/api/v2.0/quotas?page={page}&page_size={page_size}&reference=project"
                 response = self.request("GET", url)
                 response.raise_for_status()
                 data = response.json()
@@ -1642,3 +1642,42 @@ class HarborAPI:
                 )
         except Exception as e:
             return self.return_response(False, 500, f"删除自定义镜像仓库异常: {str(e)}")
+
+    # 获取项目标签
+    def get_public_projects_labels(self, project_id: int, page: int = 1, page_size: int = 100, get_all: bool = False) -> Dict[str, Any]:
+        try:
+            if get_all:
+                all_labels = []
+                while True:
+                    url = f"{self.base_url}/api/v2.0/labels"
+                    response = self.request("GET", url, params={"page": page, "page_size": page_size, "project_id": project_id,"scope":"p"})
+                    if response.status_code == 200:
+                        all_labels.extend(response.json())
+                        if len(response.json()) < page_size:
+                            break
+                        page += 1
+                return self.return_response(
+                    True,
+                    response.status_code,
+                    "获取项目标签成功",
+                    all_labels,
+                )
+            else:   
+                url = f"{self.base_url}/api/v2.0/labels"
+                response = self.request("GET", url, params={"page": page, "page_size": page_size, "project_id": project_id,"scope":"p"})
+                if response.status_code == 200:
+                    return self.return_response(
+                        True,
+                        response.status_code,
+                        "获取项目标签成功",
+                        response.json(),
+                    )
+                else:
+                    return self.return_response(
+                        False,
+                        response.status_code,
+                        "获取项目标签失败",
+                        response.json(),
+                    )
+        except Exception as e:
+            return self.return_response(False, 500, f"获取项目标签异常: {str(e)}")
