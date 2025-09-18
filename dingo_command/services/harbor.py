@@ -690,6 +690,8 @@ class HarborService:
         all_quota = private_project_storage_limit * 1024 * 1024 * 1024
         storage_limit = storage_limit * 1024 * 1024 * 1024
         get_custom_projects_response = self.get_custom_projects(user_name)
+        if not get_custom_projects_response["status"]:
+            return get_custom_projects_response
         total_hard = sum(project['quota_info']['hard'] for project in get_custom_projects_response["data"])
         if total_hard + storage_limit > all_quota:
             return self.return_response(False, 400, "仓库配额超出限制100GB")
@@ -889,13 +891,14 @@ class HarborService:
 
         # 获取自定义仓库配额信息
         get_all_quotas_response = self.harbor.get_all_quotas()
-
         # 获取所有项目，判断用户是否为项目成员
         get_projects_response = self.harbor.get_projects()
         if get_projects_response["status"]:
             for project in get_projects_response["data"]:
                 project_name = project["name"]
                 # 获取项目成员
+                if 'alayanew' in project_name or 'aladdinedu' in project_name:
+                    continue
                 project_members_response = self.harbor.get_project_members(project_name)
                 if project_members_response["status"]:
                     for member in project_members_response["data"]:
@@ -1114,6 +1117,15 @@ class HarborService:
         )
         return delete_custom_projects_images_tag_response
 
+    # 获取项目标签
+    def get_public_projects_labels(self, project_name: str, page: int = 1, page_size: int = 100) -> dict:
+        get_project_info = self.harbor.get_project_info(project_name)
+        if get_project_info["status"]:
+            project_id = get_project_info["data"]["project_id"]
+            get_public_projects_labels_response = self.harbor.get_public_projects_labels(project_id, page, page_size)
+            return get_public_projects_labels_response
+        else:
+            return get_project_info
 
     # 添加租户与harbor的关联关系
     def add_custom_harbor_relation(self, tenant_id: str, harbor_name: str, harbor_password: str):

@@ -233,6 +233,25 @@ async def delete_custom_projects_images_tag(
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"delete custom projects images tag error: {str(e)}")
 
+# 获取项目标签
+@router.get(
+    "/harbor/public/project/labels/list",
+    summary="获取项目标签",
+    description="获取项目标签",
+)
+async def get_public_projects_labels(
+    project_name: str = Query('alayanew-public', description="项目名称"),
+    page: int = Query(1, description="页码"),
+    page_size: int = Query(100, description="页数量大小"),
+):
+    try:
+        result = harbor_service.get_public_projects_labels(project_name=project_name, page=page, page_size=page_size)
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"get public projects labels error: {str(e)}")
+        
 @router.post(
     "/harbor/custom/service/relation/add",
     summary="租户私有镜像仓库功能建立关联关系",
