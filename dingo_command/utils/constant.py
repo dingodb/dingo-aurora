@@ -163,3 +163,8 @@ GPU_CARD_MAPPING = {
         "gpu_code": "nvidia.com/gpu-l40s"
     }
 }
+
+# cpu超卖倍数
+CPU_OVER_COMMIT = 4
+# 默认cpu最小的cpu的request 0.5核
+MIN_CPU_REQUEST = 0.5
