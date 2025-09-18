@@ -208,9 +208,15 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
 
         # 汇总所有POD的资源使用量
         for pod in pods:
+            pod_name = pod.metadata.name
+            ai_instance_real_name = pod_name.rsplit('-', 1)[0]
+            ai_instance_db = AiInstanceSQL.get_ai_instance_info_by_real_name(ai_instance_real_name)
+            if ai_instance_db:
+                instance_config_dict = json.loads(ai_instance_db.instance_config)
+                if instance_config_dict:
+                    # 存储
+                    total_usage['ephemeral-storage'] +=  float(instance_config_dict['system_disk_size'])
             for container in pod.spec.containers:
-                # 存储
-                total_usage['ephemeral-storage'] +=  float(ai_instance_service.convert_storage_to_gb(SYSTEM_DISK_SIZE_DEFAULT))
 
                 # GPU
                 if container.resources.limits:
@@ -230,7 +236,7 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
                                 total_usage['memory'] += float(ai_instance_service.convert_memory_to_gb(
                                     container.resources.limits['memory'])
                                 )
-                        elif 'dc.com/cpu-pod-slot':
+                        elif 'dc.com/cpu-pod-slot' in key:
                             total_usage['cpu'] += int(value)
                             total_usage['memory'] += int(value) * 2
 
@@ -294,50 +300,3 @@ def process_node_total_resource(k8s_id, node_resource):
         ai_k8s_node_resource_db.id = uuid.uuid4().hex
         LOG.info(f"Creating new resource for node {node_name}")
         AiInstanceSQL.save_k8s_node_resource(ai_k8s_node_resource_db)
-
-# def handle_node_migration(instance_db, old_node_name, new_node_name):
-#     """
-#     处理节点迁移的资源管理
-#     :return: 是否成功处理资源迁移
-#     """
-#     try:
-#         compute_resource_dict = json.loads(instance_db.instance_config)
-#         k8s_id = instance_db.instance_k8s_id
-#
-#         # 1. 释放原节点资源
-#         if old_node_name:
-#             original_node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(
-#                 k8s_id, old_node_name
-#             )
-#             if original_node_resource_db:
-#                 if ai_instance_service.update_node_resources(original_node_resource_db, compute_resource_dict, 'release'):
-#                     LOG.info(f"释放原节点[{k8s_id}_{old_node_name}]资源成功")
-#                 else:
-#                     LOG.error(f"释放原节点[{k8s_id}_{old_node_name}]资源失败")
-#                     return False
-#             else:
-#                 LOG.warning(f"未找到原节点[{k8s_id}_{old_node_name}]资源记录")
-#
-#         # 2. 分配新节点资源
-#         if new_node_name:
-#             new_node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(
-#                 k8s_id, new_node_name
-#             )
-#             if new_node_resource_db:
-#                 if ai_instance_service.update_node_resources(new_node_resource_db, compute_resource_dict, 'allocate'):
-#                     LOG.info(f"分配新节点[{k8s_id}_{new_node_name}]资源成功")
-#                     return True
-#                 else:
-#                     LOG.error(f"分配新节点[{k8s_id}_{new_node_name}]资源失败")
-#                     return False
-#             else:
-#                 LOG.error(f"未找到新节点[{k8s_id}_{new_node_name}]资源记录")
-#                 return False
-#
-#         return True
-#
-#     except Exception as e:
-#         LOG.error(f"处理节点迁移失败: {str(e)}")
-#         import traceback
-#         traceback.print_exc()
-#         return False

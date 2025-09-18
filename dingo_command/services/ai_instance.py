@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception, before_sleep_log
 from keystoneclient import client
 from math import ceil
 from kubernetes.client import V1PersistentVolumeClaim, V1ObjectMeta, V1PersistentVolumeClaimSpec, \
@@ -48,6 +49,27 @@ harbor_service = HarborService()
 
 # 全局线程池
 task_executor = ThreadPoolExecutor(max_workers=min(32, (os.cpu_count() or 1) * 4))
+
+
+def _create_retry_decorator():
+    """创建一个依赖实例的retry装饰器工厂"""
+
+    def retry_decorator(func):
+        @retry(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=1, min=40, max=80),
+            # 使用lambda延迟绑定，通过func的__self__获取实例并调用其方法
+            retry=retry_if_exception(lambda exc: func.__self__.is_retryable_error(exc)),
+            before_sleep=before_sleep_log(LOG, log.WARNING),
+            reraise=True
+        )
+        async def wrapper(*args, **kwargs):
+            return await func(*args, **kwargs)
+
+        return wrapper
+
+    return retry_decorator
+
 
 class AiInstanceService:
 
@@ -504,6 +526,7 @@ class AiInstanceService:
         if returncode != 0:
             raise Exception(f"Harbor login returncode:{returncode}, failed: {output}")
 
+    @_create_retry_decorator()  # 应用装饰器工厂
     async def _commit_container(self, core_k8s_client, nerdctl_api_pod, clean_container_id, image_name):
         """执行commit操作"""
         commit_command = [
@@ -517,6 +540,32 @@ class AiInstanceService:
 
         if returncode != 0:
             raise Exception(f"Container id {clean_container_id} Commit returncode:{returncode}, failed: {output}")
+
+    def is_retryable_error(self, exception):
+        """
+        判断传入的异常是否可重试。
+        根据你的业务场景和常见的Kubernetes操作错误进行扩充。
+        """
+        error_message = str(exception).lower()
+
+        # 匹配不可重试的错误（永久性故障）
+        non_retryable_keywords = [
+            'no such container',  # 容器不存在
+            'no such file or directory',  # 文件或目录不存在
+            'permission denied',  # 权限不足
+            'invalid reference format',  # 镜像名称等引用格式无效
+            'syntax error',  # 语法错误
+            'quota exceeded',  # 资源配额不足
+            'out of memory',  # 内存不足（如果是任务本身需求超出节点容量，重试可能无效）
+            # 'resource already exists'  # 资源已存在（如重复创建）
+        ]
+
+        for keyword in non_retryable_keywords:
+            if keyword in error_message:
+                return False  # 不可重试
+
+        # 默认情况（如网络超时、临时不可用等）视为可重试
+        return True
 
     async def _push_image(self, core_k8s_client, nerdctl_api_pod, image_name):
         """执行push操作"""
@@ -749,7 +798,8 @@ class AiInstanceService:
         return {
             'resource_limits': resource_limits,
             'node_selector_gpu': node_selector_gpu,
-            'toleration_gpus': toleration_gpus
+            'toleration_gpus': toleration_gpus,
+            "system_disk_size": instance_config.system_disk_size
         }
 
     def _assemble_and_create_instance(self, ai_instance, ai_instance_db, namespace_name, resource_config):
@@ -984,7 +1034,7 @@ class AiInstanceService:
         template = V1PodTemplateSpec(
             metadata=V1ObjectMeta(
                 labels=pod_template_labels,
-                annotations=POD_STORAGE_LIMIT_ANNOTATIONS
+                annotations={"dc.com/quota.xfs.size": f"{ai_instance.instance_config.system_disk_size}g"}
             ),
             spec=V1PodSpec(
                 # node_name=self.choose_k8s_node(ai_instance_db.instance_k8s_id,
@@ -1120,6 +1170,7 @@ class AiInstanceService:
         resource_limits = resource_config.get('resource_limits', {})
         node_selector_gpu = resource_config.get('node_selector_gpu', {})
         toleration_gpus = resource_config.get('toleration_gpus', [])
+        system_disk_size = resource_config.get('system_disk_size', 50)
 
         # 创建亲和性配置
         # affinity = self.create_affinity(node_selector_gpu)
@@ -1130,7 +1181,7 @@ class AiInstanceService:
         # 更新existing_sts的各个字段
         existing_sts.metadata.resource_version = None
         existing_sts.spec.replicas = 1
-        existing_sts.spec.template.metadata = V1ObjectMeta(labels=pod_template_labels, annotations = POD_STORAGE_LIMIT_ANNOTATIONS)
+        existing_sts.spec.template.metadata = V1ObjectMeta(labels=pod_template_labels, annotations = {"dc.com/quota.xfs.size": f"{system_disk_size}g"})
         # existing_sts.spec.template.spec.node_selector = node_selector_gpu
         # existing_sts.spec.template.spec.tolerations = toleration_gpus
         # existing_sts.spec.template.spec.affinity = affinity
@@ -1443,10 +1494,10 @@ class AiInstanceService:
                 # 累加存储使用量
                 if node_resource_db.storage_used:
                     # 使用float来处理小数
-                    total_storage = float(node_resource_db.storage_used) + float(self.convert_storage_to_gb(SYSTEM_DISK_SIZE_DEFAULT))
+                    total_storage = float(node_resource_db.storage_used) + float(compute_resource_dict['system_disk_size'])
                     node_resource_db.storage_used = str(total_storage)
                 else:
-                    node_resource_db.storage_used = 50
+                    node_resource_db.storage_used = float(compute_resource_dict['system_disk_size'])
 
                 # 处理GPU使用卡数
                 if ('gpu_model' in compute_resource_dict and 'gpu_count' in compute_resource_dict and
