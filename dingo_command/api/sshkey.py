@@ -53,8 +53,17 @@ async def list_keys(status: str = Query(None, description="status状态"),
             query_params['user_id'] = user_id
         if user_name:
             query_params['user_name'] = user_name
-
         data = key_service.list_keys(query_params, page, page_size, sort_keys, sort_dirs)
+        if data.get("data"):
+            key = data.get("data")[0]
+            if key.is_manager:
+                query_params = {}
+                query_params['tenant_id'] = key.tenant_id
+                data = key_service.list_keys(query_params, page, page_size, sort_keys, sort_dirs)
+            else:
+                query_params = {}
+                query_params['user_id'] = user_id
+                data = key_service.list_keys(query_params, page, page_size, sort_keys, sort_dirs)
         return data
     except Exception as e:
         import traceback
