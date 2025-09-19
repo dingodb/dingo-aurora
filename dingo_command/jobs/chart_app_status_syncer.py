@@ -15,7 +15,6 @@ from dingo_command.api.model.chart import CreateRepoObject, CreateAppObject
 from dingo_command.utils.helm import util
 from dingo_command.celery_api import CONF
 from dingo_command.utils.helm.redis_lock import RedisSentinelDistributedLock
-from dingo_command.common.k8s_client import set_netns
 
 
 config_dir = "/tmp/kube_config_dir"

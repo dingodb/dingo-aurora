@@ -27,7 +27,6 @@ from dingo_command.services.cluster import ClusterService
 from dingo_command.services import CONF
 from dingo_command.utils.helm import util
 from dingo_command.utils.helm.util import ChartLOG as Log
-from dingo_command.common.k8s_client import set_netns
 
 WORK_DIR = CONF.DEFAULT.cluster_work_dir
 auth_url = CONF.DEFAULT.auth_url

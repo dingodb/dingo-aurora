@@ -1,4 +1,3 @@
-import ctypes
 import os
 from kubernetes import client, config, dynamic
 from kubernetes.client.rest import ApiException
@@ -7,27 +6,6 @@ import logging
 from dingo_command.common.k8s.resource import ResourceClientFactory
 
 logger = logging.getLogger(__name__)
-
-libc = ctypes.CDLL("libc.so.6")
-
-def set_netns(netns_name):
-    """
-    将当前线程切换到指定的网络命名空间。
-    libc.setns() 系统调用需要文件描述符和命名空间标识。
-    """
-    netns_path = f"/run/netns/{netns_name}"
-    if not os.path.exists(netns_path):
-        #raise FileNotFoundError(f"网络命名空间 {netns_name} 不存在于 {netns_path}")
-        print(f"网络命名空间 {netns_name} 不存在于 {netns_path}")
-        return
-    fd = os.open(netns_path, os.O_RDONLY)
-    try:
-        if libc.setns(fd, 0) == -1:
-            raise OSError("setns 系统调用失败")
-        print(f"已切换到网络命名空间: {netns_name}")
-    finally:
-        os.close(fd)
-
 
 class K8sClient:
     """
@@ -52,8 +30,6 @@ class K8sClient:
 
     def _load_kubernetes_config(self, kubeconfig_path: Optional[str], kubeconfig_content: Optional[str] = None, netns: Optional[str] = None):
         """内部方法：加载 Kubernetes 配置。"""
-        if netns:
-            set_netns(netns)
         try:
             if kubeconfig_path:
                 config.load_kube_config(config_file=kubeconfig_path)
