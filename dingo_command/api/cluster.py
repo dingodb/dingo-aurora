@@ -36,8 +36,10 @@ async def create_cluster(cluster_object:ClusterObject, token: str = Depends(get_
         #SystemService.create_system_log(OperateLogApiModel(operate_type="create", resource_type="flow", resource_id=cluster_id, resource_name=cluster_object.name, operate_flag=True))
         return cluster_id
     except Fail as e:
+        traceback.print_exc()
         raise HTTPException(status_code=400, detail=e.error_message)
     except  HTTPException as e:
+        traceback.print_exc()
         raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
         import traceback
