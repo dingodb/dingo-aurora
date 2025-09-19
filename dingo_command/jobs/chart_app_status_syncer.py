@@ -107,7 +107,7 @@ def check_app_status():
                 continue
             # 1、先获取cluster_id，然后获取kube_config文件
             netns = "qdhcp-" + str(clusters[0].admin_network_id)
-            set_netns(netns)
+            # set_netns(netns)
             kube_config = json.loads(clusters[0].kube_info).get("kube_config")
             if not kube_config:
                 continue
@@ -116,7 +116,7 @@ def check_app_status():
                 f.write(kube_config)
 
             # 2、拿到kube_config文件后，通过helm list获取真实存在的app的名称
-            content = chart_service.get_helm_list(config_file)
+            content = chart_service.get_helm_list(config_file, netns)
             content_list = json.loads(content)
             # 处理app状态为creating、updating、deleting的情况
             for app in apps:
@@ -167,6 +167,8 @@ def check_app_status():
         shutil.rmtree(config_dir)
         LOG.info(f"Finished check app status at {time.strftime('%Y-%m-%d %H:%M:%S')}")
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         LOG.error(f"Error in app_status: {str(e)}")
 
 

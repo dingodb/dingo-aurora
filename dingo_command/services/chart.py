@@ -1089,14 +1089,14 @@ class ChartService:
         helm_cache_dir = os.path.join(WORK_DIR, "ansible-deploy/inventory/", cluster_id, util.helm_cache)
         os.makedirs(helm_cache_dir, exist_ok=True)
         kube_config = os.path.join(WORK_DIR, "ansible-deploy/inventory/", cluster_id, "kube_config")
+        netns = "qdhcp-" + str(res_cluster.network_config.admin_network_id)
         if os.path.exists(kube_config):
-            return kube_config, helm_cache_dir
+            return kube_config, helm_cache_dir, netns
         with open(kube_config, "w") as f :
             f.write(res_cluster.kube_info.kube_config)
             # f.write(yaml.dump(json.loads(res_cluster.kube_info.kube_config)))
-        netns = "qdhcp-" + str(res_cluster.network_config.admin_network_id)
-        set_netns(netns)
-        return kube_config, helm_cache_dir
+        # set_netns(netns)
+        return kube_config, helm_cache_dir, netns
 
     def convert_app_db(self, create_data: ChartDB, create_info: CreateAppObject, update=False):
         app_db = AppDB()
@@ -1146,7 +1146,7 @@ class ChartService:
             raise e
 
     def run_helm_upgrade(self, release_name, remote_url, version, config, helm_cache_dir, kube_config, values,
-                         namespace, username=None, password=None):
+                         namespace, netns, username=None, password=None):
         """执行 Helm 升级/安装操作"""
         values_yaml = str(uuid.uuid4()) + ".yaml"
         value_yaml = os.path.join(helm_cache_dir, values_yaml)
@@ -1155,6 +1155,10 @@ class ChartService:
         # 定义 Helm 命令参数
         if username and password:
             helm_command = [
+                'ip',
+                'netns',
+                'exec',
+                netns,
                 "helm",
                 "upgrade",
                 release_name,
@@ -1172,6 +1176,10 @@ class ChartService:
             ]
         else:
             helm_command = [
+                'ip',
+                'netns',
+                'exec',
+                netns,
                 "helm",
                 "upgrade",
                 release_name,
@@ -1200,7 +1208,7 @@ class ChartService:
             raise e
 
     def install_chart_app(self, app_type, repo_url, remote_url, name, version, values, kube_config, helm_cache_dir,
-                          username, password, namespace):
+                          username, password, namespace, netns):
         # 根据type类型判断下如何处理，如果是http的如何处理？
         # 如果是oci的如何处理？需要仔细的处理清楚
         # 还有带不带--plain-http也需要考虑进去
@@ -1210,13 +1218,13 @@ class ChartService:
             os.makedirs(helm_cache_tmp_dir, exist_ok=True)
             if app_type == util.repo_type_http:
                 self.run_helm_upgrade(name, remote_url, version, config, helm_cache_tmp_dir, kube_config, values,
-                                      namespace, username, password)
+                                      namespace, netns, username, password)
             else:
                 # 1、先要login登录harbor上才行
                 self.login_registry(repo_url, username, password, config)
                 # 2、执行命令
                 self.run_helm_upgrade(name, remote_url, version, config, helm_cache_tmp_dir, kube_config, values,
-                                      namespace)
+                                      namespace, netns)
             # 清除安装产生的缓存文件
             shutil.rmtree(helm_cache_tmp_dir)
         except Exception as e:
@@ -1234,14 +1242,14 @@ class ChartService:
             AppSQL.create_app(app_info_db)
         try:
             # 1、先获取cluster_id的信息，拿到kube-config文件
-            kube_config, helm_cache_dir = self.get_kubeconfig(create_data.cluster_id)
+            kube_config, helm_cache_dir, netns = self.get_kubeconfig(create_data.cluster_id)
             # 2、根据chart_id和chart_version信息来指定安装，根据类型区分https和http，http类型的也有可能是oci的url的chart包
             app_type, repo_url, remote_url, username, password = self.get_app_data_info(chart_info,
                                                                                         create_data.chart_version)
             # 3、如何使用helm的sdk实现安装应用, 创建cache目录，执行命令时添加这个cache目录执行
             self.install_chart_app(app_type, repo_url, remote_url, create_data.name, create_data.chart_version,
                                    create_data.values, kube_config, helm_cache_dir, username, password,
-                                   create_data.namespace)
+                                   create_data.namespace, netns)
             # 4、如何写入app的状态以及values的信息
             app_info_db.status = util.app_status_success
             app_info_db.status_msg = ""
@@ -1260,8 +1268,12 @@ class ChartService:
                 Log.error("install app error: %s ", str(e))
                 raise ValueError(f"install app error: {str(e)}")
 
-    def uninstall_chart_app(self, name, kube_config, namespace):
+    def uninstall_chart_app(self, name, kube_config, namespace, netns):
         helm_command = [
+            'ip',
+            'netns',
+            'exec',
+            netns,
             "helm",
             "uninstall",
             name,
@@ -1287,9 +1299,9 @@ class ChartService:
         app_data.status = util.app_status_delete
         AppSQL.update_app(app_data)
         try:
-            kube_config, helm_cache_dir = self.get_kubeconfig(app_data.cluster_id)
+            kube_config, helm_cache_dir, netns = self.get_kubeconfig(app_data.cluster_id)
             # 2、根据chart_id和chart_version信息来指定安装，根据类型区分https和http，http类型的也有可能是oci的url的chart包
-            self.uninstall_chart_app(app_data.name, kube_config, app_data.namespace)
+            self.uninstall_chart_app(app_data.name, kube_config, app_data.namespace, netns)
             AppSQL.delete_app(app_data)
         except Exception as e:
             # 写入failed的状态
@@ -1299,10 +1311,15 @@ class ChartService:
             app_data.status = util.app_status_failed
             app_data.status_msg = str(e)
             AppSQL.update_app(app_data)
+            Log.error("delete_app error: %s", str(e))
             raise ValueError(f"uninstall app error: {str(e)}")
 
-    def get_info_cmd(self, kube_config, namespace, name):
+    def get_info_cmd(self, kube_config, namespace, name, netns):
         helm_command = [
+            'ip',
+            'netns',
+            'exec',
+            netns,
             "helm",
             "status",
             name,
@@ -1321,13 +1338,14 @@ class ChartService:
         else:
             return result.stdout
 
-    def get_helm_release_manifest(self, release_name, kube_config, namespace='default'):
+    def get_helm_release_manifest(self, release_name, kube_config, netns, namespace='default'):
         """
         获取指定Helm release的所有资源的YAML清单
         """
         try:
             # 构建命令
-            cmd = ['helm', 'get', 'manifest', release_name, '-n', namespace, '--kubeconfig', kube_config]
+            cmd = ['ip', 'netns', 'exec', netns, 'helm', 'get', 'manifest', release_name, '-n', namespace,
+                   '--kubeconfig', kube_config]
             # 执行命令并捕获输出
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
             release_manifest = result.stdout
@@ -1349,11 +1367,11 @@ class ChartService:
     def get_app_detail(self, app_data: AppDB):
         try:
             # 0、要获取kube_config文件， 执行对应的命令获取下面的资源
-            kube_config, helm_cache_dir = self.get_kubeconfig(app_data.cluster_id)
-            content = self.get_info_cmd(kube_config, app_data.namespace, app_data.name)
+            kube_config, helm_cache_dir, netns = self.get_kubeconfig(app_data.cluster_id)
+            content = self.get_info_cmd(kube_config, app_data.namespace, app_data.name, netns)
             dict_content = json.loads(content)
             resourc_obj_list = []
-            dict_yaml_info = self.get_helm_release_manifest(app_data.name, kube_config, app_data.namespace)
+            dict_yaml_info = self.get_helm_release_manifest(app_data.name, kube_config, netns, app_data.namespace)
             # 1、获取chart信息
             update_time = app_data.update_time.isoformat() if app_data.update_time else None
             app_obj = AppChartObject(
@@ -1553,8 +1571,12 @@ class ChartService:
         except Exception as e:
             raise ValueError(f"get app detail error: {str(e)}")
 
-    def get_helm_list(self, kube_config):
+    def get_helm_list(self, kube_config, netns):
         helm_command = [
+            'ip',
+            'netns',
+            'exec',
+            netns,
             "helm",
             "list",
             "--kubeconfig", kube_config,
@@ -1567,7 +1589,7 @@ class ChartService:
             capture_output=True,
             text=True
         )
-        if result.returncode!= 0:
+        if result.returncode != 0:
             raise ValueError(result.stderr)
 
         return result.stdout

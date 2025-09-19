@@ -622,13 +622,3 @@ async def post_apps(create_data: CreateAppObject, background_tasks: BackgroundTa
         traceback.print_exc()
         Log.error("install app %s failed, reason: %s", create_data.name, str(e))
         raise HTTPException(status_code=400, detail=f"install app error: {str(e)}")
-
-
-@router.get("/helm/list", summary="安装某个应用（异步）", description="安装某个应用（异步）")
-async def get_test(kube_config_path: str = Query(None, description="kube_config路径")):
-    try:
-        content = chart_service.get_helm_list(kube_config_path)
-        content_list = json.loads(content)
-        return {"data": content_list}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"helm list error: {str(e)}")
