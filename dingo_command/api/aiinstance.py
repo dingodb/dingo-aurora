@@ -1,6 +1,7 @@
 # ai相关的容器实例的创建接口
 import asyncio
 import json
+import re
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -150,6 +151,11 @@ async def ai_instance_ssh_web(
             while resp.is_open():
                 if resp.peek_stdout():
                     output = resp.read_stdout()
+
+                    # 移除光标定位等控制序列
+                    # ansi_escape = re.compile(r'\x1B\[[0-9;]*[A-Za-z]')
+                    # ansi_escape.sub('', output)
+
                     await websocket.send_text(output)  # 发送 Shell 输出
                 if resp.peek_stderr():
                     error = resp.read_stderr()
@@ -186,6 +192,18 @@ async def start_instance_by_id(id: str, request: Optional[StartInstanceModel] = 
 async def stop_instance_by_id(id: str):
     try:
         return ai_instance_service.stop_ai_instance_by_id(id)
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"关机容器实例[{id}]失败:{e}")
+
+
+@router.post("/ai-instance/{id}/stop-force", summary="关机容器实例不保存镜像", description="根据实例id关机容器实例")
+async def force_stop_instance_by_id(id: str):
+    try:
+        return ai_instance_service.force_stop_ai_instance_by_id(id)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
