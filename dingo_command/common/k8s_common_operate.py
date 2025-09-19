@@ -727,7 +727,7 @@ class K8sCommonOperate:
             # 把所有的tenant_id为同一个的key_content都租户起来
             query_params = {}
             query_params['tenant_id'] = ai_instance_db.instance_tenant_id
-            query_params['is_manager'] = ai_instance_db.is_manager
+            query_params['is_manager'] = True
             data = KeyService().list_keys(query_params, 1, -1, None, None)
             key_content_tmp_list = []
             if data.get("data"):
