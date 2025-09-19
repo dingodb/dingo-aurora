@@ -10,6 +10,7 @@ import time
 import uuid
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
+from functools import wraps
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception, before_sleep_log
 from keystoneclient import client
@@ -51,23 +52,49 @@ task_executor = ThreadPoolExecutor(max_workers=min(32, (os.cpu_count() or 1) * 4
 
 
 def _create_retry_decorator():
-    """创建一个依赖实例的retry装饰器工厂"""
+    """创建支持智能重试判断的装饰器工厂"""
 
-    def retry_decorator(func):
+    def is_retryable_error(exception):
+        """
+        判断传入的异常是否可重试。
+        根据你的业务场景和常见的Kubernetes操作错误进行扩充。
+        """
+        error_message = str(exception).lower()
+
+        # 匹配不可重试的错误（永久性故障）
+        non_retryable_keywords = [
+            'no such container',  # 容器不存在
+            'no such file or directory',  # 文件或目录不存在
+            'permission denied',  # 权限不足
+            'invalid reference format',  # 镜像名称等引用格式无效
+            'syntax error',  # 语法错误
+            'quota exceeded',  # 资源配额不足
+            'out of memory',  # 内存不足（如果是任务本身需求超出节点容量，重试可能无效）
+            # 'resource already exists'  # 资源已存在（如重复创建）
+        ]
+
+        for keyword in non_retryable_keywords:
+            if keyword in error_message:
+                return False  # 不可重试
+
+        # 默认情况（如网络超时、临时不可用等）视为可重试
+        return True
+
+    def decorator(func):
         @retry(
-            stop=stop_after_attempt(3),
-            wait=wait_exponential(multiplier=1, min=40, max=80),
-            # 使用lambda延迟绑定，通过func的__self__获取实例并调用其方法
-            retry=retry_if_exception(lambda exc: func.__self__.is_retryable_error(exc)),
-            before_sleep=before_sleep_log(LOG, log.WARNING),
-            reraise=True
+            stop=stop_after_attempt(3),  # 最多重试3次（共执行4次）
+            wait=wait_exponential(multiplier=1, min=4, max=10),  # 指数退避：4s, 8s, 10s
+            retry=retry_if_exception(is_retryable_error),  # 只重试可重试的异常
+            before_sleep=before_sleep_log(LOG, log.WARNING),  # 重试前打印日志
+            reraise=True  # 重试耗尽后抛出原始异常
         )
+        @wraps(func)
         async def wrapper(*args, **kwargs):
             return await func(*args, **kwargs)
 
         return wrapper
 
-    return retry_decorator
+    return decorator
 
 
 class AiInstanceService:
@@ -75,7 +102,7 @@ class AiInstanceService:
     def delete_ai_instance_by_id(self, id):
         ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
         if not ai_instance_info_db:
-            LOG.error("ai instance[{id}] is not found")
+            print("ai instance[{id}] is not found")
             return
         # 更新状态为删除中
         ai_instance_info_db.instance_status="DELETING"
@@ -92,24 +119,24 @@ class AiInstanceService:
             try:
                 k8s_common_operate.delete_service_by_name(core_k8s_client, real_name, namespace_name)
             except Exception as e:
-                LOG.error(f"删除Service失败, name={real_name}, ns={namespace_name}, err={e}")
+                print(f"删除Service失败, name={real_name}, ns={namespace_name}, err={e}")
 
             try:
                 k8s_common_operate.delete_service_by_name(core_k8s_client, real_name + "-" + DEV_TOOL_JUPYTER, namespace_name)
             except Exception as e:
-                LOG.error(f"删除 jupyter Service失败, name={real_name}, ns={namespace_name}, err={e}")
+                print(f"删除 jupyter Service失败, name={real_name}, ns={namespace_name}, err={e}")
 
             try:
                 # 删除 ingress rule
                 k8s_common_operate.delete_namespaced_ingress(networking_k8s_client, real_name, namespace_name)
             except Exception as e:
-                LOG.error(f"删除ingress资源[{namespace_name}/{real_name}-jupyter]失败: {str(e)}")
+                print(f"删除ingress资源[{namespace_name}/{real_name}-jupyter]失败: {str(e)}")
 
             try:
                 # 删除 jupyter configMap
                 k8s_common_operate.delete_configmap(core_k8s_client, namespace_name, real_name)
             except Exception as e:
-                LOG.error(f"删除jupyter configMap资源[{namespace_name}/{real_name}]失败: {str(e)}")
+                print(f"删除jupyter configMap资源[{namespace_name}/{real_name}]失败: {str(e)}")
 
             try:
                 # 删除镜像库中保存的关机镜像
@@ -120,7 +147,7 @@ class AiInstanceService:
                 delete_project_repository_response = harbor_service.delete_custom_projects_images(project_name, image_name)
                 print(f"ai instance [{id}] project_name:{project_name}, image_name:{image_name}, delete_project_repository_response:{delete_project_repository_response}")
             except Exception as e:
-                LOG.error(f"删除容器实例[{id}]的关机镜像失败: {e}")
+                print(f"删除容器实例[{id}]的关机镜像失败: {e}")
 
             # 删除metallb的默认端口
             AiInstanceSQL.delete_ai_instance_ports_info_by_instance_id(id)
@@ -131,7 +158,7 @@ class AiInstanceService:
                 LOG.error(f"删除StatefulSet失败, name={real_name}, ns={namespace_name}, err={e}")
                 raise e
         except Exception as e:
-            LOG.error(f"获取 K8s 客户端失败或删除资源异常: {e}")
+            print(f"获取 K8s 客户端失败或删除资源异常: {e}")
             import traceback
             traceback.print_exc()
             raise e
@@ -285,11 +312,12 @@ class AiInstanceService:
                         timeout=600.0
                     )
                 )
-            except asyncio.TimeoutError:
-                print(f"ai instance[{id}]超过10分钟未完成保存镜像操作")
+            except Exception as e:
+                LOG.error(f"Background task failed: {str(e)}", exc_info=True)
                 ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
                 ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
-                ai_instance_info_db.error_msg ="start cci timeout"
+                ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
+                ai_instance_info_db.error_msg = "start cci timeout"
                 AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
 
                 # 释放pod 所在节点node资源
@@ -301,9 +329,6 @@ class AiInstanceService:
 
                 # 副本数改成0
                 self.set_k8s_sts_replica_by_instance_id(id, 0)
-
-            except Exception as e:
-                LOG.error(f"Background task failed: {str(e)}", exc_info=True)
             finally:
                 if loop:
                     loop.close()
@@ -326,11 +351,12 @@ class AiInstanceService:
                         self.sava_ai_instance_to_image_backup(id), timeout = 600.0
                     )
                 )
-            except asyncio.TimeoutError:
-                print(f"ai instance[{id}]超过10分钟未完成保存镜像操作")
+            except Exception as e:
+                LOG.error(f"Background task failed: {str(e)}", exc_info=True)
                 ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
                 ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
-                ai_instance_info_db.error_msg = "start cci timeout"
+                ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
+                ai_instance_info_db.error_msg = "stop cci timeout"
                 AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
 
                 # 释放pod 所在节点node资源
@@ -342,8 +368,6 @@ class AiInstanceService:
 
                 # 副本数改成0
                 self.set_k8s_sts_replica_by_instance_id(id, 0)
-            except Exception as e:
-                LOG.error(f"Background task failed: {str(e)}", exc_info=True)
             finally:
                 if loop:
                     loop.close()
@@ -471,6 +495,7 @@ class AiInstanceService:
             print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] push image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] finished")
         except Exception as e:
             print(f"Async save operation failed for instance {id}: {str(e)}")
+            raise e
         finally:
             redis_connection.delete_redis_key(redis_key)
 
@@ -529,9 +554,14 @@ class AiInstanceService:
     @_create_retry_decorator()  # 应用装饰器工厂
     async def _commit_container(self, core_k8s_client, nerdctl_api_pod, clean_container_id, image_name):
         """执行commit操作"""
+        # commit_command = [
+        #     'nerdctl', 'commit', clean_container_id, image_name,
+        #     '--pause=true', '--namespace', 'k8s.io', '--insecure-registry', '--compression=zstd'
+        # ]
+
         commit_command = [
             'nerdctl', 'commit', clean_container_id, image_name,
-            '--pause=false', '--namespace', 'k8s.io', '--insecure-registry'
+            '--pause=true', '--namespace', 'k8s.io', '--insecure-registry'
         ]
 
         returncode, output = await self._execute_k8s_command(
@@ -539,35 +569,17 @@ class AiInstanceService:
         )
 
         if returncode != 0:
-            print(f"Container id {clean_container_id} Commit returncode:{returncode}, failed: {output}")
-            raise Exception(f"Container id {clean_container_id} Commit returncode:{returncode}, failed: {output}")
+            error_msg = f"Container id {clean_container_id} Commit returncode:{returncode}, failed: {output}"
+            print(error_msg)
+            # WARN[0000] Image lacks label "nerdctl/platform", assuming the platform to be "linux/amd64"
+            if "nerdctl/platform" in output:
+                return output
+            else:
+                raise Exception(error_msg)
+            # 成功则返回输出
+        return output
 
-    def is_retryable_error(self, exception):
-        """
-        判断传入的异常是否可重试。
-        根据你的业务场景和常见的Kubernetes操作错误进行扩充。
-        """
-        error_message = str(exception).lower()
-
-        # 匹配不可重试的错误（永久性故障）
-        non_retryable_keywords = [
-            'no such container',  # 容器不存在
-            'no such file or directory',  # 文件或目录不存在
-            'permission denied',  # 权限不足
-            'invalid reference format',  # 镜像名称等引用格式无效
-            'syntax error',  # 语法错误
-            'quota exceeded',  # 资源配额不足
-            'out of memory',  # 内存不足（如果是任务本身需求超出节点容量，重试可能无效）
-            # 'resource already exists'  # 资源已存在（如重复创建）
-        ]
-
-        for keyword in non_retryable_keywords:
-            if keyword in error_message:
-                return False  # 不可重试
-
-        # 默认情况（如网络超时、临时不可用等）视为可重试
-        return True
-
+    @_create_retry_decorator()
     async def _push_image(self, core_k8s_client, nerdctl_api_pod, image_name):
         """执行push操作"""
         push_command = [
@@ -580,8 +592,11 @@ class AiInstanceService:
         )
 
         if returncode != 0:
-            print(f"Image {image_name} Push returncode:{returncode}, failed: {output}")
-            raise Exception(f"Image {image_name} Push returncode:{returncode}, failed: {output}")
+            error_msg = f"Image {image_name} Push returncode:{returncode}, failed: {output}"
+            print(error_msg)
+            raise Exception(error_msg)
+
+        return  output
 
     def get_ai_instance_info_by_id(self, id):
         ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
@@ -1343,6 +1358,7 @@ class AiInstanceService:
                 harbor_address, harbor_username, harbor_password  = self.get_harbor_info(ai_instance_info_db.instance_k8s_id)
                 core_k8s_client, sts_pod_info = self._get_k8s_sts_pod_info(ai_instance_info_db)
                 nerdctl_api_pod = self._get_nerdctl_api_pod(core_k8s_client, sts_pod_info['node_name'])
+                # 异步保存关机镜像
                 await self._async_save_operation(
                     id, core_k8s_client, nerdctl_api_pod,
                     sts_pod_info['container_id'], harbor_address, harbor_username, harbor_password,
@@ -1482,9 +1498,10 @@ class AiInstanceService:
                         pod_real_status = current_real_status
                         pod_located_node_name = current_node_name
                         self.update_pod_status_and_node_name_in_db(instance_id, pod_real_status, pod_located_node_name, error_msg)
-                        print(f"Pod {pod_name} 状态/node name更新为: {pod_real_status}_{pod_located_node_name}")
+                        print(f"Pod {pod_name} status/node name change to: {pod_real_status}_{pod_located_node_name}")
                         if current_real_status in ["Error", "CrashLoopBackOff", "ImagePullBackOff", "CreateContainerError",
                                                    "CreateContainerConfigError", "OOMKilled", "ContainerCannotRun", "Completed", "Failed"]:
+                            print(f"change Pod {pod_name} sts replica to 0")
                             # 副本数改成0
                             self.set_k8s_sts_replica_by_instance_id(instance_id, 0)
                             return
@@ -1584,7 +1601,7 @@ class AiInstanceService:
                 AiInstanceSQL.update_k8s_node_resource(node_resource_db)
                 LOG.info(f"k8s[{k8s_id}] node[{node_name}] resource update success")
             except Exception as e:
-                LOG.error(f"save k8s node resource fail:{e}")
+                print(f"save k8s node resource fail:{e}")
                 import traceback
                 traceback.print_exc()
         else:
@@ -1929,7 +1946,7 @@ class AiInstanceService:
                     )
                 )
             except Exception as e:
-                LOG.error(f"Background task failed: {str(e)}", exc_info=True)
+                print(f"Background task failed: {str(e)}", exc_info=True)
             finally:
                 if loop:
                     loop.close()
@@ -1942,7 +1959,7 @@ class AiInstanceService:
         try:
             await self.check_pod_status_node_name_and_update_db(*args)
         except Exception as e:
-            LOG.error(f"Pod status check failed: {str(e)}", exc_info=True)
+            print(f"Pod status check failed: {str(e)}", exc_info=True)
 
     def convert_cpu_to_core(self, cpu_str):
         """将CPU字符串转换为 核"""
@@ -2056,7 +2073,7 @@ class AiInstanceService:
             cleaned_value = str(value).replace(',', '').replace('%', '').strip()
             return convert_type(cleaned_value)
         except (ValueError, TypeError) as e:
-            LOG.error(f"Convert failed: {value} to {convert_type.__name__}, error: {str(e)}")
+            print(f"Convert failed: {value} to {convert_type.__name__}, error: {str(e)}")
             return None
 
     def update_node_resources(self, node_resource_db, compute_resource_dict, operation='release'):
@@ -2148,7 +2165,7 @@ class AiInstanceService:
             )
             return resp
         except Exception as e:
-            LOG.error(f"ai_instance_web_ssh instance_id:{instance_id} fail")
+            print(f"ai_instance_web_ssh instance_id:{instance_id} fail")
             import traceback
             traceback.print_exc()
             raise e

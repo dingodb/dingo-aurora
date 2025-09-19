@@ -2,6 +2,7 @@ import json
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
+from dingo_command.common.Enum.AIInstanceEnumUtils import K8sStatus, AiInstanceStatus
 from dingo_command.common.k8s_common_operate import K8sCommonOperate
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
 from dingo_command.services.redis_connection import RedisLock, redis_connection
@@ -309,7 +310,13 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
         pod = pod_map.get(f"{real_name}-0")  # StatefulSet Pod命名规则
 
         if not pod:
-            LOG.warning(f"Not Found Pod[{real_name}-0], skip sync")
+            ai_instance_db = AiInstanceSQL.get_ai_instance_info_by_id(real_name)
+            if ai_instance_db:
+                LOG.warning(f"Not Found Pod[{real_name}-0], update status")
+                ai_instance_db.instance_status = AiInstanceStatus.ERROR.name
+                ai_instance_db.instance_real_status = K8sStatus.ERROR.value
+                ai_instance_db.error_msg = "k8s not exist this pod"
+                AiInstanceSQL.update_ai_instance_info(ai_instance_db)
             continue
 
         # 确定实例状态
@@ -317,13 +324,14 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
         # k8s_image = extract_image_info(sts)
         # 环境变量、错误信息等
         pod_details = extract_pod_details(pod)
+        instance_status = AiInstanceService.map_k8s_to_db_status(k8s_status, instance_db.instance_status)
 
         # 更新数据库记录
         try:
             # 准备更新数据
             update_data = {
                 'instance_real_status': k8s_status,
-                'instance_status': AiInstanceService.map_k8s_to_db_status(k8s_status, instance_db.instance_status),
+                'instance_status': instance_status,
                 # 'instance_image': k8s_image,
                 'instance_node_name': pod.spec.node_name
             }
@@ -335,6 +343,9 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
             # 更新数据库
             AiInstanceSQL.update_specific_fields_instance(instance_db, **update_data)
             LOG.info(f"更新实例[{real_name}]信息: {update_data['instance_status']}")
+            if instance_status.upper() == "ERROR":
+                # 修改副本数
+                ai_instance_service.set_k8s_sts_replica_by_instance_id(instance_db.id, 0)
         except Exception as e:
             LOG.error(f"更新实例状态失败[{real_name}]: {str(e)}")
 
