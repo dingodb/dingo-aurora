@@ -101,7 +101,7 @@ class ResourceClientFactory:
         # 获取客户端类
         client_class = self._client_classes.get(resource_type)
         if client_class is None:
-            logger.warning(f"不支持的资源类型: {resource_type}")
+            logger.warning("不支持的资源类型: %s", resource_type)
             return None
         
         # 创建客户端实例
@@ -110,7 +110,7 @@ class ResourceClientFactory:
             self._client_instances[resource_type] = client_instance
             return client_instance
         except Exception as e:
-            logger.error(f"创建 {resource_type} 客户端实例失败: {e}")
+            logger.error("创建 %s 客户端实例失败: %s", resource_type, str(e))
             return None
 
     def supports_resource(self, resource_type: str) -> bool:
@@ -190,6 +190,6 @@ class ResourceClientFactory:
             )
             return resource_list
         except Exception as e:
-            logger.error(f"调用 {resource_type} 客户端的 list 方法失败: {e}")
+            logger.error("调用 {resource_type} 客户端的 list 方法失败: %s", str(e))
             # 失败时返回原始结果
             return resource_list

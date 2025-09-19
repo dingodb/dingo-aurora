@@ -5,6 +5,8 @@ import uuid
 import subprocess
 import requests
 import shutil
+import socket
+import ipaddress
 from requests.auth import HTTPBasicAuth
 from datetime import datetime
 from math import ceil
@@ -131,6 +133,41 @@ def is_valid_url(url):
         # 必须包含协议和网络位置，且协议需为http/https
         return all([result.scheme in ['http', 'https'], result.netloc])
     except Exception:
+        return False
+
+def get_ip_from_domain(domain):
+    """
+    通过域名解析获取IP地址
+    :param domain: 输入的域名
+    :return: 解析得到的IP地址字符串，解析失败返回None
+    """
+    try:
+        # 使用socket库的gethostbyname函数进行DNS解析
+        ip_addr = socket.gethostbyname(domain)
+        return ip_addr
+    except socket.gaierror:
+        # 处理域名解析错误（例如域名不存在或网络问题）
+        print(f"错误：无法解析域名 '{domain}'。请检查域名拼写或网络连接。")
+        return None
+    except Exception as e:
+        # 捕获其他潜在异常
+        print(f"在解析域名时发生未知错误: {e}")
+        return None
+
+def is_internal_ip(ip_str):
+    """
+    判断一个IP地址是否为内网地址
+    :param ip_str: 待检查的IP地址字符串
+    :return: 如果是内网IP返回True，否则返回False
+    """
+    try:
+        # 使用ipaddress库创建IP地址对象
+        ip_obj = ipaddress.ip_address(ip_str)
+        # 使用is_private属性判断是否为私有地址
+        return ip_obj.is_private
+    except ValueError:
+        # 处理无效的IP地址格式
+        print(f"错误：'{ip_str}' 不是一个有效的IP地址格式。")
         return False
 
 
