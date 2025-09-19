@@ -643,11 +643,11 @@ def render_templatefile(template_file, cluster_file, context):
 
     # 创建Jinja2环境 - 使用相对路径而不是绝对路径
     env = Environment(
-        loader=FileSystemLoader(template_dir),
-        variable_start_string='${',
-        variable_end_string='}',
-        autoescape=True
-    )
+            loader=FileSystemLoader(template_dir),
+            variable_start_string='${',
+            variable_end_string='}',
+            autoescape=True
+        )
 
     # 获取模板并渲染
     template = env.get_template(template_file)  # 只使用文件名而不是完整路径
@@ -1273,6 +1273,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                 
                 cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p 22 ' f'{cluster_tfvars.ssh_user}@{tmp_ip}')
                 netns_cmd = f"ip netns exec {netns} {cmd}"
+                print(f"config node with password {task_id}")
                 retry_count = 0
                 max_retries = 30
                 while retry_count < max_retries:
@@ -1291,6 +1292,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                 cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p 22 '
                        f'{cluster_tfvars.ssh_user}@{tmp_ip}')
                 netns_cmd = f"ip netns exec {netns} {cmd}"
+                print(f"config node with password {task_id}")
                 retry_count = 0
                 max_retries = 30
                 while retry_count < max_retries:

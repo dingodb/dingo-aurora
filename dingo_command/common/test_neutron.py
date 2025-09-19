@@ -28,7 +28,7 @@ class TestNeutron(unittest.TestCase):
         # 假设有一个测试 project_id
         user_id = "ef81a343e6ce472e8d81a71954ed047a"
         name = "bbb"
-        token = "gAAAAABoylZjYufJCrtzX1eefvOjMdebajWzFpaunpb82uPGC99WiuW75VD5F0hYVs5FEaF35pOSPknQC5G6rdBNukpi1T4EfRUZIfrrLjs0TFgDna7omF_dFEWYeyIbfnYC-CB-uKv1JfCm9J_DGfMxWdce84VCh7UWF7rodgQ_Rbn0nkhvqaxfimtsa_T701We1JwRa1YX"
+        #token = "gAAAAABoylZjYufJCrtzX1eefvOjMdebajWzFpaunpb82uPGC99WiuW75VD5F0hYVs5FEaF35pOSPknQC5G6rdBNukpi1T4EfRUZIfrrLjs0TFgDna7omF_dFEWYeyIbfnYC-CB-uKv1JfCm9J_DGfMxWdce84VCh7UWF7rodgQ_Rbn0nkhvqaxfimtsa_T701We1JwRa1YX"
         try:
             keystoneclient = KeystoneClient(token=token)
             app_credential = keystoneclient.get_app_credential(user_id=user_id, name=name)
@@ -37,7 +37,7 @@ class TestNeutron(unittest.TestCase):
             name = app_credential.name
             id = app_credential.id  
             secret= app_credential.secret
-            print(f"app_credential 测试通过: name={name}, id={id}, secret={secret}")
+           
         except Exception as e:
             print(f"init_cluster_network 测试失败: {e}")
 

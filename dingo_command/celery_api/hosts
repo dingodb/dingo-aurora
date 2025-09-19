@@ -197,7 +197,6 @@ def query_database_nodes(args):
             return db_nodes
             
     except Exception as e:
-        #print(f"Error querying database nodes: {e}", file=sys.stderr)
         import traceback
         traceback.print_exc()
         return []
@@ -217,9 +216,7 @@ def merge_hosts_with_db_nodes(terraform_hosts, db_nodes):
     for name, attrs, groups in db_nodes:
         if name not in terraform_hostnames:
             merged_hosts.append((name, attrs, groups))
-            #print(f"Added database node to inventory: {name}", file=sys.stderr)
         else:
-            #print(f"Skipped duplicate node from database: {name}", file=sys.stderr)
             pass
     
     return merged_hosts
@@ -250,7 +247,6 @@ def convert_to_v3_structure(attributes, prefix=''):
 def iterresources(filenames):
     for filename in filenames:
         # 打印文件名
-        # print(filename)
         with open(filename, 'r') as json_file:
             state = json.load(json_file)
             tf_version = state['version']
@@ -264,7 +260,6 @@ def iterresources(filenames):
                 # each instance inside the resource branch.
                 for resource in state['resources']:
                     name = resource['provider'].split('.')[-1]
-                    # print(name)
                     for instance in resource['instances']:
                         key = "{}.{}".format(resource['type'], resource['name'])
                         if 'index_key' in instance:
@@ -317,7 +312,6 @@ def iterips_v2(resources):
     float_ip = ""
     port_id = ""
     for module_name, key, resource in resources:
-        #print("module_name: ", module_name,"key: ", key,"resource: ", resource)
         resource_type, name = key.split('.', 1)
         if resource_type == 'openstack_networking_portforwarding_v2' and name == 'master_portforward.0':
             port_id = resource['primary']['attributes']['internal_port_id']
@@ -330,7 +324,6 @@ def iterips_v2(resources):
 def iterlbips(resources):
     '''yield ip tuples of (port_id, ip)'''
     for module_name, key, resource in resources:
-        #print("module_name: ", module_name,"key: ", key,"resource: ", resource)
         resource_type, name = key.split('.', 1)
         if resource_type == 'openstack_networking_floatingip_associate_v2' and 'public_ip.0' == name:
             raw_attrs = resource['primary']['attributes']
@@ -587,8 +580,6 @@ def iter_host_ips(hosts, ips,ip_lb, adminsubnet, bussububnet, bastion_ip):
     '''Update hosts that have an entry in the floating IP list'''
     for host in hosts:
         port_id = host[1]['port_id']
-        # print("adminsubnet: ", adminsubnet)
-        # print("bussububnet: ", bussububnet)
         if port_id in ips:
             ip = ips[port_id]
             if ip != "":
@@ -618,8 +609,6 @@ def iter_host_ips(hosts, ips,ip_lb, adminsubnet, bussububnet, bastion_ip):
 def iter_host_network(hosts,lb_ip, adminsubnet, bussububnet):
     '''Update hosts that have an entry in the floating IP list'''
     for host in hosts:
-        # print("adminsubnet: ", adminsubnet)
-        # print("bussububnet: ", bussububnet)
         host[1]['subnet_id'] = adminsubnet
         host[1]['bussubnet_id'] = bussububnet
         if lb_ip == None or lb_ip == "":
@@ -708,8 +697,7 @@ def main():
     lb_ip = iterlbips(iterresources(tfstates(args.root)))
     adminsubnet, bussububnet = itersubnets(iterresources(tfstates(args.root)))
     #hosts = iter_host_ips(hosts, ips, lb_ip, adminsubnet, bussububnet)
-    
-        #print(f"第一个 bastion IP: {first_bastion_ip}")
+
     float_ip = ""
     outputs = parse_outputs(tfstates(args.root))
     bastion_fips = outputs.get('bastion_fips', [])
