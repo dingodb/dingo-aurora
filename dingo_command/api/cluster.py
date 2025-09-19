@@ -1,5 +1,6 @@
 import os
 import tempfile
+import traceback
 from typing import List
 from fastapi import Query
 from fastapi.responses import FileResponse
@@ -42,7 +43,6 @@ async def create_cluster(cluster_object:ClusterObject, token: str = Depends(get_
         traceback.print_exc()
         raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=str(e))
     
@@ -101,7 +101,6 @@ async def get_cluster_private_key(cluster_id:str = Query(None, description="集�
             #background=BackgroundTasks([lambda: os.unlink(temp_path)])  # 请求完成后删除临时文件
         )
     except Exception as e:
-        import traceback
         traceback.print_exc()
         raise e
 
@@ -116,7 +115,6 @@ async def get_cluster_progress(type:str):
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail="get cluster progress param error")
 
@@ -131,7 +129,6 @@ async def get_cluster_progress(cluster_id:str):
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"get cluster progress error {str(e)}")
 
@@ -146,7 +143,6 @@ async def get_cluster_progress(cluster_id:str):
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"get delete cluster progress error {str(e)}")
     
@@ -161,7 +157,6 @@ async def list_params():
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail="get cluster param error")
     
@@ -176,7 +171,6 @@ async def get_cluster(cluster_id:str):
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
     except Exception as e:
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"get cluster error {str(e)}")
 
@@ -205,7 +199,6 @@ async def delete_cluster(cluster_id:str, token: str = Depends(get_token)):
     except  HTTPException as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"delete cluster error {str(e)}")
     
@@ -258,6 +251,5 @@ async def add_node(cluster_id:str, servers: List[ExistingNodeObject], token: str
     except  HTTPException as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"add node error {str(e)}")
