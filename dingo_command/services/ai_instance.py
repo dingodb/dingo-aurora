@@ -1278,6 +1278,55 @@ class AiInstanceService:
             traceback.print_exc()
             raise e
 
+    def force_stop_ai_instance_by_id(self, id):
+        try:
+            ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
+            if not ai_instance_info_db:
+                raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
+            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} start to stop ai instance[{id}]")
+
+            # 标记为 STOPPED
+            ai_instance_info_db.instance_status = AiInstanceStatus.STOPPING.name
+            ai_instance_info_db.instance_real_status = None
+            AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+
+            app_client = get_k8s_app_client(ai_instance_info_db.instance_k8s_id)
+            body = {"spec": {"replicas": 0}}
+            try:
+                app_client.patch_namespaced_stateful_set(
+                    name=ai_instance_info_db.instance_real_name,
+                    namespace=CCI_NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id,
+                    body=body,
+                    _preload_content=False
+                )
+            except Exception as e:
+                LOG.error(f"关机失败，实例ID: {id}, 错误: {e}")
+                ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
+                ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
+                AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+                raise e
+
+            # 标记为 STOPPED
+            ai_instance_info_db.instance_status = AiInstanceStatus.STOPPED.name
+            ai_instance_info_db.instance_real_status = None
+            ai_instance_info_db.stop_time = datetime.now()
+            AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+
+            # 释放pod 所在节点node资源
+            node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(
+                ai_instance_info_db.instance_k8s_id, ai_instance_info_db.instance_node_name)
+            if node_resource_db and ai_instance_info_db.instance_config:
+                instance_config_dict = json.loads(ai_instance_info_db.instance_config)
+                self.update_node_resources(node_resource_db, instance_config_dict, "release")
+
+            return {"id": id, "status": AiInstanceStatus.STOPPING.name}
+        except Fail:
+            raise
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
+
     async def sava_ai_instance_to_image_backup(self, id, image_tag = "latest"):
         """
         异步保存AI实例为镜像（立即返回，实际操作在后台执行）
