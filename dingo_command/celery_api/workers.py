@@ -1284,9 +1284,8 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                         if retry_count < max_retries:
                             print(f"sshpass failed, retry {retry_count}/{max_retries} after 5s...")
                             time.sleep(5) 
-            index = 1
             for node in node_list:
-                node_name = f"{cluster_tfvars.cluster_name}-node-{str(index)}"
+                node_name = node.get("name")
                 #ssh_port = hosts_data["_meta"]["hostvars"][master_node_name].get("ansible_port", 22)
                 tmp_ip = hosts_data["_meta"]["hostvars"][node_name]["ansible_host"]
                 cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p 22 '
@@ -1304,7 +1303,6 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                         if retry_count < max_retries:
                             print(f"sshpass failed, retry {retry_count}/{max_retries} after 5s...")
                             time.sleep(5)  
-                index += 1
         # 执行ansible命令验证是否能够连接到所有节点
         print(f"check all node status {task_id}")
         ansible_dir = os.path.join(WORK_DIR, "ansible-deploy")
