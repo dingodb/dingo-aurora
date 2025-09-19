@@ -126,9 +126,10 @@ async def create_resources(
     """
     根据提供的参数查询 Kubernetes 资源。
     """
+    restore_ns = None
     try:
         kube_config, netns = get_cluster_info(resource.cluster_id)
-        restore_ns = None
+        
         if netns:
             restore_ns = set_netns(netns)
         k8sclient = get_k8s_client_by_cluster(kube_config)
@@ -168,9 +169,10 @@ async def create_resources(
     """
     根据提供的参数查询 Kubernetes 资源。
     """
+    restore_ns = None
     try:
         kube_config, netns = get_cluster_info(resource.cluster_id)
-        restore_ns = None
+        
         if netns:
             restore_ns = set_netns(netns)
         k8sclient = get_k8s_client_by_cluster(kube_config)
@@ -214,9 +216,10 @@ async def list_resources(
     """
     根据提供的参数查询 Kubernetes 资源。
     """
+    restore_ns = None
     try:
-        kube_config, netns = get_cluster_info(resource.cluster_id)
-        restore_ns = None
+        kube_config, netns = get_cluster_info(cluster_id)
+        
         if netns:
             restore_ns = set_netns(netns)
         k8sclient = get_k8s_client_by_cluster(kube_config)
@@ -254,9 +257,10 @@ async def get_resources(
     """
     根据提供的参数查询 Kubernetes 资源。
     """
+    restore_ns = None
     try:
-        kube_config, netns = get_cluster_info(resource.cluster_id)
-        restore_ns = None
+        kube_config, netns = get_cluster_info(cluster_id)
+       
         if netns:
             restore_ns = set_netns(netns)
         k8sclient = get_k8s_client_by_cluster(kube_config)
@@ -286,9 +290,10 @@ async def get_resources(
     """
     根据提供的参数查询 Kubernetes 资源。
     """
+    restore_ns = None
     try:
-        kube_config, netns = get_cluster_info(resource.cluster_id)
-        restore_ns = None
+        kube_config, netns = get_cluster_info(cluster_id)
+        
         if netns:
             restore_ns = set_netns(netns)
         k8sclient = get_k8s_client_by_cluster(kube_config)
@@ -319,9 +324,10 @@ async def delete_resources(
     """
     根据提供的参数查询 Kubernetes 资源。
     """
+    restore_ns = None
     try:
-        kube_config, netns = get_cluster_info(resource.cluster_id)
-        restore_ns = None
+        kube_config, netns = get_cluster_info(cluster_id)
+        
         if netns:
             restore_ns = set_netns(netns)
         if resource == "namespaces" and name in not_delete_ns:
@@ -355,7 +361,7 @@ async def delete_resources(
     根据提供的参数查询 Kubernetes 资源。
     """
     try:
-        kube_config, netns = get_cluster_info(resource.cluster_id)
+        kube_config, netns = get_cluster_info(cluster_id)
         restore_ns = None
         
         if resource == "namespaces" and name in not_delete_ns:
@@ -391,9 +397,9 @@ async def delete_resources(
     """
     根据提供的参数查询 Kubernetes 资源。
     """
+    restore_ns = None
     try:
-        kube_config, netns = get_cluster_info(resource.cluster_id)
-        restore_ns = None
+        kube_config, netns = get_cluster_info(cluster_id)
         
         if resource == "namespaces" and name in not_delete_ns:
             raise HTTPException(status_code=403, detail="The namespace resources automatically created by the k8s cluster "
@@ -426,9 +432,10 @@ async def update_resources(
     """
     根据提供的参数查询 Kubernetes 资源。
     """
+    restore_ns = None
     try:
         kube_config, netns = get_cluster_info(resource.cluster_id)
-        restore_ns = None
+    
         if netns:
             restore_ns = set_netns(netns)
         k8sclient = get_k8s_client_by_cluster(kube_config)
@@ -468,9 +475,10 @@ async def update_resources(
     """
     根据提供的参数查询 Kubernetes 资源。
     """
+    restore_ns = None
     try:
         kube_config, netns = get_cluster_info(resource.cluster_id)
-        restore_ns = None
+        
         if netns:
             restore_ns = set_netns(netns)
         k8sclient = get_k8s_client_by_cluster(kube_config)
