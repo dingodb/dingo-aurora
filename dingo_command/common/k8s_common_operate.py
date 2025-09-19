@@ -286,7 +286,7 @@ class K8sCommonOperate:
             if e.status == 404:
                 LOG.warning(f"ConfigMap '{configmap_name}' 在命名空间 '{namespace}' 中不存在")
             else:
-                LOG.error(f"删除 ConfigMap 时发生异常: {e}")
+                LOG.error(f"删除 ConfigMap {configmap_name} 时发生异常: {e}")
             raise e
 
     def create_cci_ingress_rule(self, networking_v1: client.NetworkingV1Api, namespace: str, service_name: str, host_domain: str, nb_prefix: str):
@@ -443,7 +443,7 @@ class K8sCommonOperate:
             return created_sts
 
         except Exception as e:
-            print(f"替换 StatefulSet 时发生错误: {e}")
+            print(f"替换 StatefulSet {namespace_name}/{real_name}时发生错误: {e}")
             import traceback
             traceback.print_exc()
             raise e
@@ -615,13 +615,13 @@ class K8sCommonOperate:
                 propagation_policy=propagation_policy,
                 body=client.V1DeleteOptions()
             )
-            print(f"已删除 StatefulSet: {real_sts_name}")
+            print(f"已删除 StatefulSet: {namespace}/{real_sts_name}")
         except ApiException as e:
             if e.status == 404:
-                print(f"StatefulSet 不存在 (StatefulSet: {real_sts_name})")
+                print(f"StatefulSet 不存在 (StatefulSet: {namespace}/{real_sts_name})")
                 return
             else:
-                print(f"删除失败: {e.reason}")
+                print(f"删除{namespace}/{real_sts_name}失败: {e.reason}")
             return False
 
     def delete_service_by_name(self,
@@ -645,17 +645,17 @@ class K8sCommonOperate:
                 grace_period_seconds=grace_period_seconds,
                 body=client.V1DeleteOptions()
             )
-            print(f"已删除 Service: {service_name}")
+            print(f"已删除 Service: {namespace}/{service_name}")
             return True
 
         except ApiException as e:
             import traceback
             traceback.print_exc()
             if e.status == 404:
-                print(f"Service 不存在: {service_name}")
+                print(f"Service {namespace}/{service_name}不存在: {service_name}")
                 return
             else:
-                print(f"删除失败: {e.reason}")
+                print(f"删除 {namespace}/{service_name}失败: {e.reason}")
             raise e
 
     def delete_namespaced_ingress(self, networking_v1: client.NetworkingV1Api, ingress_name: str, namespace: str):
