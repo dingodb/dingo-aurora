@@ -135,16 +135,22 @@ def process_namespace_resources(namespace: str, instances: list, core_client, ap
         core_client,
         namespace=namespace
     )
+    svc_list = k8s_common_operate.list_svc_by_label(
+        core_client,
+        namespace=namespace
+    )
 
     # 2. 构建资源映射
     sts_map = {sts.metadata.name: sts for sts in sts_list}
     pod_map = {pod.metadata.name: pod for pod in pod_list}
+    svc_map = {svc.metadata.name: svc for svc in svc_list}
     db_instance_map = {inst.instance_real_name: inst for inst in instances}
     LOG.info(f"---------sts_map:{sts_map.keys()}, pod_map:{pod_map.keys()}, db_instance_map:{db_instance_map.keys()}")
 
     # 3. 处理孤儿资源: K8s中存在但数据库不存在的资源
     handle_orphan_resources(
         sts_names=sts_map.keys(),
+        svc_names = svc_map.keys(),
         db_instance_map=db_instance_map,
         namespace=namespace,
         core_client=core_client,
@@ -166,10 +172,12 @@ def process_namespace_resources(namespace: str, instances: list, core_client, ap
     )
 
 
-def handle_orphan_resources(sts_names, db_instance_map, namespace, core_client, apps_client, networking_client):
+def handle_orphan_resources(sts_names, svc_names, db_instance_map, namespace, core_client, apps_client, networking_client):
     db_instance_names = db_instance_map.keys()
     """处理K8s中存在但数据库不存在的资源"""
     orphans = set(sts_names) - set(db_instance_names)
+    # cci的ns中多余的svc
+    orphans_svcs = filter_svc_names(svc_names, db_instance_names)
     LOG.info(f"======handle_orphan_resources======orphans:{orphans}")
     for name in orphans:
         LOG.info(f"清理孤儿资源: {namespace}/{name}")
@@ -197,6 +205,40 @@ def handle_orphan_resources(sts_names, db_instance_map, namespace, core_client, 
         # 删除metallb的默认端口
         AiInstanceSQL.delete_ai_instance_ports_info_by_instance_id(ai_instance_db.id)
 
+    # 遍历删除多余的svc （出现过sts删除了，但是svc未删除的情况）
+    for svc_name in orphans_svcs:
+        try:
+            # 删除
+            k8s_common_operate.delete_service_by_name(
+                core_client,
+                service_name=svc_name,
+                namespace=namespace
+            )
+        except Exception as e:
+            LOG.error(f"删除 default svc资源[{namespace}/{svc_name}]失败: {str(e)}")
+
+
+def filter_svc_names(svc_names, db_instance_names):
+    """
+    过滤掉以 db_instance_names 开头的服务名称，并去重
+
+    :param svc_names: 原始服务名称列表（可能包含重复项）
+    :param db_instance_names: 需要排除的数据库实例名前缀列表
+    :return: 去重后的过滤结果集合
+    """
+    # 将输入列表转为集合去重
+    svc_set = set(svc_names)
+
+    # 生成需要排除的数据库服务名前缀集合（统一小写处理）
+    db_prefixes = {name.lower() for name in db_instance_names}
+
+    # 过滤条件：服务名不以任何 db_prefixes 中的前缀开头（不区分大小写）
+    filtered_svcs = {
+        svc for svc in svc_set
+        if not any(svc.lower().startswith(prefix) for prefix in db_prefixes)
+    }
+
+    return filtered_svcs
 
 def cleanup_cci_resources(apps_client, core_client, networking_client, name, namespace):
     try:

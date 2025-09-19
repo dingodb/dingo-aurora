@@ -535,6 +535,60 @@ class K8sCommonOperate:
             raise e
         return all_sts
 
+    def list_svc_by_label(self, core_v1: client.CoreV1Api, namespace="",
+                          label_selector="", limit=2000, timeout_seconds=60):
+        """
+        根据标签选择器列出Service，支持分页查询所有命名空间或指定命名空间
+
+        :param core_v1: CoreV1Api 客户端实例
+        :param namespace: 命名空间，为空字符串时查询所有命名空间
+        :param label_selector: 标签选择器，例如 "app=my-app,environment=prod"
+        :param limit: 每页返回的结果数量限制
+        :param timeout_seconds: 查询超时时间
+        :return: 匹配的Service列表
+        :raises: RuntimeError 当查询失败时
+        """
+        all_svcs = []
+        continue_token = None
+
+        try:
+            while True:
+                # 构造查询参数
+                kwargs = {
+                    "label_selector": label_selector,
+                    "limit": limit,
+                    "_continue": continue_token,
+                    "timeout_seconds": timeout_seconds
+                }
+
+                try:
+                    if namespace:
+                        # 分页查询指定命名空间
+                        resp = core_v1.list_namespaced_service(
+                            namespace=namespace,
+                            **kwargs
+                        )
+                    else:
+                        # 分页查询所有命名空间
+                        resp = core_v1.list_service_for_all_namespaces(
+                            **kwargs
+                        )
+                except ApiException as ex:
+                    raise RuntimeError(f"Failed to query Services: {str(ex)}") from ex
+
+                all_svcs.extend(resp.items)
+
+                # 检查是否还有更多数据
+                continue_token = resp.metadata._continue
+                if not continue_token:
+                    break
+
+        except Exception as e:
+            print(f"list_svc_by_label failed: {e}")
+            raise e
+
+        return all_svcs
+
     def delete_sts_by_name(self,
             apps_v1: client.AppsV1Api,
             real_sts_name: str,
