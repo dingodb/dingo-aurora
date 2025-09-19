@@ -632,27 +632,28 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None, n
 
 def render_templatefile(template_file, cluster_file, context):
    
-        # 修正模板文件路径
+    # 修正模板文件路径
     #template_file = "k8s-cluster.yml.j2"
     template_dir = os.path.join(BASE_DIR, "dingo_command", "templates")
     template_path = os.path.join(template_dir, template_file)
 
-        # 确保模板文件存在
+    # 确保模板文件存在
     if not os.path.exists(template_path):
         raise FileNotFoundError(f"模板文件不存在: {template_path}")
 
-        # 创建Jinja2环境 - 使用相对路径而不是绝对路径
+    # 创建Jinja2环境 - 使用相对路径而不是绝对路径
     env = Environment(
-            loader=FileSystemLoader(template_dir),
-            variable_start_string='${',
-            variable_end_string='}'
-        )
+        loader=FileSystemLoader(template_dir),
+        variable_start_string='${',
+        variable_end_string='}',
+        autoescape=True
+    )
 
-        # 获取模板并渲染
+    # 获取模板并渲染
     template = env.get_template(template_file)  # 只使用文件名而不是完整路径
     rendered = template.render(**context)
 
-        # 将渲染后的内容写入新文件，使用 UTF-8 编码确保兼容性
+    # 将渲染后的内容写入新文件，使用 UTF-8 编码确保兼容性
     with open(cluster_file, 'w', encoding='utf-8') as f:
         f.write(rendered)
 
@@ -1272,7 +1273,6 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                 
                 cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p 22 ' f'{cluster_tfvars.ssh_user}@{tmp_ip}')
                 netns_cmd = f"ip netns exec {netns} {cmd}"
-                print(f"config node with password: {netns_cmd} {task_id}")
                 retry_count = 0
                 max_retries = 30
                 while retry_count < max_retries:
@@ -1291,7 +1291,6 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                 cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p 22 '
                        f'{cluster_tfvars.ssh_user}@{tmp_ip}')
                 netns_cmd = f"ip netns exec {netns} {cmd}"
-                print(f"config node with password: {netns_cmd} {task_id}")
                 retry_count = 0
                 max_retries = 30
                 while retry_count < max_retries:
