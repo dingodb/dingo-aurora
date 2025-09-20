@@ -98,4 +98,36 @@ class ResponseAppObject(BaseModel):
     values: Optional[str] = Field(None, description="values.yaml里面的值")
     chart_info: Optional[AppChartObject] = Field(None, description="chart的详情")
 
+
+class ChartInfoObject(BaseModel):
+    id: Optional[int] = Field(None, description="chart的id")
+    name: Optional[str] = Field(None, description="chart的名称")
+    prefix_name: Optional[str] = Field(None, description="prefix_name")
+    cluster_id: Optional[str] = Field(None, description="集群的名称")
+    repo_id: Optional[int] = Field(None, description="repo的id")
+    icon: Optional[str] = Field(None, description="icon")
+    description: Optional[str] = Field(None, description="chart的描述")
+    repo_name: Optional[str] = Field(None, description="repo的名称")
+    type: Optional[str] = Field(None, description="chart的类型")
+    tag_id: Optional[int] = Field(None, description="chart的tag_id")
+    tag_name: Optional[str] = Field(None, description="chart的tag名称")
+    status: Optional[str] = Field(None, description="chart的状态")
+    create_time: Optional[str] = Field(None, description="chart的创建的时间")
+    version: Optional[str] = Field(None, description="chart的版本")
+    latest_version: Optional[str] = Field(None, description="chart的最新版本")
+    deprecated: Optional[bool] = Field(None, description="chart是否是老版本")
+    need_install: Optional[bool] = Field(None, description="chart是否是必须安装的")
+    chart_content: Optional[str] = Field(None, description="chart的content信息")
+    values_content: Optional[str] = Field(None, description="chart的名values信息")
+    readme_content: Optional[str] = Field(None, description="chart的readme内容")
+    extra: Optional[str] = Field(None, description="预留参数")
+
+
+class ListChartInfoObject(BaseModel):
+    currentPage: Optional[int] = Field(None, description="当前页码")
+    pageSize: Optional[int] = Field(None, description="每页条数")
+    total: Optional[int] = Field(None, description="总条数")
+    totalPages: Optional[int] = Field(None, description="总页数")
+    data: Optional[List[ChartInfoObject]] = Field(None, description="数据")
+
 # CreateAppObject.model_rebuild()

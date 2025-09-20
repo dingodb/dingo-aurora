@@ -199,7 +199,9 @@ class ChartService:
             if page and page_size:
                 res['currentPage'] = page
                 res['pageSize'] = page_size
-                res['totalPages'] = ceil(count / int(page_size))
+                res['totalPages'] = ceil(count / abs(int(page_size)))
+                if page_size == -1:
+                    res['totalPages'] = 1
             res['total'] = count
             res['data'] = data
             return res
@@ -235,7 +237,9 @@ class ChartService:
             if page and page_size:
                 res['currentPage'] = page
                 res['pageSize'] = page_size
-                res['totalPages'] = ceil(count / int(page_size))
+                res['totalPages'] = ceil(count / abs(int(page_size)))
+                if page_size == -1:
+                    res['totalPages'] = 1
             res['total'] = count
             res['data'] = data
             return res
@@ -254,7 +258,9 @@ class ChartService:
             if page and page_size:
                 res['currentPage'] = page
                 res['pageSize'] = page_size
-                res['totalPages'] = ceil(count / int(page_size))
+                res['totalPages'] = ceil(count / abs(int(page_size)))
+                if page_size == -1:
+                    res['totalPages'] = 1
             res['total'] = count
             res['data'] = data
             return res
@@ -273,7 +279,9 @@ class ChartService:
             if page and page_size:
                 res['currentPage'] = page
                 res['pageSize'] = page_size
-                res['totalPages'] = ceil(count / int(page_size))
+                res['totalPages'] = ceil(count / abs(int(page_size)))
+                if page_size == -1:
+                    res['totalPages'] = 1
             res['total'] = count
             res['data'] = data
             return res

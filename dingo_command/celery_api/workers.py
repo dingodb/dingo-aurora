@@ -1266,25 +1266,6 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                     update_task_state(task_info)
                     raise Exception("Ansible kubernetes deployment failed, configure ssh-keygen error")
         if cluster_tfvars.password != "":
-            for i in range(1, cluster_tfvars.number_of_k8s_masters + 1):
-                master_node_name = f"{cluster_tfvars.cluster_name}-master-{str(i)}"
-                #ssh_port = hosts_data["_meta"]["hostvars"][master_node_name].get("ansible_port", 22)
-                tmp_ip = hosts_data["_meta"]["hostvars"][master_node_name]["ansible_host"]
-                
-                cmd = (f'sshpass -p "{cluster_tfvars.password}" ssh-copy-id -o StrictHostKeyChecking=no -p 22 ' f'{cluster_tfvars.ssh_user}@{tmp_ip}')
-                netns_cmd = f"ip netns exec {netns} {cmd}"
-                print(f"config node with password {task_id}")
-                retry_count = 0
-                max_retries = 30
-                while retry_count < max_retries:
-                    result = subprocess.run(netns_cmd, shell=True, capture_output=True)
-                    if result.returncode == 0:
-                        break
-                    else:
-                        retry_count += 1
-                        if retry_count < max_retries:
-                            print(f"sshpass failed, retry {retry_count}/{max_retries} after 5s...")
-                            time.sleep(5) 
             for node in node_list:
                 node_name = node.get("name")
                 #ssh_port = hosts_data["_meta"]["hostvars"][master_node_name].get("ansible_port", 22)

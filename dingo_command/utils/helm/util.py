@@ -38,6 +38,7 @@ key_status_create = "creating"
 key_status_success = "running"
 key_status_delete = "deleting"
 key_status_failed = "failed"
+need_install_chart = ["ingress-nginx", "cert-manager"]
 tag_data = {
     1: {"chinese_name": "基础设施", "name": "Infrastructure"},
     2: {"chinese_name": "监控", "name": "Monitor"},
