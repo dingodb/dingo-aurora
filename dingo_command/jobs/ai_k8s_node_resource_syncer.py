@@ -7,22 +7,33 @@ from dingo_command.common.Enum.AIInstanceEnumUtils import AiInstanceStatus
 from dingo_command.common.k8s_common_operate import K8sCommonOperate
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
 from dingo_command.services.redis_connection import RedisLock, redis_connection
-from dingo_command.utils.constant import CPU_POD_SLOT_KEY
+from dingo_command.utils.constant import CPU_POD_SLOT_KEY, CCI_SYNC_K8S_NODE_REDIS_KEY
 from dingo_command.utils.k8s_client import get_k8s_core_client
 from dingo_command.db.models.ai_instance.models import AiK8sNodeResourceInfo
 from dingo_command.services.ai_instance import AiInstanceService
 from datetime import datetime
-from oslo_log import log
 
 node_resource_scheduler = BackgroundScheduler()
 ai_instance_service = AiInstanceService()
 k8s_common_operate = K8sCommonOperate()
 
-LOG = log.getLogger(__name__)
-
 def start():
     node_resource_scheduler.add_job(fetch_ai_k8s_node_resource, 'interval', seconds=300, next_run_time=datetime.now(),  misfire_grace_time=150,coalesce=True, max_instances=1)
+    node_resource_scheduler.add_job(fetch_ai_k8s_node_resource_4operate, 'interval', seconds=10, next_run_time=datetime.now(), misfire_grace_time=150, coalesce=True, max_instances=1)
     node_resource_scheduler.start()
+
+def fetch_ai_k8s_node_resource_4operate():
+    try:
+        # 从redis查看最近10s内是否存在key
+        operator_flag = redis_connection.get_redis_by_key(CCI_SYNC_K8S_NODE_REDIS_KEY)
+        # 没有key 啥都不做
+        if not operator_flag:
+            print(f"redis {CCI_SYNC_K8S_NODE_REDIS_KEY} is empty")
+            return
+        # 同步
+        fetch_ai_k8s_node_resource()
+    except Exception as e:
+        print(e)
 
 def fetch_ai_k8s_node_resource():
     # 获取redis的锁，自动释放时间是60s
@@ -34,7 +45,7 @@ def fetch_ai_k8s_node_resource():
                 # 查询所有k8s集群配置
                 k8s_configs = AiInstanceSQL.list_k8s_configs()
                 if not k8s_configs:
-                    LOG.info("ai k8s kubeconfig configs is temp")
+                    print("ai k8s kubeconfig configs is temp")
                     return
 
                 for k8s_kubeconfig_db in k8s_configs:
@@ -48,7 +59,7 @@ def fetch_ai_k8s_node_resource():
                         core_client  = get_k8s_core_client(k8s_kubeconfig_db.k8s_id)
                         k8s_nodes = k8s_common_operate.list_node(core_client)
                         if not k8s_nodes:
-                            LOG.info(f"k8s cluster {k8s_kubeconfig_db.k8s_id} no available node, clear old data")
+                            print(f"k8s cluster {k8s_kubeconfig_db.k8s_id} no available node, clear old data")
                             AiInstanceSQL.delete_k8s_node_resource_by_k8s_id(k8s_kubeconfig_db.k8s_id)
                             continue
                         # k8s node 信息
@@ -75,16 +86,16 @@ def fetch_ai_k8s_node_resource():
                     except Exception as e:
                         import traceback
                         traceback.print_exc()
-                        LOG.error(f"get k8s[{k8s_kubeconfig_db.k8s_id}] client fail: {e}")
+                        print(f"get k8s[{k8s_kubeconfig_db.k8s_id}] client fail: {e}")
                         continue
 
             except Exception as e:
                 import traceback
                 traceback.print_exc()
-                LOG.error(f"sync k8s node resource fail: {e}")
+                print(f"sync k8s node resource fail: {e}")
             finally:
                 end_time = datetime.now()
-                LOG.error(f"sync k8s node resource end time: {end_time}, time-consuming：{(end_time - start_time).total_seconds()}s")
+                print(f"sync k8s node resource end time: {end_time}, time-consuming：{(end_time - start_time).total_seconds()}s")
         else:
             print("get dingo_command_ai_k8s_node_resource_lock redis lock failed")
 
@@ -95,7 +106,7 @@ def handle_removed_nodes(k8s_id, removed_node_names):
             # 检查节点上是否还有关联的AI实例
             instances = AiInstanceSQL.get_instances_by_k8s_and_node(k8s_id, node_name)
             if instances:
-                LOG.warning(f"node [{node_name}] deleted, {len(instances)}AI instances remain associated, flagged as abnormal status.")
+                print(f"node [{node_name}] deleted, {len(instances)}AI instances remain associated, flagged as abnormal status.")
                 for instance in instances:
                     update_data = {
                         'instance_real_status': None,
@@ -111,10 +122,10 @@ def handle_removed_nodes(k8s_id, removed_node_names):
 
             # 删除节点资源记录
             AiInstanceSQL.delete_k8s_node_resource(k8s_id, node_name)
-            LOG.info(f"Cleared resource records of deleted node [{node_name}]")
+            print(f"Cleared resource records of deleted node [{node_name}]")
 
         except Exception as e:
-            LOG.error(f"hande delete node [{node_name}] fail: {str(e)}", exc_info=True)
+            print(f"hande delete node [{node_name}] fail: {str(e)}")
 
 def sync_node_and_pod_resources(k8s_id, k8s_node, core_client):
     """
@@ -122,15 +133,15 @@ def sync_node_and_pod_resources(k8s_id, k8s_node, core_client):
     """
     # 处理node资源总量
     if not sync_node_resource_total(k8s_id, k8s_node):
-        LOG.error(f"k8s [{k8s_id}] node  {k8s_node.metadata.name} resource total sync fail")
+        print(f"k8s [{k8s_id}] node  {k8s_node.metadata.name} resource total sync fail")
         return
 
     # 处理node资源使用量
     if not sync_pod_resource_usage(k8s_id, k8s_node.metadata.name, core_client):
-        LOG.error(f"k8s [{k8s_id}] node {k8s_node.metadata.name} POD resource used sync fail")
+        print(f"k8s [{k8s_id}] node {k8s_node.metadata.name} POD resource used sync fail")
         return
 
-    LOG.info(f"k8s [{k8s_id}] node {k8s_node.metadata.name} resource sync end")
+    print(f"k8s [{k8s_id}] node {k8s_node.metadata.name} resource sync end")
 
 
 def sync_node_resource_total(k8s_id, k8s_node):
@@ -143,7 +154,7 @@ def sync_node_resource_total(k8s_id, k8s_node):
     try:
         allocatable = k8s_node.status.allocatable
         if not allocatable:
-            LOG.warning(f"Node {k8s_node.metadata.name} has no allocatable resources")
+            print(f"Node {k8s_node.metadata.name} has no allocatable resources")
             return False
         internal_ips  = [item.address for item in k8s_node.status.addresses if item.type == 'InternalIP']
         print(f"sync k8s: {k8s_id} node name:{k8s_node.metadata.name}")
@@ -179,7 +190,7 @@ def sync_node_resource_total(k8s_id, k8s_node):
         process_node_total_resource(k8s_id, node_resource)
         return True
     except Exception as e:
-        LOG.error(f"sync node {k8s_node.metadata.name} resource total failed: {str(e)}")
+        print(f"sync node {k8s_node.metadata.name} resource total failed: {str(e)}")
         return False
 
 
@@ -204,6 +215,7 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
                 node_resource_db.memory_used = "0"
                 node_resource_db.gpu_used = "0"
                 node_resource_db.storage_used = "0"
+                node_resource_db.cpu_slot_used = "0"
                 AiInstanceSQL.update_k8s_node_resource(node_resource_db)
             return True
 
@@ -270,11 +282,11 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
             AiInstanceSQL.update_k8s_node_resource(node_resource_db)
             return True
 
-        LOG.error(f"Not found {k8s_id}/{node_name} resource data")
+        print(f"Not found {k8s_id}/{node_name} resource data")
         return False
 
     except Exception as e:
-        LOG.error(f"sync POD used resource failed: {str(e)}")
+        print(f"sync POD used resource failed: {str(e)}")
         return False
 
 def process_node_total_resource(k8s_id, node_resource):
@@ -301,7 +313,7 @@ def process_node_total_resource(k8s_id, node_resource):
         existing.gpu_model = gpu_model
         existing.gpu_total = gpu_total
         existing.node_ip = node_resource['node_ip']
-        LOG.info(f"Updating resource for node {node_name}")
+        print(f"Updating resource for node {node_name}")
         AiInstanceSQL.update_k8s_node_resource(existing)
     else:
         ai_k8s_node_resource_db = AiK8sNodeResourceInfo(
@@ -317,5 +329,5 @@ def process_node_total_resource(k8s_id, node_resource):
             cpu_slot_total=node_resource['standard_resources'][CPU_POD_SLOT_KEY]
         )
         ai_k8s_node_resource_db.id = uuid.uuid4().hex
-        LOG.info(f"Creating new resource for node {node_name}")
+        print(f"Creating new resource for node {node_name}")
         AiInstanceSQL.save_k8s_node_resource(ai_k8s_node_resource_db)

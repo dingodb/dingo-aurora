@@ -22,7 +22,6 @@ from kubernetes.client import V1PersistentVolumeClaim, V1ObjectMeta, V1Persisten
     V1WeightedPodAffinityTerm, V1PodAffinityTerm, V1LabelSelectorRequirement, V1HostPathVolumeSource, V1SecurityContext
 from kubernetes import client
 from kubernetes.stream import stream
-from oslo_log import log
 
 from dingo_command.api.model.aiinstance import AddPortModel
 from dingo_command.common.Enum.AIInstanceEnumUtils import AiInstanceStatus, K8sStatus
@@ -38,11 +37,9 @@ from dingo_command.utils.constant import CCI_NAMESPACE_PREFIX, RESOURCE_TYPE_KEY
     DEV_TOOL_JUPYTER, \
     SAVE_TO_IMAGE_CCI_PREFIX, GPU_POD_LABEL_KEY, GPU_POD_LABEL_VALUE, CCI_STS_PREFIX, CCI_STS_POD_SUFFIX, INGRESS_SIGN, \
     HYPHEN_SIGN, POINT_SIGN, JUPYTER_INIT_MOUNT_NAME, JUPYTER_INIT_MOUNT_PATH, HARBOR_PULL_IMAGE_SUFFIX, \
-    CPU_OVER_COMMIT, MIN_CPU_REQUEST, CPU_POD_SLOT_KEY
+    CPU_OVER_COMMIT, MIN_CPU_REQUEST, CPU_POD_SLOT_KEY, CCI_SYNC_K8S_NODE_REDIS_KEY, CCI_TIME_OUT_DEFAULT
 from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client, get_k8s_networking_client
 from dingo_command.services.custom_exception import Fail
-
-LOG = log.getLogger(__name__)
 
 k8s_common_operate = K8sCommonOperate()
 harbor_service = HarborService()
@@ -85,7 +82,7 @@ def _create_retry_decorator():
             stop=stop_after_attempt(3),  # 最多重试3次（共执行4次）
             wait=wait_exponential(multiplier=1, min=4, max=10),  # 指数退避：4s, 8s, 10s
             retry=retry_if_exception(is_retryable_error),  # 只重试可重试的异常
-            before_sleep=before_sleep_log(LOG, log.WARNING),  # 重试前打印日志
+            # before_sleep=before_sleep_log(LOG, log.WARNING),  # 重试前打印日志
             reraise=True  # 重试耗尽后抛出原始异常
         )
         @wraps(func)
@@ -155,22 +152,18 @@ class AiInstanceService:
             try:
                 k8s_common_operate.delete_sts_by_name(app_k8s_client, real_name, namespace_name)
             except Exception as e:
-                LOG.error(f"删除StatefulSet失败, name={real_name}, ns={namespace_name}, err={e}")
+                print(f"删除StatefulSet失败, name={real_name}, ns={namespace_name}, err={e}")
                 raise e
         except Exception as e:
             print(f"获取 K8s 客户端失败或删除资源异常: {e}")
             import traceback
             traceback.print_exc()
             raise e
+        finally:
+            self.get_or_set_update_k8s_node_resource_redis()
 
         # 删除数据库记录
         AiInstanceSQL.delete_ai_instance_info_by_id(id)
-
-        # 移除pod在ops_ai_k8s_node_resource表中的资源占用
-        node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(ai_instance_info_db.instance_k8s_id, ai_instance_info_db.instance_node_name)
-        if node_resource_db and ai_instance_info_db.instance_config:
-            instance_config_dict = json.loads(ai_instance_info_db.instance_config)
-            self.update_node_resources(node_resource_db, instance_config_dict, "release")
         return {"data": "success", "uuid": id}
 
     # ================= 账户相关 =================
@@ -309,23 +302,18 @@ class AiInstanceService:
                             id, core_k8s_client, nerdctl_api_pod,
                             clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag
                         ),
-                        timeout=600.0
+                        timeout=CCI_TIME_OUT_DEFAULT
                     )
                 )
             except Exception as e:
-                LOG.error(f"Background task failed: {str(e)}", exc_info=True)
+                print(f"Background task failed: {str(e)}")
                 ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
                 ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
                 ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
-                ai_instance_info_db.error_msg = "start cci timeout"
+                ai_instance_info_db.error_msg = str(e)
                 AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
 
-                # 释放pod 所在节点node资源
-                node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(
-                    ai_instance_info_db.instance_k8s_id, ai_instance_info_db.instance_node_name)
-                if node_resource_db and ai_instance_info_db.instance_config:
-                    instance_config_dict = json.loads(ai_instance_info_db.instance_config)
-                    self.update_node_resources(node_resource_db, instance_config_dict, "release")
+                self.get_or_set_update_k8s_node_resource_redis()
 
                 # 副本数改成0
                 self.set_k8s_sts_replica_by_instance_id(id, 0)
@@ -348,23 +336,16 @@ class AiInstanceService:
                 loop.run_until_complete(
                     # 执行检查任务
                     asyncio.wait_for(
-                        self.sava_ai_instance_to_image_backup(id), timeout = 600.0
+                        self.sava_ai_instance_to_image_backup(id), timeout = CCI_TIME_OUT_DEFAULT
                     )
                 )
             except Exception as e:
-                LOG.error(f"Background task failed: {str(e)}", exc_info=True)
+                print(f"Background task failed: {str(e)}")
                 ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
                 ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
                 ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
-                ai_instance_info_db.error_msg = "stop cci timeout"
+                ai_instance_info_db.error_msg = str(e)
                 AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
-
-                # 释放pod 所在节点node资源
-                node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(
-                    ai_instance_info_db.instance_k8s_id, ai_instance_info_db.instance_node_name)
-                if node_resource_db and ai_instance_info_db.instance_config:
-                    instance_config_dict = json.loads(ai_instance_info_db.instance_config)
-                    self.update_node_resources(node_resource_db, instance_config_dict, "release")
 
                 # 副本数改成0
                 self.set_k8s_sts_replica_by_instance_id(id, 0)
@@ -554,16 +535,16 @@ class AiInstanceService:
     @_create_retry_decorator()  # 应用装饰器工厂
     async def _commit_container(self, core_k8s_client, nerdctl_api_pod, clean_container_id, image_name):
         """执行commit操作"""
-        # commit_command = [
-        #     'nerdctl', 'commit', clean_container_id, image_name,
-        #     '--pause=true', '--namespace', 'k8s.io', '--insecure-registry', '--compression=zstd'
-        # ]
-
         commit_command = [
             'nerdctl', 'commit', clean_container_id, image_name,
-            '--pause=true', '--namespace', 'k8s.io', '--insecure-registry'
+            '--pause=true', '--namespace', 'k8s.io', '--insecure-registry', '--compression=zstd'
         ]
 
+        # commit_command = [
+        #     'nerdctl', 'commit', clean_container_id, image_name,
+        #     '--pause=true', '--namespace', 'k8s.io', '--insecure-registry'
+        # ]
+        print(f"commit_command: {commit_command}")
         returncode, output = await self._execute_k8s_command(
             core_k8s_client, nerdctl_api_pod['name'], nerdctl_api_pod['namespace'], commit_command
         )
@@ -586,7 +567,7 @@ class AiInstanceService:
             'nerdctl', 'push', image_name,
             '--namespace', 'k8s.io', '--insecure-registry'
         ]
-
+        print(f"push_command: {push_command}")
         returncode, output = await self._execute_k8s_command(
             core_k8s_client, nerdctl_api_pod['name'], nerdctl_api_pod['namespace'], push_command
         )
@@ -690,7 +671,7 @@ class AiInstanceService:
                 # 多副本场景
                 return self._create_multiple_instances(ai_instance, ai_instance_db, namespace_name)
         except Exception as e:
-            LOG.error(f"Failed to create AI instance: {str(e)}")
+            print(f"Failed to create AI instance: {str(e)}")
             import traceback
             traceback.print_exc()
             raise e
@@ -723,7 +704,7 @@ class AiInstanceService:
 
         if not k8s_common_operate.check_ai_instance_ns_exists(self.core_k8s_client, namespace_name):
             k8s_common_operate.create_ai_instance_ns(self.core_k8s_client, namespace_name)
-            LOG.info(f"Created namespace: {namespace_name}")
+            print(f"Created namespace: {namespace_name}")
 
         return namespace_name
 
@@ -1029,7 +1010,7 @@ class AiInstanceService:
         container = V1Container(
             name=ai_instance_db.instance_real_name,  # 使用实例的真实名称
             image=ai_instance.image,
-            image_pull_policy="Always",
+            # image_pull_policy="Always",
             security_context=container_security_context,
             env=env_list,
             env_from=[
@@ -1315,7 +1296,7 @@ class AiInstanceService:
                     _preload_content=False
                 )
             except Exception as e:
-                LOG.error(f"关机失败，实例ID: {id}, 错误: {e}")
+                print(f"关机失败，实例ID: {id}, 错误: {e}")
                 ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
                 ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
                 AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
@@ -1341,6 +1322,8 @@ class AiInstanceService:
             import traceback
             traceback.print_exc()
             raise e
+        finally:
+            self.get_or_set_update_k8s_node_resource_redis()
 
     async def sava_ai_instance_to_image_backup(self, id, image_tag = "latest"):
         """
@@ -1386,7 +1369,7 @@ class AiInstanceService:
                         _preload_content=False
                     )
                 except Exception as e:
-                    LOG.error(f"关机失败，实例ID: {id}, 错误: {e}")
+                    print(f"stop cci failed, id [{id}] : {e}")
                     ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
                     ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
                     AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
@@ -1398,16 +1381,11 @@ class AiInstanceService:
                 ai_instance_info_db.stop_time = datetime.now()
                 AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
 
-                # 释放pod 所在节点node资源
-                node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(
-                    ai_instance_info_db.instance_k8s_id, ai_instance_info_db.instance_node_name)
-                if node_resource_db and ai_instance_info_db.instance_config:
-                    instance_config_dict = json.loads(ai_instance_info_db.instance_config)
-                    self.update_node_resources(node_resource_db, instance_config_dict, "release")
-
         except Exception as e:
             print(f"Failed to start save operation for instance {id}: {e}")
             raise Fail(f"Failed to start save operation: {e}")
+        finally:
+            self.get_or_set_update_k8s_node_resource_redis()
 
     def set_auto_close_instance_by_id(self, id: str, auto_close_time: str, auto_close: bool):
         try:
@@ -1470,7 +1448,7 @@ class AiInstanceService:
                                                        instance_id: str,
                                                        pod_name: str,
                                                        namespace: str,
-                                                       timeout: int = 600
+                                                       timeout: int = CCI_TIME_OUT_DEFAULT
                                                        ):
         """
         异步检查 Pod 状态并更新数据库
@@ -1504,14 +1482,15 @@ class AiInstanceService:
                             print(f"change Pod {pod_name} sts replica to 0")
                             # 副本数改成0
                             self.set_k8s_sts_replica_by_instance_id(instance_id, 0)
+
+                            self.get_or_set_update_k8s_node_resource_redis()
                             return
 
 
                     # 如果 Pod 处于 Running 状态，退出循环
                     if pod_real_status == "Running":
                         print(f"Pod {pod_name} 已正常运行, node name:{current_node_name}")
-                        node_name = pod.spec.node_name
-                        self.handle_cci_node_resource_info(instance_id, k8s_id, node_name)
+                        self.get_or_set_update_k8s_node_resource_redis()
 
                         # 明确退出函数
                         return
@@ -1529,20 +1508,17 @@ class AiInstanceService:
             # 5. 检查是否超时
             if (datetime.now() - start_time).total_seconds() >= timeout:
                 print(f"Pod {pod_name} 状态检查超时(5分钟)")
-                # 查询 Pod 状态
-                pod = k8s_common_operate.get_pod_info(core_k8s_client, pod_name, namespace)
-                if pod.spec.node_name:
-                    print("")
-                    # 处理pod 未运行场景
-                    self.handle_cci_node_resource_info(instance_id, k8s_id, pod.spec.node_name)
 
-                self.update_pod_status_and_node_name_in_db(instance_id, K8sStatus.ERROR.value, pod_located_node_name, "pod create success timeout")
+                self.update_pod_status_and_node_name_in_db(instance_id, K8sStatus.ERROR.value, pod_located_node_name, "cci pod change to running timeout")
 
                 # 副本数改成0
                 self.set_k8s_sts_replica_by_instance_id(instance_id, 0)
 
+                self.get_or_set_update_k8s_node_resource_redis()
+
         except Exception as e:
             print(f"检查Pod状态时发生未预期错误: {e}")
+            self.get_or_set_update_k8s_node_resource_redis()
             import traceback
             traceback.print_exc()
             return
@@ -1599,13 +1575,13 @@ class AiInstanceService:
                     node_resource_db.less_gpu_pod_count += 1
 
                 AiInstanceSQL.update_k8s_node_resource(node_resource_db)
-                LOG.info(f"k8s[{k8s_id}] node[{node_name}] resource update success")
+                print(f"k8s[{k8s_id}] node[{node_name}] resource update success")
             except Exception as e:
                 print(f"save k8s node resource fail:{e}")
                 import traceback
                 traceback.print_exc()
         else:
-            LOG.error(f"Not found k8s[{k8s_id}] node[{node_name}] resource info, can not to update used resource")
+            print(f"Not found k8s[{k8s_id}] node[{node_name}] resource info, can not to update used resource")
 
     def update_pod_status_and_node_name_in_db(self, id : str, k8s_status: str, node_name: str, error_msg: str = None):
         """
@@ -1946,7 +1922,7 @@ class AiInstanceService:
                     )
                 )
             except Exception as e:
-                print(f"Background task failed: {str(e)}", exc_info=True)
+                print(f"Background task failed: {str(e)}")
             finally:
                 if loop:
                     loop.close()
@@ -1959,7 +1935,7 @@ class AiInstanceService:
         try:
             await self.check_pod_status_node_name_and_update_db(*args)
         except Exception as e:
-            print(f"Pod status check failed: {str(e)}", exc_info=True)
+            print(f"Pod status check failed: {str(e)}")
 
     def convert_cpu_to_core(self, cpu_str):
         """将CPU字符串转换为 核"""
@@ -1994,7 +1970,6 @@ class AiInstanceService:
             raise Fail("k8s id is empty", error_message="K8s ID为空")
         node_resource_list_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id(k8s_id)
         if not node_resource_list_db:
-            LOG.error("")
             return None
 
         node_resources = []
@@ -2128,7 +2103,7 @@ class AiInstanceService:
             return True
 
         except Exception as e:
-            LOG.error(f"{operation}节点资源失败: {str(e)}")
+            print(f"{operation}节点资源失败: {str(e)}")
             import traceback
             traceback.print_exc()
             return False
@@ -2209,7 +2184,7 @@ class AiInstanceService:
                 _preload_content=False
             )
         except Exception as e:
-            LOG.error(f"实例设置副本数{replica}失败，实例ID: {id}, 错误: {e}")
+            print(f"实例设置副本数{replica}失败，实例ID: {id}, 错误: {e}")
 
     def get_pod_final_status(self, pod) -> str:
         """
@@ -2308,7 +2283,7 @@ class AiInstanceService:
             node_list = self.get_k8s_node_resource_statistics(k8s_id)
             # node_list.append(node_resource_list_db)
         except Exception as e:
-            LOG.error(f"查询不到可用节点, 错误: {e}")
+            print(f"查询不到可用节点, 错误: {e}")
         # 空
         if not node_list:
             return None
@@ -2417,5 +2392,11 @@ class AiInstanceService:
             # 最小返回0.5 保留两位小数
             return max(MIN_CPU_REQUEST, round(result, 2))
         except Exception as e:
-            LOG.error(e)
+            print(e)
             return MIN_CPU_REQUEST  # 默认安全值
+
+    def get_or_set_update_k8s_node_resource_redis(self):
+        operator_flag = redis_connection.get_redis_by_key(CCI_SYNC_K8S_NODE_REDIS_KEY)
+        if not operator_flag:
+            print("set ai instance k8s ndoe resource key expire time  to 10s")
+            redis_connection.set_redis_by_key_with_expire(CCI_SYNC_K8S_NODE_REDIS_KEY, "true", 10)

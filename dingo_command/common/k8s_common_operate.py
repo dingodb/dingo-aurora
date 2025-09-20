@@ -697,6 +697,23 @@ class K8sCommonOperate:
             print(f"查询Node失败: {e.reason} (状态码: {e.status})")
             raise e.reason
 
+    def read_node(self, core_v1: client.CoreV1Api, node_name: str):
+        """
+        读取指定名称的节点信息
+
+        :param core_v1: CoreV1Api客户端实例
+        :param node_name: 要查询的节点名称
+        :return: Node对象
+        :raises: Exception 当Kubernetes API调用失败时
+        """
+        try:
+            node = core_v1.read_node(name=node_name)
+            return node
+        except ApiException as e:
+            error_msg = f"read node {node_name} fail: {e.reason} (status: {e.status})"
+            print(error_msg)
+            raise Exception(error_msg) from e
+
     def create_ns_configmap(self, core_v1: client.CoreV1Api, namespace_name: str, configmap_name: str, ai_instance_db,
                             configmap_data: Dict[str, str]):
         """
