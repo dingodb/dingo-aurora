@@ -37,7 +37,7 @@ class IngressClient:
             matched_ingresses = []
             for ingress in items:
                 # 检查ingress是否关联到匹配的service
-                for service in matched_services:
+                for service in matched_services.get("items", []):
                     service_name = service.get('metadata', {}).get('name')
                     if not service_name:
                         continue

@@ -37,7 +37,7 @@ resource "openstack_networking_network_v2" "bus_cluster" {
 
 resource "openstack_networking_subnet_v2" "cluster" {
   name            = "${var.cluster_name}-internal-network"
-  count           =  var.use_existing_network && var.bus_network_id != "" ? 0 : var.use_neutron
+  count           =  var.use_existing_network ? 0 : (var.bus_network_id != null && var.bus_network_id != "") ? 1 : 0
   network_id      = openstack_networking_network_v2.cluster[count.index].id
   cidr            = var.subnet_cidr
   ip_version      = 4

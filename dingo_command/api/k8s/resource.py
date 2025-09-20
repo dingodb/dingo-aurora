@@ -204,6 +204,7 @@ async def list_resources(
     namespace:str = Query(None, description="集群id"),
     resource: str = Path(..., description="Kubernetes 资源类型"),
     label_selector: str = Query(None, description="标签选择器"),
+    search_terms: str = Query(None, description="搜索关键词，多个关键词用逗号分隔"),
     name: str = Query(None, description="搜索关键词"),
     page: str = Query(None, description="页码"),
     page_size: str = Query(None, description="每页大小"),
@@ -223,8 +224,9 @@ async def list_resources(
         if netns:
             restore_ns = set_netns(netns)
         k8sclient = get_k8s_client_by_cluster(kube_config)
-    #将search_terms按照逗号分开
-        search_terms_list = [f"name={name}"] if name else []
+        #将search_terms按照逗号分开
+        search_terms_list = search_terms.split(",") if search_terms else []
+        search_terms_list = ["name=" + name] + search_terms_list if name else search_terms_list
         resources = k8sclient.list_resource(
             resource_type=resource,
             namespace=namespace,
