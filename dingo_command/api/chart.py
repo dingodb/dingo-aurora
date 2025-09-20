@@ -6,7 +6,7 @@ from datetime import datetime
 import json
 from fastapi import Query
 from fastapi import APIRouter, HTTPException, BackgroundTasks
-from dingo_command.api.model.chart import CreateRepoObject, CreateAppObject
+from dingo_command.api.model.chart import CreateRepoObject, CreateAppObject, ListChartInfoObject, ChartInfoObject
 from dingo_command.services.chart import ChartService, create_harbor_repo, create_tag_info
 from dingo_command.db.models.chart.sql import RepoSQL, AppSQL
 from dingo_command.utils.helm.util import ChartLOG as Log
@@ -373,6 +373,43 @@ async def get_repo_charts(cluster_id: str = Query(None, description="集群id"),
         if id:
             query_params['id'] = id
         # 显示repo列表的逻辑
+        # 如果是repo==1，并且chart_name在必须安装组件的列表中
+        if (repo_id == 1 or repo_id == "1") and not cluster_id:
+            data = chart_service.list_charts(query_params, page, page_size, sort_keys, sort_dirs)
+            chart_tmp_list = []
+            for chart in data.get("data"):
+                chart_info= ChartInfoObject(
+                    id=chart.id,
+                    name=chart.name,
+                    prefix_name=chart.prefix_name,
+                    cluster_id=chart.cluster_id,
+                    repo_id=chart.repo_id,
+                    icon=chart.icon,
+                    description=chart.description,
+                    repo_name=chart.repo_name,
+                    type=chart.type,
+                    tag_id=chart.tag_id,
+                    tag_name=chart.tag_name,
+                    status=chart.status,
+                    create_time=chart.create_time,
+                    version=chart.version,
+                    latest_version=chart.latest_version,
+                    deprecated=chart.deprecated,
+                    chart_content=chart.chart_content,
+                    values_content=chart.values_content,
+                    readme_content=chart.readme_content,
+                    extra=chart.extra,
+                    need_install= True if chart.name in util.need_install_chart else False
+                )
+                chart_tmp_list.append(chart_info)
+            data = ListChartInfoObject(
+                total=data.get("total"),
+                data=chart_tmp_list,
+                currentPage=data.get("currentPage"),
+                pageSize=data.get("pageSize"),
+                totalPages=data.get("totalPages")
+            )
+            return data
         return chart_service.list_charts(query_params, page, page_size, sort_keys, sort_dirs)
     except Exception as e:
         import traceback
