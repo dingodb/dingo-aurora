@@ -1410,7 +1410,10 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
                 if gpu_count_info.resource_gpu_count is not None:
                     c.gpu = gpu_count_info.resource_gpu_count + c.gpu
         ClusterSQL.update_cluster(c)
-        install_app_chart(cluster.charts, cluster_dict["id"])
+        try:
+            install_app_chart(cluster.charts, cluster_dict["id"])
+        except Exception as e:
+            print(f"install app chart error: {e}")
 
     except SoftTimeLimitExceeded:
         query_params = {}

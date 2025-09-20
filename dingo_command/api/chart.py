@@ -374,7 +374,7 @@ async def get_repo_charts(cluster_id: str = Query(None, description="集群id"),
             query_params['id'] = id
         # 显示repo列表的逻辑
         # 如果是repo==1，并且chart_name在必须安装组件的列表中
-        if (repo_id == 1 or repo_id == "1") and not cluster_id:
+        if repo_id == 1 or repo_id == "1":
             data = chart_service.list_charts(query_params, page, page_size, sort_keys, sort_dirs)
             chart_tmp_list = []
             for chart in data.get("data"):
