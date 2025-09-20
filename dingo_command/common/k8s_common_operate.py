@@ -1,5 +1,6 @@
 import base64
 import textwrap
+import time
 from typing import Dict
 import json
 
@@ -416,25 +417,30 @@ class K8sCommonOperate:
 
     def replace_statefulset(self, apps_v1: client.AppsV1Api, real_name, namespace_name, modified_sts_data):
         """
-        替换 StatefulSet：删除旧的并创建新的。
+        替换 StatefulSet：删除旧的并创建新的，确保旧资源完全清理后再创建。
 
         参数:
-            apps_v1: app client。
+            apps_v1: apps client。
+            core_v1: core client (用于检查Pod)。
             real_name: StatefulSet 的名称。
             namespace_name: 命名空间。
             modified_sts_data: 修改后的 V1StatefulSet 对象。
         """
         try:
-            # 1. 删除 StatefulSet (非级联删除，保留 Pods 和 PVCs)
+            # 1. 删除 StatefulSet (采用默认的级联删除策略，会删除Pod)
             delete_options = client.V1DeleteOptions(grace_period_seconds=0)
             apps_v1.delete_namespaced_stateful_set(
                 name=real_name,
                 namespace=namespace_name,
                 body=delete_options
             )
-            print(f"StatefulSet '{namespace_name}/{real_name}' 已删除 (cascade=false).")
+            print(f"StatefulSet '{namespace_name}/{real_name}' 删除命令已发出.")
 
-            # 2. 创建新的 StatefulSet
+            # 2. 等待 StatefulSet 资源完全删除
+            if not self.wait_for_sts_deletion(apps_v1, real_name, namespace_name, timeout=120):
+                print(f"警告: 等待 StatefulSet '{real_name}' 删除超时，但仍尝试继续操作。")
+
+            # 3. 创建新的 StatefulSet
             created_sts = apps_v1.create_namespaced_stateful_set(
                 namespace=namespace_name,
                 body=modified_sts_data
@@ -443,10 +449,43 @@ class K8sCommonOperate:
             return created_sts
 
         except Exception as e:
-            print(f"替换 StatefulSet {namespace_name}/{real_name}时发生错误: {e}")
+            print(f"替换 StatefulSet {namespace_name}/{real_name} 时发生错误: {e}")
             import traceback
             traceback.print_exc()
             raise e
+
+    def wait_for_sts_deletion(self, apps_v1, sts_name, namespace, timeout=120, interval=1):
+        """
+        等待指定的 StatefulSet 被完全删除。
+
+        参数:
+            apps_v1: apps client。
+            sts_name: StatefulSet 名称。
+            namespace: 命名空间。
+            timeout: 总等待超时时间（秒）。
+            interval: 检查间隔（秒）。
+
+        返回:
+            bool: True 表示删除成功，False 表示超时。
+        """
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                apps_v1.read_namespaced_stateful_set(name=sts_name, namespace=namespace)
+                # 如果read操作没抛异常，说明STS还存在
+                time.sleep(interval)
+            except ApiException as e:
+                if e.status == 404:  # Not Found
+                    print(f"StatefulSet '{namespace}/{sts_name}' 已确认删除。")
+                    return True
+                else:
+                    # 其他API错误，可能需要根据情况处理
+                    raise
+            except Exception as e:
+                print(f"检查 StatefulSet 删除状态时发生未知错误: {e}")
+                time.sleep(interval)
+        print(f"等待 StatefulSet '{namespace}/{sts_name}' 删除超时 (超时时间: {timeout} 秒)。")
+        return False
 
     def list_pods_by_label_and_node(self, core_v1: client.CoreV1Api,
                                     namespace=None,
