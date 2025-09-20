@@ -1108,15 +1108,24 @@ class AiInstanceService:
             else:
                 resource_config = self._prepare_resource_config(json.loads(ai_instance_info_db.instance_config))
 
+            project_name = None
+            image_name_temp = SAVE_TO_IMAGE_CCI_PREFIX + id
             if request and request.image:
                 image_name = request.image
             else:
                 harbor_address, harbor_username, harbor_password = self.get_harbor_info(
                     ai_instance_info_db.instance_k8s_id)
                 if harbor_address.endswith('/'):
-                    image_name = harbor_address + SAVE_TO_IMAGE_CCI_PREFIX + id + ":latest"
+                    image_name = harbor_address + image_name_temp + ":latest"
+                    project_name = harbor_address.rstrip('/').split('/')[-1]
                 else:
-                    image_name = harbor_address + "/" + SAVE_TO_IMAGE_CCI_PREFIX + id + ":latest"
+                    image_name = harbor_address + "/" + image_name_temp + ":latest"
+                    project_name = harbor_address.split('/')[-1]
+
+            # 判断镜像是否存在，不存在用初始镜像
+            if not self._check_image_exists(core_k8s_client, image_name_temp, project_name):
+                image_name = ai_instance_info_db.instance_image
+            print(f"ai instance [{id}] image {image_name}")
 
             updated_sts = self.build_updated_sts(
                 existing_sts, resource_config, image_name, ai_instance_info_db, request
@@ -1155,6 +1164,27 @@ class AiInstanceService:
             ai_instance_info_db.error_msg = e
             AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
             raise e
+
+    def _check_image_exists(self, core_k8s_client, image_name, project_name):
+        """检查镜像是否存在"""
+        try:
+            result = harbor_service.get_custom_projects_images(project_name)
+            if result["status"]:
+                images = result["data"]
+                for image in images:
+                    if image['repository_name'] == image_name:
+                        for tag in image['tags_list']:
+                            if tag['tag_name'] == "latest":
+                                print(f"镜像 {image_name}:latest 存在")
+                                return True
+            else:
+                print(f"获取镜像列表失败: {result['message']}")
+                return False
+
+            return False
+        except Exception as e:
+            print(f"Error checking image existence: {str(e)}")
+            return False
 
     def get_and_validate_instance(self, instance_id):
         ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(instance_id)
@@ -1197,6 +1227,7 @@ class AiInstanceService:
         #                                        ai_instance.instance_config.gpu_count),
         existing_sts.spec.template.spec.containers[0].name = ai_instance_info_db.instance_real_name
         existing_sts.spec.template.spec.containers[0].image = image_name
+        existing_sts.spec.template.spec.containers[0].image_pull_policy = "Always"
         if resource_limits:
             existing_sts.spec.template.spec.containers[0].resources = V1ResourceRequirements(
                 requests=resource_limits,
