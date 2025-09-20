@@ -703,14 +703,13 @@ class K8sClient:
             if search_terms:
                 tmp_items_dict = []
                 for term in search_terms:
-                    # 这里假设 term 是一个简单的字符串，可以是字段名或值
                     if '=' in term:
                         key, value = term.split('=', 1)
                         if key == "name":
                             for item in items_dict:
                                 if value.lower() in item.get('metadata', {}).get('name', '').lower():
                                     tmp_items_dict.append(item)
-                items_dict = tmp_items_dict
+                            items_dict = tmp_items_dict
 
             # 应用排序
             if sort_by:
