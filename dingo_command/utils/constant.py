@@ -169,3 +169,7 @@ GPU_CARD_MAPPING = {
 CPU_OVER_COMMIT = 4
 # 默认cpu最小的cpu的request 0.5核
 MIN_CPU_REQUEST = 0.5
+# cci容器实例操作，需要同步底层k8s的节点信息的 redis的key
+CCI_SYNC_K8S_NODE_REDIS_KEY = "dingo_command_ai_instance_sync_k8s_node_flag"
+
+CCI_TIME_OUT_DEFAULT = 1800
