@@ -167,16 +167,19 @@ def sync_node_resource_total(k8s_id, k8s_node):
                 node_status = "Ready"
                 break
 
+        # 节点污点
+        taints = k8s_node.spec.taints
+
         # 构建资源字典
         node_resource  = {
             'node_name': k8s_node.metadata.name,
             'node_ip': internal_ips[0] if internal_ips else None,
             'node_status': node_status,
             'standard_resources': {
-                'cpu': ai_instance_service.convert_cpu_to_core(allocatable.get('cpu', '0')),
-                'memory': ai_instance_service.convert_memory_to_gb(allocatable.get('memory', '0Ki')),
-                'ephemeral_storage': ai_instance_service.convert_storage_to_gb(allocatable.get('ephemeral-storage', '0')),
-                'dc.com/cpu-pod-slot': str(allocatable.get('dc.com/cpu-pod-slot', '0'))
+                'cpu': ai_instance_service.convert_cpu_to_core(allocatable.get('cpu', '0')) if not taints else 0,
+                'memory': ai_instance_service.convert_memory_to_gb(allocatable.get('memory', '0Ki')) if not taints else 0,
+                'ephemeral_storage': ai_instance_service.convert_storage_to_gb(allocatable.get('ephemeral-storage', '0')) if not taints else 0,
+                'dc.com/cpu-pod-slot': str(allocatable.get('dc.com/cpu-pod-slot', '0')) if not taints else 0
             },
             'extended_resources': {}
         }
