@@ -1256,10 +1256,10 @@ class ChartService:
         # 根据type类型判断下如何处理，如果是http的如何处理？
         # 如果是oci的如何处理？需要仔细的处理清楚
         # 还有带不带--plain-http也需要考虑进去
+        config = os.path.join(helm_cache_dir, util.registry_config)
+        helm_cache_tmp_dir = os.path.join(helm_cache_dir, str(uuid.uuid4()))
+        os.makedirs(helm_cache_tmp_dir, exist_ok=True)
         try:
-            config = os.path.join(helm_cache_dir, util.registry_config)
-            helm_cache_tmp_dir = os.path.join(helm_cache_dir, str(uuid.uuid4()))
-            os.makedirs(helm_cache_tmp_dir, exist_ok=True)
             if app_type == util.repo_type_http:
                 self.run_helm_upgrade(name, remote_url, version, config, helm_cache_tmp_dir, kube_config, values,
                                       namespace, netns, username, password)
@@ -1272,7 +1272,7 @@ class ChartService:
             # 清除安装产生的缓存文件
             shutil.rmtree(helm_cache_tmp_dir)
         except Exception as e:
-            shutil.rmtree(helm_cache_dir)
+            shutil.rmtree(helm_cache_tmp_dir)
             raise e
 
     def install_app(self, create_data: CreateAppObject, update=False):
