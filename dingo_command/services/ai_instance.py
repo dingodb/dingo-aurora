@@ -784,7 +784,7 @@ class AiInstanceService:
                                gpu_card_info.gpu_key: instance_config.gpu_count, 'ephemeral-storage': f"{int(instance_config.system_disk_size) * 1024 + 100}Mi"}
             # 定义资源requests
             resource_requests = {'cpu': int(instance_config.compute_cpu), 'memory': instance_config.compute_memory + "Gi",
-                               gpu_card_info.gpu_key: instance_config.gpu_count, 'ephemeral-storage': f"{int(instance_config.system_disk_size) * 1024 + 100}Mi"}
+                               gpu_card_info.gpu_key: instance_config.gpu_count, 'ephemeral-storage': "1024Mi"}
             # node_selector_gpu['nvidia.com/gpu.product'] = gpu_card_info.gpu_node_label
             # 容忍度
             # toleration_gpus.append(V1Toleration(
@@ -796,7 +796,7 @@ class AiInstanceService:
             # 定义资源requests
             resource_requests = {'cpu': self.safe_divide(instance_config.compute_cpu),
                                  'memory': instance_config.compute_memory + "Gi",
-                                 'ephemeral-storage': f"{int(instance_config.system_disk_size) * 1024 + 100}Mi"}
+                                 'ephemeral-storage': "1024Mi"}
             resource_limits= {CPU_POD_SLOT_KEY: int(instance_config.compute_cpu),
                               "cpu": int(instance_config.compute_cpu),
                               'memory': instance_config.compute_memory + "Gi",
