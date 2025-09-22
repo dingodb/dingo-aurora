@@ -898,7 +898,7 @@ class AiInstanceService:
                 if not available_ports:
                     print("ai instance {instance_id} available port is empty")
                     raise Fail(f"ai instance {instance_id} available port is empty")
-
+                available_ports_map = {}
                 if is_add == False:
                     available_ports_map = {
                         "22": available_ports[0] if len(available_ports) > 0 else None,
@@ -924,7 +924,7 @@ class AiInstanceService:
                         instance_svc_target_port=int(target_port),
                         instance_svc_port=available_ports[0]
                     )
-                    AiInstanceSQL.save_ai_instance_ports_info(port)
+                    AiInstanceSQL.save_ai_instance_ports_info([port])
 
                 return available_ports, available_ports_map
 
@@ -1716,7 +1716,7 @@ class AiInstanceService:
             protocol = getattr(model, 'protocol', None) or 'TCP'
 
             # 查询一个未被占用的port
-            available_port = self.find_ai_instance_available_ports(instance_id=id, count=1, is_add=True, target_port=target_port)
+            available_port, _ = self.find_ai_instance_available_ports(instance_id=id, count=1, is_add=True, target_port=target_port)
             port=available_port[0]
             try:
                 # 读取 Service 并追加端口
@@ -1733,13 +1733,6 @@ class AiInstanceService:
                 svc.spec.ports = existing_ports
 
                 core_k8s_client.patch_namespaced_service(name=service_name, namespace=namespace_name, body=svc)
-                port_db = AiInstancePortsInfo(
-                    id=uuid.uuid4().hex,
-                    instance_id=id,
-                    instance_svc_port=port,
-                    instance_svc_target_port=target_port
-                )
-                AiInstanceSQL.save_ai_instance_ports_info([port_db])
             except Exception as e:
                 AiInstanceSQL.delete_ports_info_by_instance_id_target_port(id, target_port)
                 import traceback
