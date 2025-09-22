@@ -346,8 +346,8 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
 
             # 更新数据库
             AiInstanceSQL.update_specific_fields_instance(instance_db, **update_data)
-            print(f"update ai instance [{real_name}]: {update_data['instance_status']}")
             if instance_status.upper() == "ERROR":
+                print(f"update ai instance [{real_name}]: {update_data['instance_status']}")
                 # 修改副本数
                 ai_instance_service.set_k8s_sts_replica_by_instance_id(instance_db.id, 0)
         except Exception as e:
