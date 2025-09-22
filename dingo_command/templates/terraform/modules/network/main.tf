@@ -68,10 +68,16 @@ resource "openstack_networking_router_interface_v2" "cluster_interface" {
   count     = var.use_existing_network && !var.attached_router && var.admin_subnet_id != null && var.admin_subnet_id != "" ? 1 : 0
   router_id = local.router_id
   subnet_id = var.admin_subnet_id
+  provisioner "local-exec" {
+    command = "sed -i 's/external_openstack_lbaas_subnet_id: .*/external_openstack_lbaas_subnet_id: ${var.admin_subnet_id}/' group_vars_path/all/openstack.yml"
+  }
 }
 
 resource "openstack_networking_router_interface_v2" "cluster_interface_n" {
   count     = var.use_existing_network ? 0 : 1
   router_id = local.router_id
   subnet_id = resource.openstack_networking_subnet_v2.cluster[0].id
+  provisioner "local-exec" {
+    command = "sed -i 's/external_openstack_lbaas_subnet_id: .*/external_openstack_lbaas_subnet_id: ${resource.openstack_networking_subnet_v2.cluster[0].id}/' group_vars_path/all/openstack.yml"
+  }
 }

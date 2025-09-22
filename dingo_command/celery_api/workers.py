@@ -466,7 +466,7 @@ def create_cluster(self, cluster_tf, cluster_dict, instance_bm_list, scale=False
         ClusterSQL.update_cluster(db_cluster)
         raise
 
-def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None, netns: str = None, app_credential_id: str=None, app_credential_secret: str=None,app_credential_name: str=None):
+def deploy_kubernetes(cluster: ClusterObject, cluster_tf: ClusterTFVarsObject, lb_ip: str, task_id: str = None, netns: str = None, app_credential_id: str=None, app_credential_secret: str=None,app_credential_name: str=None):
     """使用Ansible部署K8s集群"""
     runtime_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
                          start_time=datetime.fromtimestamp(datetime.now().timestamp()),
@@ -499,6 +499,7 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None, n
             "container_manager": cluster.kube_info.runtime,
             "custom_hosts": CUSTOM_HOSTS,
             "nameservers": NAMESERVERS,
+            "install_cloud_provider_manager_enabled": True
         }
         target_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "group_vars", "k8s_cluster")
         os.makedirs(target_dir, exist_ok=True)
@@ -516,6 +517,10 @@ def deploy_kubernetes(cluster: ClusterObject, lb_ip: str, task_id: str = None, n
             "app_credential_name": app_credential_name,
             "app_credential_id": app_credential_id,
             "app_credential_secret": app_credential_secret,
+            "external_openstack_lbaas_enabled": True,
+            "external_openstack_lbaas_floating_network_id": cluster_tf.external_net,
+            "external_openstack_lbaas_floating_subnet_id": cluster_tf.public_floatingip_pool,
+            #"external_openstack_lbaas_subnet_ids": cluster.network_config.admin_subnet_id,
         }
         target_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "group_vars", "all")
         os.makedirs(target_dir, exist_ok=True)
@@ -1384,7 +1389,7 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
             #调用keystoneclient的get_app_credential方法获取应用凭证，如果没有则用create_app_credential方法创建
             keystoneclient = KeystoneClient(token=cluster_tfvars.token, project_id=cluster.project_id)
             app_credential = keystoneclient.create_app_credential(user_id=cluster.user_id, name=cluster_tfvars.id)
-            ansible_result = deploy_kubernetes(cluster, lb_ip, task_id, netns, app_credential.id, app_credential.secret, app_credential.name)
+            ansible_result = deploy_kubernetes(cluster,cluster_tfvars, lb_ip, task_id, netns, app_credential.id, app_credential.secret, app_credential.name)
         if not ansible_result[0]:
             raise Exception(f"Ansible kubernetes deployment failed: {ansible_result[1]}")
         # 阻塞线程，直到ansible_client.get_playbook_result()返回结果

@@ -189,6 +189,9 @@ resource "openstack_networking_port_v2" "masters_port" {
   depends_on = [
     var.network_router_id
   ]
+  provisioner "local-exec" {
+    command = "sed -i 's/external_openstack_lbaas_network_id: .*/external_openstack_lbaas_network_id: ${data.openstack_networking_network_v2.admin_network.id}/' group_vars_path/all/openstack.yml"
+  }
 }
 
 resource "openstack_compute_instance_v2" "masters" {
