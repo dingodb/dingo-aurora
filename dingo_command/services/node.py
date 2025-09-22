@@ -450,13 +450,12 @@ class NodeService:
 
             cluster_info_db = self.convert_clusterinfo_todb(cluster_info.id, cluster_info.name)
             k8s_nodes = content["nodes"]
-            k8s_masters = content.get("masters") if content.get("masters") is not None else {}  # 读取现有 master 节点，null 时返回空对象
             scale_nodes = []
             subnet_cidr = content.get("subnet_cidr")
             image_uuid = content.get("image_uuid")
             ssh_user = content.get("ssh_user")
             password = content.get("password")
-            k8s_masters = content.get("masters")
+            k8s_masters = content.get("masters") if content.get("masters") is not None else {}
             admin_network_id = content.get("admin_network_id")
             admin_subnet_id = content.get("admin_subnet_id")
             use_existing_network = content.get("use_existing_network")

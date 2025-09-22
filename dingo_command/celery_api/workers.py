@@ -1973,7 +1973,7 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
         # 3、然后需要更新node节点的数据库的信息和集群的数据库信息
         # 更新集群cluster的状态为running，删除缩容节点的数据库信息
         if cluster_tfvars and hosts_data and master_ip:
-            remove_node_exporter(cluster_tfvars, node_list, hosts_data, master_ip, cluster_dir)
+            remove_node_exporter(cluster_tfvars, node_list, hosts_data, master_ip, cluster_dir, netns)
         component_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
         component_task.state = "success"
         component_task.detail = TaskService.TaskDetail.remove_file_dirs.value
