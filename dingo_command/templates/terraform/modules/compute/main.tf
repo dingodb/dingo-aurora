@@ -190,7 +190,7 @@ resource "openstack_networking_port_v2" "masters_port" {
     var.network_router_id
   ]
   provisioner "local-exec" {
-    command = "sed -i 's/external_openstack_lbaas_network_id: .*/external_openstack_lbaas_network_id: ${data.openstack_networking_network_v2.admin_network.id}/' group_vars_path/all/openstack.yml"
+    command = "sed -i 's/external_openstack_lbaas_network_id: .*/external_openstack_lbaas_network_id: ${data.openstack_networking_network_v2.admin_network.id}/' ${var.group_vars_path}/all/openstack.yml"
   }
 }
 

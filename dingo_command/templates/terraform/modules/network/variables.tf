@@ -50,3 +50,9 @@ variable "tenant_id" {
   type    = string
   default = ""
 }
+
+variable "group_vars_path" {
+  description = "path to the inventory group vars directory"
+  type        = string
+  default     = "./group_vars"
+}
