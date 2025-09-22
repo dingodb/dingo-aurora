@@ -12,7 +12,7 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception, before_sleep_log
+from tenacity import retry, stop_after_attempt, retry_if_exception, wait_fixed
 from keystoneclient import client
 from math import ceil
 from kubernetes.client import V1PersistentVolumeClaim, V1ObjectMeta, V1PersistentVolumeClaimSpec, \
@@ -79,8 +79,8 @@ def _create_retry_decorator():
 
     def decorator(func):
         @retry(
-            stop=stop_after_attempt(3),  # 最多重试3次（共执行4次）
-            wait=wait_exponential(multiplier=1, min=4, max=10),  # 指数退避：4s, 8s, 10s
+            stop=stop_after_attempt(3), # 设置最大尝试次数为2（原始调用1次 + 重试2次）
+            wait=wait_fixed(1),   # 重试前等待1秒（可根据需要调整间隔）
             retry=retry_if_exception(is_retryable_error),  # 只重试可重试的异常
             # before_sleep=before_sleep_log(LOG, log.WARNING),  # 重试前打印日志
             reraise=True  # 重试耗尽后抛出原始异常
@@ -248,7 +248,7 @@ class AiInstanceService:
         异步保存AI实例为镜像（立即返回，实际操作在后台执行）
         """
         try:
-            with RedisLock(redis_connection.redis_master_connection, f"ai-instance-image-{id}", expire_time=3600) as lock:
+            with RedisLock(redis_connection.redis_master_connection, f"ai-instance-image-{id}", expire_time=CCI_TIME_OUT_DEFAULT) as lock:
                 if lock:
                     # 参数验证和基本信息获取
                     ai_instance_info_db = self._validate_and_get_instance_info(id, image_registry, image_name, image_tag)
@@ -321,6 +321,8 @@ class AiInstanceService:
                 if loop:
                     loop.close()
 
+                redis_connection.delete_redis_key(SAVE_TO_IMAGE_CCI_PREFIX + id + "_flag")
+
         # 使用线程池提交任务
         task_executor.submit(_run_task)
 
@@ -334,25 +336,27 @@ class AiInstanceService:
                 asyncio.set_event_loop(loop)
 
                 loop.run_until_complete(
-                    # 执行检查任务
-                    asyncio.wait_for(
-                        self.sava_ai_instance_to_image_backup(id), timeout = CCI_TIME_OUT_DEFAULT
-                    )
+                    asyncio.wait_for(self.sava_ai_instance_to_image_backup(id), timeout = CCI_TIME_OUT_DEFAULT)
                 )
             except Exception as e:
-                print(f"Background task failed: {str(e)}")
-                ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
-                ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
-                ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
-                ai_instance_info_db.error_msg = str(e)
-                AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
-
-                # 副本数改成0
-                self.set_k8s_sts_replica_by_instance_id(id, 0)
+                print(
+                    f"{time.strftime('%Y-%m-%d %H:%M:%S')} Background task _stop_save_cci_to_image_task failed or timeout for instance {id}: {str(e)}")
+                try:
+                    ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
+                    if ai_instance_info_db:
+                        ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
+                        ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
+                        ai_instance_info_db.error_msg = str(e)
+                        AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+                        # 副本数改成0
+                        self.set_k8s_sts_replica_by_instance_id(id, 0)
+                except Exception as inner_e:
+                    print(f"Error during exception handling for instance {id}: {inner_e}")
             finally:
                 if loop:
                     loop.close()
-
+                self.get_or_set_update_k8s_node_resource_redis()
+                print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Task for instance {id} has finished (success, timeout, or error), thread should be released.")
         # 使用线程池提交任务
         task_executor.submit(_run_task)
 
@@ -456,7 +460,7 @@ class AiInstanceService:
         # 存入redis，镜像推送完成标识
         redis_key = SAVE_TO_IMAGE_CCI_PREFIX + id
         try:
-            redis_connection.set_redis_by_key_with_expire(redis_key, f"{image_name}:{image_tag}", 3600)
+            redis_connection.set_redis_by_key_with_expire(redis_key, f"{image_name}:{image_tag}", CCI_TIME_OUT_DEFAULT)
 
             # 1. Harbor登录
             await self._harbor_login(core_k8s_client, nerdctl_api_pod, harbor_address, harbor_username, harbor_password)
@@ -467,12 +471,12 @@ class AiInstanceService:
             await self._commit_container(
                 core_k8s_client, nerdctl_api_pod, clean_container_id, image
             )
-            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] commit image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] finished")
+            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] commit image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] finished, start push image")
 
             # 3. Push操作
-            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] push image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] start")
             await self._push_image(core_k8s_client, nerdctl_api_pod, image)
-            redis_connection.set_redis_by_key_with_expire(redis_key + "_flag", "true", 3600)
+            # 判断是否完成标识
+            redis_connection.set_redis_by_key_with_expire(redis_key + "_flag", "true", 10)
             print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] push image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] finished")
         except Exception as e:
             print(f"Async save operation failed for instance {id}: {str(e)}")
@@ -539,11 +543,6 @@ class AiInstanceService:
             'nerdctl', 'commit', clean_container_id, image_name,
             '--pause=true', '--namespace', 'k8s.io', '--insecure-registry', '--compression=zstd'
         ]
-
-        # commit_command = [
-        #     'nerdctl', 'commit', clean_container_id, image_name,
-        #     '--pause=true', '--namespace', 'k8s.io', '--insecure-registry'
-        # ]
         print(f"commit_command: {commit_command}")
         returncode, output = await self._execute_k8s_command(
             core_k8s_client, nerdctl_api_pod['name'], nerdctl_api_pod['namespace'], commit_command
@@ -555,8 +554,7 @@ class AiInstanceService:
             # WARN[0000] Image lacks label "nerdctl/platform", assuming the platform to be "linux/amd64"
             if "nerdctl/platform" in output:
                 return output
-            else:
-                raise Exception(error_msg)
+            raise Exception(error_msg)
             # 成功则返回输出
         return output
 
@@ -833,20 +831,23 @@ class AiInstanceService:
         )
 
         # 22、9001、9002 port需实时获取,防止冲突
-        available_ports = self.find_ai_instance_available_ports()
+        available_ports, available_ports_map = self.find_ai_instance_available_ports(instance_id=ai_instance_db.id, is_add=False, )
         if len(available_ports) < 3:
-            raise Fail("Not enough available ports", error_message="无足够可用端口")
-
-        available_ports_map = {
-            "22": available_ports[0] if len(available_ports) > 0 else None,
-            "9001": available_ports[1] if len(available_ports) > 1 else None,
-            "9002": available_ports[2] if len(available_ports) > 2 else None,
-        }
+            print(f"Not enough available ports or ai instance {ai_instance_db.id} not get redis lock")
+            raise Fail(f"Not enough available ports or ai instance {ai_instance_db.id} not get redis lock ", error_message="无足够可用端口")
         print(f"ai instance [{ai_instance_db.id}] available_ports:{available_ports}")
-        # 2、创建metallb的服务，包括默认端口22、9001、9002
-        k8s_common_operate.create_cci_metallb_service(
-            self.core_k8s_client, namespace_name, ai_instance_db.instance_real_name, service_ip, is_account, available_ports_map
-        )
+
+        try:
+            # 2、创建metallb的服务，包括默认端口22、9001、9002
+            k8s_common_operate.create_cci_metallb_service(
+                self.core_k8s_client, namespace_name, ai_instance_db.instance_real_name, service_ip, is_account, available_ports_map
+            )
+        except Exception as e:
+            print(f"create cci pod fail:{e}")
+            import traceback
+            traceback.print_exc()
+            AiInstanceSQL.delete_ai_instance_ports_info_by_instance_id(ai_instance_db.id)
+            raise e
 
         # 规则： host: ingress-${zone_id}.${region_id}.alayanew.com # 这里的region_id和zone_id对应的就是下一步的值，每一个cci实例的ingress都是这个值
         # 生产环境域名后缀： alayanew.com； 测试环境：zetyun.cn
@@ -877,22 +878,11 @@ class AiInstanceService:
         sts_data = self._assemble_sts_data(ai_instance, ai_instance_db, namespace_name, resource_config, nb_prefix)
         k8s_common_operate.create_sts_pod(self.app_k8s_client, namespace_name, sts_data)
 
-        # 22、9001、9002默认端口的metallb配置
-        ports = []
-        for port_key, port_value in available_ports_map.items():
-            port = AiInstancePortsInfo(
-                id=uuid.uuid4().hex,
-                instance_id=ai_instance_db.id,
-                instance_svc_target_port=int(port_key),
-                instance_svc_port=port_value
-            )
-            ports.append(port)
-        AiInstanceSQL.save_ai_instance_ports_info(ports)
-
         # 保存数据库信息
         AiInstanceSQL.update_ai_instance_info(ai_instance_db)
 
-    def find_ai_instance_available_ports(self, start_port=30001, end_port=65535, count=3):
+
+    def find_ai_instance_available_ports(self,instance_id, start_port=30001, end_port=65535, count=3, is_add: bool=False, target_port: int=None):
         """查找从start_port开始的最小count个可用端口"""
         with RedisLock(redis_connection.redis_master_connection, lock_name=f"cci-metallb-port") as lock:
             if lock:
@@ -905,7 +895,38 @@ class AiInstanceService:
                         available_ports.append(current_port)
                     current_port += 1
 
-                return available_ports
+                if not available_ports:
+                    print("ai instance {instance_id} available port is empty")
+                    raise Fail(f"ai instance {instance_id} available port is empty")
+
+                if is_add == False:
+                    available_ports_map = {
+                        "22": available_ports[0] if len(available_ports) > 0 else None,
+                        "9001": available_ports[1] if len(available_ports) > 1 else None,
+                        "9002": available_ports[2] if len(available_ports) > 2 else None,
+                    }
+
+                    # 22、9001、9002默认端口的metallb配置
+                    ports = []
+                    for port_key, port_value in available_ports_map.items():
+                        port = AiInstancePortsInfo(
+                            id=uuid.uuid4().hex,
+                            instance_id=instance_id,
+                            instance_svc_target_port=int(port_key),
+                            instance_svc_port=port_value
+                        )
+                        ports.append(port)
+                    AiInstanceSQL.save_ai_instance_ports_info(ports)
+                else:
+                    port = AiInstancePortsInfo(
+                        id=uuid.uuid4().hex,
+                        instance_id=instance_id,
+                        instance_svc_target_port=int(target_port),
+                        instance_svc_port=available_ports[0]
+                    )
+                    AiInstanceSQL.save_ai_instance_ports_info(port)
+
+                return available_ports, available_ports_map
 
 
     def _get_service_ip(self, ai_instance_db):
@@ -1330,6 +1351,7 @@ class AiInstanceService:
                 print(f"关机失败，实例ID: {id}, 错误: {e}")
                 ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
                 ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
+                ai_instance_info_db.error_msg = str(e)
                 AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
                 raise e
 
@@ -1382,12 +1404,9 @@ class AiInstanceService:
                 commit_push_image_flag = redis_connection.get_redis_by_key(SAVE_TO_IMAGE_CCI_PREFIX + id + "_flag")
                 print(f"ai instance[{id}] push image flag: {commit_push_image_flag}")
                 if commit_push_image_flag != "true":
-                    print(
-                        f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] commit or push image image_tag: [{image_name}:{image_tag}] failed")
-                    ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
-                    ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
-                    AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
-                    return
+                    error_msg =  f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] commit or push image image_tag: [{image_name}:{image_tag}] failed"
+                    print(error_msg)
+                    raise error_msg
 
 
                 app_client = get_k8s_app_client(ai_instance_info_db.instance_k8s_id)
@@ -1400,11 +1419,9 @@ class AiInstanceService:
                         _preload_content=False
                     )
                 except Exception as e:
-                    print(f"stop cci failed, id [{id}] : {e}")
-                    ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
-                    ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
-                    AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
-                    raise e
+                    error_msg = (f"stop k8s cci pod failed, id [{id}] : {e}")
+                    print(error_msg)
+                    raise error_msg
 
                 # 标记为 STOPPED
                 ai_instance_info_db.instance_status = AiInstanceStatus.STOPPED.name
@@ -1413,10 +1430,11 @@ class AiInstanceService:
                 AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
 
         except Exception as e:
-            print(f"Failed to start save operation for instance {id}: {e}")
-            raise Fail(f"Failed to start save operation: {e}")
-        finally:
-            self.get_or_set_update_k8s_node_resource_redis()
+            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} stop cci {id} to save image fail:{e}")
+            import  traceback
+            traceback.print_exc()
+            raise e
+
 
     def set_auto_close_instance_by_id(self, id: str, auto_close_time: str, auto_close: bool):
         try:
@@ -1698,30 +1716,36 @@ class AiInstanceService:
             protocol = getattr(model, 'protocol', None) or 'TCP'
 
             # 查询一个未被占用的port
-            available_port = self.find_ai_instance_available_ports(count=1)
+            available_port = self.find_ai_instance_available_ports(instance_id=id, count=1, is_add=True, target_port=target_port)
             port=available_port[0]
-            # 读取 Service 并追加端口
-            svc = core_k8s_client.read_namespaced_service(name=service_name, namespace=namespace_name)
-            if not svc or not svc.spec:
+            try:
+                # 读取 Service 并追加端口
+                svc = core_k8s_client.read_namespaced_service(name=service_name, namespace=namespace_name)
+                if not svc or not svc.spec:
+                    raise Fail("service invalid", error_message="Service 无效")
 
-                raise Fail("service invalid", error_message="Service 无效")
+                existing_ports = svc.spec.ports or []
+                new_port = client.V1ServicePort(port=port, target_port=target_port, protocol=protocol)
 
-            existing_ports = svc.spec.ports or []
-            new_port = client.V1ServicePort(port=port, target_port=target_port, protocol=protocol)
+                # 必须为每个端口设置唯一 name 字段
+                new_port.name = f"port-{target_port}"
+                existing_ports.append(new_port)
+                svc.spec.ports = existing_ports
 
-            # 必须为每个端口设置唯一 name 字段
-            new_port.name = f"port-{target_port}"
-            existing_ports.append(new_port)
-            svc.spec.ports = existing_ports
+                core_k8s_client.patch_namespaced_service(name=service_name, namespace=namespace_name, body=svc)
+                port_db = AiInstancePortsInfo(
+                    id=uuid.uuid4().hex,
+                    instance_id=id,
+                    instance_svc_port=port,
+                    instance_svc_target_port=target_port
+                )
+                AiInstanceSQL.save_ai_instance_ports_info([port_db])
+            except Exception as e:
+                AiInstanceSQL.delete_ports_info_by_instance_id_target_port(id, target_port)
+                import traceback
+                traceback.print_exc()
+                raise e
 
-            core_k8s_client.patch_namespaced_service(name=service_name, namespace=namespace_name, body=svc)
-            port_db = AiInstancePortsInfo(
-                id=uuid.uuid4().hex,
-                instance_id=id,
-                instance_svc_port=port,
-                instance_svc_target_port=target_port
-            )
-            AiInstanceSQL.save_ai_instance_ports_info([port_db])
             return {"data": "success", "port": port}
         except Fail:
             raise
@@ -2429,5 +2453,5 @@ class AiInstanceService:
     def get_or_set_update_k8s_node_resource_redis(self):
         operator_flag = redis_connection.get_redis_by_key(CCI_SYNC_K8S_NODE_REDIS_KEY)
         if not operator_flag:
-            print("set ai instance k8s ndoe resource key expire time  to 10s")
+            print("set ai instance k8s node resource key expire time  to 10s")
             redis_connection.set_redis_by_key_with_expire(CCI_SYNC_K8S_NODE_REDIS_KEY, "true", 10)

@@ -95,7 +95,7 @@ class RedisConnection:
                 # 不使用过期时间
                 return self.redis_master_connection.set(redis_key, redis_value)
         except Exception as e:
-            print(f"Redis set operation failed: {e}")
+            print(f"Redis set operation failed, redis_key:{redis_key}, redis_value:{redis_value}, expire_seconds:{expire_seconds} error:: {e}")
             return False
 
     def delete_redis_key(self, redis_key: str) -> bool:
