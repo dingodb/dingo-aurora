@@ -26,6 +26,7 @@ module "network" {
   auth_url = var.auth_url
   tenant_id = var.tenant_id
   attached_router = var.attached_router
+  group_vars_path = var.group_vars_path
 }
 
 module "compute" {

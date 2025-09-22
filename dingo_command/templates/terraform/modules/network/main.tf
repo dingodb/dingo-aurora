@@ -69,7 +69,7 @@ resource "openstack_networking_router_interface_v2" "cluster_interface" {
   router_id = local.router_id
   subnet_id = var.admin_subnet_id
   provisioner "local-exec" {
-    command = "sed -i 's/external_openstack_lbaas_subnet_id: .*/external_openstack_lbaas_subnet_id: ${var.admin_subnet_id}/' group_vars_path/all/openstack.yml"
+    command = "sed -i 's/external_openstack_lbaas_subnet_id: .*/external_openstack_lbaas_subnet_id: ${var.admin_subnet_id}/' ${var.group_vars_path}/all/openstack.yml"
   }
 }
 
@@ -78,6 +78,6 @@ resource "openstack_networking_router_interface_v2" "cluster_interface_n" {
   router_id = local.router_id
   subnet_id = resource.openstack_networking_subnet_v2.cluster[0].id
   provisioner "local-exec" {
-    command = "sed -i 's/external_openstack_lbaas_subnet_id: .*/external_openstack_lbaas_subnet_id: ${resource.openstack_networking_subnet_v2.cluster[0].id}/' group_vars_path/all/openstack.yml"
+    command = "sed -i 's/external_openstack_lbaas_subnet_id: .*/external_openstack_lbaas_subnet_id: ${resource.openstack_networking_subnet_v2.cluster[0].id}/' ${var.group_vars_path}/all/openstack.yml"
   }
 }

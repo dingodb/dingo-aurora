@@ -1,11 +1,11 @@
 ---
 dependencies:
-  - role: kubernetes-apps/install_cloud_provider_seecrets
+  - role: kubernetes-apps/install_cloud_provider_seecret
     when:
       - install_cloud_provider_manager_enabled
       - inventory_hostname == groups['kube_control_plane'][0]
     tags:
-      - install-cloud-provider-secrets
+      - install-cloud-provider-secret
 
   - role: kubernetes-apps/ansible
     when:
