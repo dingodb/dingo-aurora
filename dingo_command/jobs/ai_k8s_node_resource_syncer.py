@@ -28,7 +28,6 @@ def fetch_ai_k8s_node_resource_4operate():
         operator_flag = redis_connection.get_redis_by_key(CCI_SYNC_K8S_NODE_REDIS_KEY)
         # 没有key 啥都不做
         if not operator_flag:
-            print(f"redis {CCI_SYNC_K8S_NODE_REDIS_KEY} is empty")
             return
         # 同步
         fetch_ai_k8s_node_resource()
@@ -186,8 +185,8 @@ def sync_node_resource_total(k8s_id, k8s_node):
 
         # 处理扩展资源（主要关注GPU）
         for key in allocatable.keys():
-            if 'gpu' in key.lower():
-                node_resource['extended_resources'][key] = allocatable.get(key)
+            if 'nvidia.com/gpu' in key.lower():
+                node_resource['extended_resources'][key] = allocatable.get(key) if not taints else 0
 
         # 保存或更新到数据库
         process_node_total_resource(k8s_id, node_resource)

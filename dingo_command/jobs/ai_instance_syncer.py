@@ -309,8 +309,7 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
         if sts and sts.spec.replicas == 0 and not pod:
             ai_instance_db = AiInstanceSQL.get_ai_instance_info_by_real_name(real_name)
             if ai_instance_db:
-                if (ai_instance_db.instance_status != AiInstanceStatus.STOPPING.name or ai_instance_db.instance_status != AiInstanceStatus.STOPPED.name
-                        or ai_instance_db.instance_status != AiInstanceStatus.DELETING.name):
+                if ai_instance_db.instance_status == AiInstanceStatus.READY.name or ai_instance_db.instance_status == AiInstanceStatus.RUNNING.name or ai_instance_db.instance_status == AiInstanceStatus.ERROR.name:
                     print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} change instance_status:{ai_instance_db.instance_status} to error")
                     ai_instance_db.instance_status = AiInstanceStatus.ERROR.name
                     ai_instance_db.instance_real_status = K8sStatus.ERROR.value
