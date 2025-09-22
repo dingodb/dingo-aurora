@@ -167,8 +167,10 @@ class K8sCommonOperate:
         except ApiException as e:
             print(f"创建Metallb Service时发生Kubernetes API异常: {e}")
             print(f"异常详情: {e.body}")
+            raise e
         except Exception as e:
             print(f"创建Service时发生系统异常: {e}")
+            raise e
 
     def create_jupyter_configmap(self, core_v1: client.CoreV1Api, namespace, configmap_name, nb_prefix, nb_init_password):
         """

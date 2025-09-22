@@ -669,7 +669,7 @@ class AiInstanceService:
                 # 多副本场景
                 return self._create_multiple_instances(ai_instance, ai_instance_db, namespace_name)
         except Exception as e:
-            print(f"Failed to create AI instance: {str(e)}")
+            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Failed to create AI instance: {e}")
             import traceback
             traceback.print_exc()
             raise e
@@ -730,19 +730,23 @@ class AiInstanceService:
         """创建单个实例"""
         resource_config = self._prepare_resource_config(ai_instance.instance_config)
         # 组装和创建
-        instance_result = self._assemble_and_create_instance(
-            ai_instance, ai_instance_db, namespace_name, resource_config
-        )
+        # instance_result = self._assemble_and_create_instance(
+        #     ai_instance, ai_instance_db, namespace_name, resource_config
+        # )
+
+        # 设置实例ID
+        ai_instance_db.id = ai_instance.instance_id or uuid.uuid4().hex
+        # 设置实例k8s上真实名称
+        ai_instance_db.instance_real_name = CCI_STS_PREFIX + ai_instance_db.id
+        # 保存数据库信息
+        AiInstanceSQL.update_ai_instance_info(ai_instance_db)
+
         # 后台检查pod状态
-        self._start_async_check_task(
-            self.core_k8s_client,
-            ai_instance_db.instance_k8s_id,
-            instance_result.id,
-            f"{instance_result.instance_real_name}{CCI_STS_POD_SUFFIX}",
-            CCI_NAMESPACE_PREFIX + ai_instance_db.instance_tenant_id
+        self._create_async_check_task(
+            ai_instance, ai_instance_db, namespace_name, resource_config,
         )
 
-        return [self.assemble_ai_instance_return_result(instance_result)]
+        return [self.assemble_ai_instance_return_result(ai_instance_db)]
 
     def _create_multiple_instances(self, ai_instance, ai_instance_db, namespace_name):
         """创建多个实例副本"""
@@ -755,13 +759,13 @@ class AiInstanceService:
                 ai_instance, instance_copy, namespace_name, resource_config
             )
 
-            self._start_async_check_task(
-                self.core_k8s_client,
-                ai_instance_db.instance_k8s_id,
-                instance_result.id,
-                f"{instance_result.instance_real_name}{CCI_STS_POD_SUFFIX}",
-                CCI_NAMESPACE_PREFIX + ai_instance_db.instance_tenant_id
-            )
+            # self._start_async_check_task(
+            #     self.core_k8s_client,
+            #     ai_instance_db.instance_k8s_id,
+            #     instance_result.id,
+            #     f"{instance_result.instance_real_name}{CCI_STS_POD_SUFFIX}",
+            #     CCI_NAMESPACE_PREFIX + ai_instance_db.instance_tenant_id
+            # )
 
             results.append(self.assemble_ai_instance_return_result(instance_result))
 
@@ -825,12 +829,35 @@ class AiInstanceService:
         # 获取服务IP
         service_ip, dns_suffix, is_account = self._get_service_ip(ai_instance_db)
 
-        # 1、创建jupter的service服务，包括默认端口8888
+        # 规则： host: ingress-${zone_id}.${region_id}.alayanew.com # 这里的region_id和zone_id对应的就是下一步的值，每一个cci实例的ingress都是这个值
+        # 生产环境域名后缀： alayanew.com； 测试环境：zetyun.cn
+        host_domain = f"{INGRESS_SIGN}{HYPHEN_SIGN}{ai_instance_db.instance_k8s_id}{POINT_SIGN}{ai_instance_db.instance_region_id}{POINT_SIGN}{dns_suffix}"
+        # 这个path对应的就是注入到pod的环境变量中的path. 规则： /notebook/jupyter/{region_id}/{zone_id}/{instance_id{user_namespace}/{cci_pod_name}  # HTTPS 路径
+        nb_prefix = f"/notebook/jupyter/{ai_instance_db.instance_region_id}/{ai_instance_db.instance_k8s_id}/{ai_instance_db.id}/{namespace_name}/{ai_instance_db.instance_real_name}{CCI_STS_POD_SUFFIX}"
+
+        # 1、创建sshkey的configmap（如果有就跳过，没有就创建）
+        configmap_name = CONFIGMAP_PREFIX + ai_instance.user_id
+        k8s_common_operate.create_ns_configmap(
+            self.core_k8s_client, namespace_name, configmap_name, ai_instance_db, {"authorized_keys": ""}
+        )
+
+        self._wait_for_resource(self.core_k8s_client, self.app_k8s_client, self.networking_k8s_client, namespace_name, configmap_name, client.V1ConfigMap)
+
+        # 2、挂载jupyter config
+        nb_init_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+        ai_instance_db.ssh_root_password = nb_init_password
+        k8s_common_operate.create_jupyter_configmap(self.core_k8s_client, namespace_name,
+                                                    ai_instance_db.instance_real_name, nb_prefix, nb_init_password)
+        self._wait_for_resource(self.core_k8s_client, self.app_k8s_client, self.networking_k8s_client, namespace_name,  ai_instance_db.instance_real_name, client.V1ConfigMap)
+
+        # 3、创建jupter的service服务，包括默认端口8888
         k8s_common_operate.create_cci_jupter_service(
             self.core_k8s_client, namespace_name, ai_instance_db.instance_real_name
         )
+        self._wait_for_resource(self.core_k8s_client, self.app_k8s_client, self.networking_k8s_client,
+                                namespace_name, ai_instance_db.instance_real_name  + "-" + DEV_TOOL_JUPYTER, client.V1Service)
 
-        # 22、9001、9002 port需实时获取,防止冲突
+        # 端口：22、9001、9002 port需实时获取,防止冲突
         available_ports, available_ports_map = self.find_ai_instance_available_ports(instance_id=ai_instance_db.id, is_add=False, )
         if len(available_ports) < 3:
             print(f"Not enough available ports or ai instance {ai_instance_db.id} not get redis lock")
@@ -838,10 +865,13 @@ class AiInstanceService:
         print(f"ai instance [{ai_instance_db.id}] available_ports:{available_ports}")
 
         try:
-            # 2、创建metallb的服务，包括默认端口22、9001、9002
+            # 4、创建metallb的服务，包括默认端口22、9001、9002
             k8s_common_operate.create_cci_metallb_service(
                 self.core_k8s_client, namespace_name, ai_instance_db.instance_real_name, service_ip, is_account, available_ports_map
             )
+            self._wait_for_resource(self.core_k8s_client, self.app_k8s_client, self.networking_k8s_client,
+                                    namespace_name, ai_instance_db.instance_real_name, client.V1Service)
+
         except Exception as e:
             print(f"create cci pod fail:{e}")
             import traceback
@@ -849,37 +879,44 @@ class AiInstanceService:
             AiInstanceSQL.delete_ai_instance_ports_info_by_instance_id(ai_instance_db.id)
             raise e
 
-        # 规则： host: ingress-${zone_id}.${region_id}.alayanew.com # 这里的region_id和zone_id对应的就是下一步的值，每一个cci实例的ingress都是这个值
-        # 生产环境域名后缀： alayanew.com； 测试环境：zetyun.cn
-        host_domain = f"{INGRESS_SIGN}{HYPHEN_SIGN}{ai_instance_db.instance_k8s_id}{POINT_SIGN}{ai_instance_db.instance_region_id}{POINT_SIGN}{dns_suffix}"
-        # 这个path对应的就是注入到pod的环境变量中的path. 规则： /notebook/jupyter/{region_id}/{zone_id}/{instance_id{user_namespace}/{cci_pod_name}  # HTTPS 路径
-        nb_prefix = f"/notebook/jupyter/{ai_instance_db.instance_region_id}/{ai_instance_db.instance_k8s_id}/{ai_instance_db.id}/{namespace_name}/{ai_instance_db.instance_real_name}{CCI_STS_POD_SUFFIX}"
-
-        # 3、创建ingress 规则，端口是8888
+        # 5、创建ingress 规则，端口是8888
         k8s_common_operate.create_cci_ingress_rule(
             self.networking_k8s_client, namespace_name, ai_instance_db.instance_real_name,
             host_domain, nb_prefix
         )
-
-        # 4、创建sshkey的configmap（如果有就跳过，没有就创建）
-        configmap_name = CONFIGMAP_PREFIX + ai_instance.user_id
-        k8s_common_operate.create_ns_configmap(
-            self.core_k8s_client, namespace_name, configmap_name, ai_instance_db, {"authorized_keys": ""}
-        )
-
-
-        # 5、挂载jupyter config
-        nb_init_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-        ai_instance_db.ssh_root_password = nb_init_password
-        k8s_common_operate.create_jupyter_configmap(self.core_k8s_client, namespace_name,
-                                           ai_instance_db.instance_real_name, nb_prefix, nb_init_password)
+        self._wait_for_resource(self.core_k8s_client, self.app_k8s_client, self.networking_k8s_client,
+                                namespace_name, f"{ai_instance_db.instance_real_name}-{INGRESS_SIGN}", client.V1Ingress)
 
         # 6、创建StatefulSet
         sts_data = self._assemble_sts_data(ai_instance, ai_instance_db, namespace_name, resource_config, nb_prefix)
         k8s_common_operate.create_sts_pod(self.app_k8s_client, namespace_name, sts_data)
 
-        # 保存数据库信息
-        AiInstanceSQL.update_ai_instance_info(ai_instance_db)
+
+    def _wait_for_resource(self, core_v1_client, app_v1_client, networking_v1_client, namespace, name, resource_type, timeout=60):
+        """等待资源就绪"""
+        start = time.time()
+        while time.time() - start < timeout:
+            try:
+                if resource_type == client.V1ConfigMap:
+                    core_v1_client.read_namespaced_config_map(name, namespace)
+                    return
+                elif resource_type == client.V1Service:
+                    svc = core_v1_client.read_namespaced_service(name, namespace)
+                    if svc.spec.cluster_ip:  # 检查 Service 已分配 ClusterIP
+                        return
+                elif resource_type == client.V1StatefulSet:
+                    sts = app_v1_client.read_namespaced_stateful_set(name, namespace)
+                    if sts.status.ready_replicas == sts.spec.replicas:
+                        return
+                elif resource_type == client.V1Ingress:
+                    networking_v1_client.read_namespaced_ingress(name, namespace)
+                    return
+
+                asyncio.sleep(2)
+            except Exception as e:
+                asyncio.sleep(1)
+                print(f"{namespace}/{name} resource_type:{resource_type} fail: {e}")
+        raise TimeoutError(f"Resource {name} not ready in {timeout}s")
 
 
     def find_ai_instance_available_ports(self,instance_id, start_port=30001, end_port=65535, count=3, is_add: bool=False, target_port: int=None):
@@ -1155,7 +1192,6 @@ class AiInstanceService:
             # 开机操作
             k8s_common_operate.replace_statefulset(app_k8s_client, real_name, namespace_name, updated_sts)
 
-
             # 设置下发参数
             if request and request.product_code:
                 ai_instance_info_db.product_code = request.product_code
@@ -1166,7 +1202,7 @@ class AiInstanceService:
             AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
 
             # 后台检查pod状态
-            self._start_async_check_task(
+            self._start_cci_async_check_task(
                 core_k8s_client,
                 ai_instance_info_db.instance_k8s_id,
                 ai_instance_info_db.id,
@@ -1490,8 +1526,43 @@ class AiInstanceService:
             traceback.print_exc()
             raise e
 
+    def _start_cci_async_check_task(self, core_k8s_client, k8s_id, instance_id, pod_name, namespace):
+        """启动后台检查任务"""
 
-    async def check_pod_status_node_name_and_update_db(self,
+        def _run_task():
+            loop = None
+            try:
+                # 创建新的事件循环（每个线程独立）
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                # 执行检查任务
+                loop.run_until_complete(
+                    self.start_cci_safe_check_pod_status_and_node_name(
+                        core_k8s_client,
+                        k8s_id,
+                        instance_id,
+                        pod_name,
+                        namespace
+                    )
+                )
+            except Exception as e:
+                print(f"Background task failed: {str(e)}")
+            finally:
+                if loop:
+                    loop.close()
+
+        # 使用线程池提交任务
+        task_executor.submit(_run_task)
+
+    async def start_cci_safe_check_pod_status_and_node_name(self, *args):
+        """受保护的检查任务"""
+        try:
+            await self.start_cci_check_pod_status_node_name_and_update_db(*args)
+        except Exception as e:
+            print(f"Pod status check failed: {str(e)}")
+
+    async def start_cci_check_pod_status_node_name_and_update_db(self,
                                                        core_k8s_client,
                                                        k8s_id: str,
                                                        instance_id: str,
@@ -1567,6 +1638,89 @@ class AiInstanceService:
 
         except Exception as e:
             print(f"检查Pod状态时发生未预期错误: {e}")
+            self.get_or_set_update_k8s_node_resource_redis()
+            import traceback
+            traceback.print_exc()
+            return
+
+
+    async def create_check_pod_status_node_name_and_update_db(self,
+                                                       ai_instance, ai_instance_db, namespace_name, resource_config,
+                                                       timeout: int = CCI_TIME_OUT_DEFAULT
+                                                       ):
+        """
+        异步检查 Pod 状态并更新数据库
+
+        :param core_k8s_client: k8s core v1 client
+        :param pod_name: 要检查的 Pod 名称
+        :param namespace: Pod 所在的命名空间
+        :param timeout: 超时时间(秒)，默认5分钟(300秒)
+        """
+        try:
+            start_time = datetime.now()
+            pod_real_status = None
+            pod_located_node_name = None
+
+            while (datetime.now() - start_time).total_seconds() < timeout:
+                pod_name = ai_instance_db.instance_real_name + "-0"
+                namespace = CCI_NAMESPACE_PREFIX + ai_instance_db.instance_tenant_id
+                try:
+                    # 创建K8s资源
+                    self._create_cci_k8s_resources(ai_instance, ai_instance_db, namespace_name, resource_config)
+
+                    # 查询 Pod 状态
+                    pod = k8s_common_operate.get_pod_info(self.core_k8s_client, pod_name, namespace)
+
+                    current_real_status, error_msg = self.get_pod_final_status(pod)
+                    current_node_name = pod.spec.node_name
+
+                    # 如果状态发生变化，更新数据库
+                    if current_real_status != pod_real_status or current_node_name != pod_located_node_name:
+                        pod_real_status = current_real_status
+                        pod_located_node_name = current_node_name
+                        self.update_pod_status_and_node_name_in_db(ai_instance_db.id, pod_real_status, pod_located_node_name, error_msg)
+                        print(f"Pod {pod_name} status/node name change to: {pod_real_status}_{pod_located_node_name}")
+                        if current_real_status in ["Error", "CrashLoopBackOff", "ImagePullBackOff", "CreateContainerError",
+                                                   "CreateContainerConfigError", "OOMKilled", "ContainerCannotRun", "Completed", "Failed"]:
+                            print(f"change Pod {pod_name} sts replica to 0")
+                            # 副本数改成0
+                            self.set_k8s_sts_replica_by_instance_id(ai_instance_db.id, 0)
+
+                            self.get_or_set_update_k8s_node_resource_redis()
+                            return
+
+
+                    # 如果 Pod 处于 Running 状态，退出循环
+                    if pod_real_status == "Running":
+                        print(f"Pod {pod_name} 已正常运行, node name:{current_node_name}")
+                        self.get_or_set_update_k8s_node_resource_redis()
+
+                        # 明确退出函数
+                        return
+
+
+                    # 等待3秒后再次检查
+                    await asyncio.sleep(3)
+
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+
+                    await asyncio.sleep(3)
+
+            # 5. 检查是否超时
+            if (datetime.now() - start_time).total_seconds() >= timeout:
+                print(f"Pod {pod_name} 状态检查超时(5分钟)")
+
+                self.update_pod_status_and_node_name_in_db(ai_instance_db.id, K8sStatus.ERROR.value, pod_located_node_name, "cci pod change to running timeout")
+
+                # 副本数改成0
+                self.set_k8s_sts_replica_by_instance_id(ai_instance_db.id, 0)
+
+                self.get_or_set_update_k8s_node_resource_redis()
+
+        except Exception as e:
+            print(f"检查Pod {ai_instance_db.id} 状态时发生未预期错误: {e}")
             self.get_or_set_update_k8s_node_resource_redis()
             import traceback
             traceback.print_exc()
@@ -1734,6 +1888,7 @@ class AiInstanceService:
 
                 core_k8s_client.patch_namespaced_service(name=service_name, namespace=namespace_name, body=svc)
             except Exception as e:
+                print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance {id} add port {target_port} fail: {e}")
                 AiInstanceSQL.delete_ports_info_by_instance_id_target_port(id, target_port)
                 import traceback
                 traceback.print_exc()
@@ -1950,7 +2105,7 @@ class AiInstanceService:
             traceback.print_exc()
             raise e
 
-    def _start_async_check_task(self, core_k8s_client, k8s_id, instance_id, pod_name, namespace):
+    def _create_async_check_task(self,ai_instance, ai_instance_db, namespace_name, resource_config):
         """启动后台检查任务"""
         def _run_task():
             loop = None
@@ -1961,16 +2116,14 @@ class AiInstanceService:
 
                 # 执行检查任务
                 loop.run_until_complete(
-                    self._safe_check_pod_status_and_node_name(
-                        core_k8s_client,
-                        k8s_id,
-                        instance_id,
-                        pod_name,
-                        namespace
+                    self.create_safe_check_pod_status_and_node_name(
+                        ai_instance, ai_instance_db, namespace_name, resource_config
                     )
                 )
             except Exception as e:
-                print(f"Background task failed: {str(e)}")
+                print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance {ai_instance_db.id} Background task failed: {e}")
+                import traceback
+                traceback.print_exc()
             finally:
                 if loop:
                     loop.close()
@@ -1978,12 +2131,14 @@ class AiInstanceService:
         # 使用线程池提交任务
         task_executor.submit(_run_task)
 
-    async def _safe_check_pod_status_and_node_name(self, *args):
+    async def create_safe_check_pod_status_and_node_name(self, *args):
         """受保护的检查任务"""
         try:
-            await self.check_pod_status_node_name_and_update_db(*args)
+            await self.create_check_pod_status_node_name_and_update_db(*args)
         except Exception as e:
-            print(f"Pod status check failed: {str(e)}")
+            print(f"Pod status check failed: {e}")
+            import traceback
+            traceback.print_exc()
 
     def convert_cpu_to_core(self, cpu_str):
         """将CPU字符串转换为 核"""
