@@ -2053,8 +2053,8 @@ class AiInstanceService:
                 'node_name': node_resource_db.node_name,
                 'less_gpu_pod_total': node_resource_db.less_gpu_pod_total,
                 'less_gpu_pod_count': node_resource_db.less_gpu_pod_count,
-                'cpu_slot_total': node_resource_db.cpu_slot_total,
-                'cpu_slot_used': node_resource_db.cpu_slot_used,
+                'cpu_slot_total': int(node_resource_db.cpu_slot_total) if node_resource_db.cpu_slot_total else 0,
+                'cpu_slot_used': int(node_resource_db.cpu_slot_used) if node_resource_db.cpu_slot_used else 0,
                 'gpu_model': None if not node_resource_db.gpu_model else self.find_gpu_display_by_key(node_resource_db.gpu_model),
                 # GPU资源（整数）
                 'gpu_total': int(gpu_total) if gpu_total else 0,
