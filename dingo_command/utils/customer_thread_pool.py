@@ -1,5 +1,6 @@
 import os
-from queue import Queue
+import queue
+from queue import Queue, Empty
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 import threading
 import time
@@ -44,6 +45,8 @@ class QueuedThreadPool:
                     self._active_tasks += 1
                 future = self.executor.submit(fn, *args, **kwargs)
                 future.add_done_callback(self._task_completed)
+            except queue.Empty:
+                continue  # 静默处理队列空异常
             except Exception as e:
                 print(e)
                 continue
