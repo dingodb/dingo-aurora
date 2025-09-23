@@ -306,30 +306,43 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
         sts = sts_map[real_name]
         pod = pod_map.get(f"{real_name}-0")  # StatefulSet Pod命名规则
 
-        if sts and sts.spec.replicas == 0 and not pod:
-            ai_instance_db = AiInstanceSQL.get_ai_instance_info_by_real_name(real_name)
-            if ai_instance_db:
-                if ai_instance_db.instance_status == AiInstanceStatus.READY.name or ai_instance_db.instance_status == AiInstanceStatus.RUNNING.name or ai_instance_db.instance_status == AiInstanceStatus.ERROR.name:
-                    print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} change instance_status:{ai_instance_db.instance_status} to error")
-                    ai_instance_db.instance_status = AiInstanceStatus.ERROR.name
-                    ai_instance_db.instance_real_status = K8sStatus.ERROR.value
-                    ai_instance_db.error_msg = "k8s not exist this pod"
-                    AiInstanceSQL.update_ai_instance_info(ai_instance_db)
-                    ai_instance_service.set_k8s_sts_replica_by_instance_id(instance_db.id, 0)
-                else:
-                    print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} change instance_status:{ai_instance_db.instance_status} to stopped")
-                    ai_instance_db.instance_status = AiInstanceStatus.STOPPED.name
-                    ai_instance_db.instance_real_status = None
-                    AiInstanceSQL.update_ai_instance_info(ai_instance_db)
+        # 处理副本数为0的情况 关机状态
+        if sts and sts.spec.replicas == 0:
+            print(f"Sts[{real_name}]副本数为0，检查Pod[{real_name}-0]是否存在")
+            # 如果副本数为0，但Pod不存在，说明是关机状态，更新状态为STOPPED
+            if not pod:
+                print(f"Not Found Pod[{real_name}-0], Sts[{real_name}]副本数为0，更新状态为STOPPED")
+                ai_instance_db = AiInstanceSQL.get_ai_instance_info_by_real_name(real_name)
+                if ai_instance_db:
+                    if (ai_instance_db.instance_status == AiInstanceStatus.READY.name
+                            or ai_instance_db.instance_status == AiInstanceStatus.RUNNING.name
+                            or ai_instance_db.instance_status == AiInstanceStatus.ERROR.name):
+                        print(
+                            f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} change instance_status:{ai_instance_db.instance_status} to error")
+                        ai_instance_db.instance_status = AiInstanceStatus.ERROR.name
+                        ai_instance_db.instance_real_status = K8sStatus.ERROR.value
+                        ai_instance_db.error_msg = "k8s not exist this pod"
+                        AiInstanceSQL.update_ai_instance_info(ai_instance_db)
+                        ai_instance_service.set_k8s_sts_replica_by_instance_id(instance_db.id, 0)
+                    else:
+                        print(
+                            f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} change instance_status:{ai_instance_db.instance_status} to stopped")
+                        ai_instance_db.instance_status = AiInstanceStatus.STOPPED.name
+                        ai_instance_db.instance_real_status = None
+                        AiInstanceSQL.update_ai_instance_info(ai_instance_db)
+            else:
+                # 关机过程中，Pod还存在
+                print(f"Sts[{real_name}]副本数为0，但Pod[{real_name}-0]存在，关机过程中，不更新状态")
             continue
 
-
+        print(f"Sts[{real_name}]副本数不为0，进行别的状态处理")
         # 确定实例状态
         k8s_status, error_msg = ai_instance_service.get_pod_final_status(pod)
         # k8s_image = extract_image_info(sts)
         # 环境变量、错误信息等
         pod_details = extract_pod_details(pod)
         instance_status = AiInstanceService.map_k8s_to_db_status(k8s_status, instance_db.instance_status)
+        print(f"ai instance [{real_name}] k8s_status: {k8s_status}, instance_status: {instance_status}, error_msg: {error_msg}")
 
         # 更新数据库记录
         try:
