@@ -280,7 +280,7 @@ async def get_resources(
             restore_ns()
     return JSONResponse(content=jsonable_encoder(resources)) # 确保复杂对象可以被序列化
 
-@router.get("/k8s/{resource}/{name}?cluster_id=xxxx", summary="获取资源", description="获取资源")
+@router.get("/k8s/{resource}/{name}", summary="获取资源", description="获取资源")
 async def get_resources(
     cluster_id:str = Query(None, description="集群id"),
     name: str = Path(..., description="Kubernetes 资源名称"),
@@ -314,41 +314,6 @@ async def get_resources(
     return JSONResponse(content=jsonable_encoder(resources)) # 确保复杂对象可以被序列化
 
 
-@router.delete("/k8s/{resource}/{name}", summary="查询资源", description="查询资源")
-async def delete_resources(
-    cluster_id:str = Query(None, description="集群id"),
-    name: str = Path(..., description="Kubernetes 资源名称"),
-    resource: str = Path(..., description="Kubernetes 资源类型"),
-    token: str = Depends(get_token),
-):
-    #根据cluster_id获取对应的kubeconfig，然后获取kubeclient
-
-    """
-    根据提供的参数查询 Kubernetes 资源。
-    """
-    restore_ns = None
-    try:
-        kube_config, netns = get_cluster_info(cluster_id)
-        
-        if netns:
-            restore_ns = set_netns(netns)
-        if resource == "namespaces" and name in not_delete_ns:
-            raise HTTPException(status_code=403, detail="The namespace resources automatically created by the k8s cluster "
-                                                        "cannot be deleted")
-        k8sclient = get_k8s_client_by_cluster(kube_config)
-        resources = k8sclient.delete_resource(
-            resource_type=resource,
-            name=name,
-            api_version=None
-        )
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"查询资源 '{resource}' 失败。")
-    finally:
-        if restore_ns:
-            restore_ns()
-    return JSONResponse(content=jsonable_encoder(resources)) # 确保复杂对象可以被序列化
-
 @router.delete("/k8s/namespace/{namespace}/{resource}/{name}", summary="查询资源", description="查询资源")
 async def delete_resources(
     cluster_id:str = Query(None, description="集群id"),
@@ -366,9 +331,6 @@ async def delete_resources(
         kube_config, netns = get_cluster_info(cluster_id)
         restore_ns = None
         
-        if resource == "namespaces" and name in not_delete_ns:
-            raise HTTPException(status_code=403, detail="The namespace resources automatically created by the k8s cluster "
-                                                        "cannot be deleted")
         if netns:
             restore_ns = set_netns(netns)
         k8sclient = get_k8s_client_by_cluster(kube_config)
@@ -400,12 +362,12 @@ async def delete_resources(
     根据提供的参数查询 Kubernetes 资源。
     """
     restore_ns = None
+    if resource == "namespaces" and name in not_delete_ns:
+        raise HTTPException(status_code=403, detail="The namespace resources automatically created by the k8s cluster "
+                                                    "cannot be deleted")
     try:
         kube_config, netns = get_cluster_info(cluster_id)
         
-        if resource == "namespaces" and name in not_delete_ns:
-            raise HTTPException(status_code=403, detail="The namespace resources automatically created by the k8s cluster "
-                                                        "cannot be deleted")
         if netns:
             restore_ns = set_netns(netns)
         k8sclient = get_k8s_client_by_cluster(kube_config)

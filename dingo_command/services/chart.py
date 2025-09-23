@@ -1065,12 +1065,12 @@ class ChartService:
                     if version == chart_version:
                         chart_readme_url = create_time_info.get("readme_url")
                         chart_values_url = create_time_info.get("values_url")
-                if not chart_readme_url or not chart_values_url:
+                if not chart_readme_url and not chart_values_url:
                     raise ValueError(f"get oci chart {chart_data.name} content failed, please check")
                 readme_content, values_dict = self.get_chart_oci_details(chart_readme_url, chart_values_url,
                                                                          username, password)
-                if not readme_content or not values_dict:
-                    raise ValueError(f"get oci chart {chart_data.name} failed, please check")
+                if not readme_content and not values_dict:
+                    raise ValueError(f"get oci chart detail {chart_data.name} failed, please check")
 
             chart_object = ChartObject(
                 metadata=chart_metadata,
