@@ -289,7 +289,6 @@ class HarborService:
             project_repositories = self.harbor.get_project_repositories(
                 project_name, page=page, page_size=page_size, get_all=False
             )
-
             if not project_repositories["status"]:
                 return project_repositories
 
@@ -631,7 +630,7 @@ class HarborService:
 
     # 添加自定义镜像仓库
     def add_custom_projects(
-        self, project_name: str, public: str, storage_limit: int, user_name: str
+        self, project_name: str, public: str, storage_limit: int, tenant_id: str
     ) -> dict:
         """
         添加自定义镜像仓库项目并分配用户权限
@@ -693,6 +692,13 @@ class HarborService:
             - 如果项目名称已存在，操作将失败
             - 建议在生产环境中使用有意义的项目名称
         """
+        # 检查租户ID是否存在
+        get_custom_harbor_relation_response = self.get_custom_harbor_relation(tenant_id)
+
+        if not get_custom_harbor_relation_response:
+            return self.return_response(False, 400, "租户ID不存在")
+        user_name = get_custom_harbor_relation_response.harbor_name
+
         # 检查仓库配额限制，是否超出限制100GB
         all_quota = private_project_storage_limit * 1024 * 1024 * 1024
         storage_limit = storage_limit * 1024 * 1024 * 1024
@@ -727,7 +733,7 @@ class HarborService:
 
     # 更新自定义镜像仓库
     def update_custom_projects(
-        self, project_name: str, public: str, storage_limit: int, user_name: str
+        self, project_name: str, public: str, storage_limit: int, tenant_id: str
     ) -> dict:
         """
         更新自定义镜像仓库项目的配置信息
@@ -787,6 +793,13 @@ class HarborService:
             - 建议在更新前检查当前存储使用情况
             - 存储限制不能小于已使用的存储空间
         """
+        # 检查租户ID是否存在
+        get_custom_harbor_relation_response = self.get_custom_harbor_relation(tenant_id)
+
+        if not get_custom_harbor_relation_response:
+            return self.return_response(False, 400, "租户ID不存在")
+        user_name = get_custom_harbor_relation_response.harbor_name
+
         # 检查仓库配额限制，是否超出限制100GB
         all_quota = private_project_storage_limit * 1024 * 1024 * 1024
         get_custom_projects_response = self.get_custom_projects(user_name)
@@ -807,7 +820,6 @@ class HarborService:
         update_custom_projects_response = self.harbor.update_custom_projects(
             project_name, public
         )
-
         if update_custom_projects_response["status"]:
             # 仓库大小无法使用该接口更改，通过单独调用update_project_quotas接口更改
             quotas = self.harbor.get_all_quotas()
@@ -819,12 +831,12 @@ class HarborService:
                     )
                     if update_project_quotas_response["status"]:
                         update_custom_projects_response["message"] = (
-                            f"仓库 {project_name} 更新成功"
+                            f"仓库更新成功: {project_name} "
                         )
                         return update_custom_projects_response
                     else:
                         update_custom_projects_response["message"] = (
-                            f"仓库 {project_name} 更新失败"
+                            f"仓库更新失败: {project_name} "
                         )
                         return update_custom_projects_response
         else:
@@ -833,7 +845,7 @@ class HarborService:
     # 获取自定义镜像仓库
     # Harbor 的 GET /projects?owner=username 参数并不是用来查询"某个用户参与的项目"，而是用来查询"某个用户创建的项目"。
     # 但是在实际使用中，大多数用户不是用 UI 创建项目，而是管理员创建后把用户加入为成员。此时，用户不是项目 owner，只是成员，所以这个 API 返回为空
-    def get_custom_projects(self, user_name: str) -> dict:
+    def get_custom_projects(self, user_name: str, tenant_id: str = None) -> dict:
         """
         获取指定用户参与的所有自定义镜像仓库项目信息
 
@@ -895,6 +907,14 @@ class HarborService:
             True, 200, "获取自定义镜像仓库成功", ""
         )
         custom_projects_list = []
+        if tenant_id:
+            get_custom_harbor_relation_response = self.get_custom_harbor_relation(tenant_id)
+            if not get_custom_harbor_relation_response:
+                return self.return_response(False, 400, "租户ID不存在")
+            else:
+                user_name = get_custom_harbor_relation_response.harbor_name
+        else:
+            user_name = user_name
 
         # 获取自定义仓库配额信息
         get_all_quotas_response = self.harbor.get_all_quotas()
