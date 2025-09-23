@@ -337,3 +337,15 @@ async def get_instance_info_by_id(k8s_id:str):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"查询容器实例详情失败:{id}")
+
+@router.get("/ai/resources/thread/test", summary="测试线程池", description="测试线程池")
+async def test_thread_pool():
+    # 查询容器实例详情
+    try:
+        return ai_instance_service.test_thread_pool()
+    except Fail as e:
+        raise HTTPException(status_code=400, detail=e.error_message)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"失败:{id}")

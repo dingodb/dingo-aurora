@@ -10,7 +10,7 @@ import time
 import uuid
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
-from functools import wraps
+from functools import wraps, partial
 
 from tenacity import retry, stop_after_attempt, retry_if_exception, wait_fixed
 from keystoneclient import client
@@ -38,6 +38,7 @@ from dingo_command.utils.constant import CCI_NAMESPACE_PREFIX, RESOURCE_TYPE_KEY
     SAVE_TO_IMAGE_CCI_PREFIX, GPU_POD_LABEL_KEY, GPU_POD_LABEL_VALUE, CCI_STS_PREFIX, CCI_STS_POD_SUFFIX, INGRESS_SIGN, \
     HYPHEN_SIGN, POINT_SIGN, JUPYTER_INIT_MOUNT_NAME, JUPYTER_INIT_MOUNT_PATH, HARBOR_PULL_IMAGE_SUFFIX, \
     CPU_OVER_COMMIT, MIN_CPU_REQUEST, CPU_POD_SLOT_KEY, CCI_SYNC_K8S_NODE_REDIS_KEY, CCI_TIME_OUT_DEFAULT
+from dingo_command.utils.customer_thread_pool import queuedThreadPool
 from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client, get_k8s_networking_client
 from dingo_command.services.custom_exception import Fail
 
@@ -46,7 +47,6 @@ harbor_service = HarborService()
 
 # 全局线程池
 task_executor = ThreadPoolExecutor(max_workers=min(32, (os.cpu_count() or 1) * 4))
-
 
 def _create_retry_decorator():
     """创建支持智能重试判断的装饰器工厂"""
@@ -104,7 +104,6 @@ class AiInstanceService:
         # 更新状态为删除中
         ai_instance_info_db.instance_status="DELETING"
         AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
-
         # 优先尝试删除 K8s 资源（Service、StatefulSet）
         try:
             core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
@@ -2603,3 +2602,8 @@ class AiInstanceService:
         if not operator_flag:
             print("set ai instance k8s node resource key expire time  to 10s")
             redis_connection.set_redis_by_key_with_expire(CCI_SYNC_K8S_NODE_REDIS_KEY, "true", 10)
+
+    def test_thread_pool(self):
+        for i in range(1, 1001):
+            # 测试线程池
+            queuedThreadPool.submit(partial(print, f"Hello World Number {i}"))
