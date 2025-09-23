@@ -266,7 +266,7 @@ class MessageService:
         fields = ", ".join(message_data_json.keys())
         placeholders = ", ".join(["%s"] * len(message_data_json))
         # 生成sql语句
-        dingodb_sql_template = f"INSERT INTO {message_dingo_table} ({fields}) VALUES ({placeholders})"
+        dingodb_sql_template = f"INSERT IGNORE INTO {message_dingo_table} ({fields}) VALUES ({placeholders})"
         # 返回组装语句
         return dingodb_sql_template
 
