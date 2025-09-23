@@ -733,7 +733,7 @@ class AiInstanceService:
         # 设置实例k8s上真实名称
         ai_instance_db.instance_real_name = CCI_STS_PREFIX + ai_instance_db.id
         # 保存数据库信息
-        AiInstanceSQL.update_ai_instance_info(ai_instance_db)
+        AiInstanceSQL.save_ai_instance_info(ai_instance_db)
 
         # 启异步任务执行创建k8s资源及检查pod状态, 提交任务时使用这个包装函数
         queuedThreadPool.submit(partial(self.async_create_cci_task, ai_instance, ai_instance_db, namespace_name, resource_config))
@@ -1246,6 +1246,7 @@ class AiInstanceService:
         """构建需要更新的StatefulSet配置"""
         # 提取资源配置
         resource_limits = resource_config.get('resource_limits', {})
+        resource_requests = resource_config.get('resource_requests', {})
         node_selector_gpu = resource_config.get('node_selector_gpu', {})
         toleration_gpus = resource_config.get('toleration_gpus', [])
         system_disk_size = resource_config.get('system_disk_size', 50)
@@ -1265,7 +1266,7 @@ class AiInstanceService:
         existing_sts.spec.template.spec.containers[0].image_pull_policy = "Always"
         if resource_limits:
             existing_sts.spec.template.spec.containers[0].resources = V1ResourceRequirements(
-                requests=resource_limits,
+                requests=resource_requests,
                 limits=resource_limits
             )
 

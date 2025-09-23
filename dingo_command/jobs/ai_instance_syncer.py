@@ -10,7 +10,7 @@ from dingo_command.utils.constant import CCI_NAMESPACE_PREFIX,  DEV_TOOL_JUPYTER
 from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client
 from dingo_command.services.ai_instance import AiInstanceService, harbor_service
 from dingo_command.utils import datetime as datatime_util
-from datetime import datetime
+from datetime import datetime, timedelta
 
 ai_instance_scheduler = BackgroundScheduler()
 ai_instance_service = AiInstanceService()
@@ -45,7 +45,7 @@ def start():
 
 
 def fetch_ai_instance_info():
-    with RedisLock(redis_connection.redis_connection, "dingo_command_ai_instance_lock", expire_time=120) as lock:
+    with RedisLock(redis_connection.redis_master_connection, "dingo_command_ai_instance_lock", expire_time=120) as lock:
         if lock:
             start_time = datatime_util.get_now_time()
             print(f"同步容器实例开始时间: {start_time}")
@@ -286,15 +286,28 @@ def handle_missing_resources(sts_names, db_instances):
     sts_name_set = set(sts_names)
     for instance in db_instances:
         if instance.instance_real_name not in sts_name_set:
-            print(f"删除数据库中不存在的实例记录: {instance.instance_real_name}")
+            # 当前时间
+            current_time = datetime.now()
+            # cci实例的最新操作时间
+            cci_latest_operator_time = instance.create_time
+            if instance.instance_start_time:
+                cci_latest_operator_time = instance.instance_start_time
+            # 最新操作时间与当前时间的差值
+            operator_time_difference = current_time - cci_latest_operator_time
+            # 差值在一小时之内的不允许清理
+            if operator_time_difference <= timedelta(hours=1):
+                print(f"current instance in 1 hour cannot be delete, id:{instance.id} ")
+                continue
+
+            print(f"delete not exists instance, instance_real_name: {instance.instance_real_name}")
             try:
-                print(f"删除db的instance资源: id = {instance.id}, name = {instance.instance_name}, real_name = {instance.instance_real_name}")
+                print(f"delete db instance resource: id = {instance.id}, name = {instance.instance_name}, real_name = {instance.instance_real_name}")
                 # 清理实例
                 AiInstanceSQL.delete_ai_instance_info_by_id(instance.id)
                 # 清理端口数据
                 AiInstanceSQL.delete_ai_instance_ports_info_by_instance_id(instance.id)
             except Exception as e:
-                print(f"删除数据库记录失败[{instance.id}]: {str(e)}")
+                print(f"delete cci instance id [{instance.id}]: {str(e)}")
 
 
 def sync_instance_info(sts_map, pod_map, db_instance_map):
@@ -336,6 +349,14 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
             continue
 
         print(f"Sts[{real_name}]副本数不为0，进行别的状态处理")
+
+
+        # 开机或创建
+        if sts and sts.spec.replicas == 1:
+            # POD不存在，则实例处于开机中状态
+            if not pod and instance_db.instance_status.lower() == AiInstanceStatus.STARTING.name.lower():
+                continue
+
         # 确定实例状态
         k8s_status, error_msg = ai_instance_service.get_pod_final_status(pod)
         # k8s_image = extract_image_info(sts)
