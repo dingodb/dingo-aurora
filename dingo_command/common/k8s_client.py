@@ -571,15 +571,16 @@ class K8sClient:
         
         return filtered_items
 
-    def _paginate_items(self, items: List[Dict[str, Any]], page: int, page_size: int) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    def _paginate_items(self, items: List[Dict[str, Any]], page: int, page_size: int) \
+            -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
         对资源列表进行分页处理。
-        
+
         Args:
             items: 资源列表
             page: 页码，从1开始
-            page_size: 每页大小
-            
+            page_size: 每页大小。如果为-1，则返回所有项目
+
         Returns:
             tuple: (分页后的资源列表, 分页元数据)
         """
@@ -588,25 +589,44 @@ class K8sClient:
         page_size = int(page_size)
 
         total_count = len(items)
-        total_pages = (total_count + page_size - 1) // page_size if page_size > 0 else 1
-        
-        # 确保页码有效
-        if page < 1:
+
+        # 处理 page_size = -1 的情况，返回所有项目
+        if page_size == -1:
+            # 当 page_size 为 -1 时，将所有项目视为一页
+            effective_page_size = total_count
+            total_pages = 1 if total_count > 0 else 0
+            # 强制设置 page=1，因为所有数据都在一页
             page = 1
-        elif page > total_pages and total_pages > 0:
+        else:
+            # 正常分页计算
+            if page_size <= 0:
+                # 除了 -1 外，page_size 不应小于等于 0，这里可以抛出异常或设置为默认值
+                # 这里选择设置为默认值 10，你也可以根据需求抛出 ValueError
+                page_size = 10
+
+            effective_page_size = page_size
+            total_pages = (total_count + effective_page_size - 1) // effective_page_size \
+                if effective_page_size > 0 else 1
+
+        # 确保页码有效
+        if total_pages == 0:
+            page = 0
+        elif page < 1:
+            page = 1
+        elif page > total_pages:
             page = total_pages
-        
+
         # 计算起始和结束索引
-        start_index = (page - 1) * page_size
-        end_index = start_index + page_size
-        
+        start_index = (page - 1) * effective_page_size
+        end_index = start_index + effective_page_size
+
         # 获取当前页的数据
         paginated_items = items[start_index:end_index]
-        
+
         # 构建分页元数据
         pagination_metadata = {
             'current_page': page,
-            'page_size': page_size,
+            'page_size': effective_page_size,
             'total_count': total_count,
             'total_pages': total_pages,
             'has_previous': page > 1,
@@ -616,7 +636,7 @@ class K8sClient:
             'start_index': start_index + 1 if paginated_items else 0,
             'end_index': start_index + len(paginated_items)
         }
-        
+
         return paginated_items, pagination_metadata
 
     def _convert_k8s_object_to_dict(self, obj: Any) -> Dict[str, Any]:
