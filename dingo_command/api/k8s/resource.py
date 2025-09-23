@@ -1,6 +1,7 @@
 import json
 import ctypes
 import os
+import codecs
 import re
 import traceback
 from fastapi import FastAPI, Depends, HTTPException, Query, Path
@@ -415,7 +416,11 @@ async def update_resources(
         if match:
             body_str = match.group(1)
             # 处理转义字符
-            body_str = body_str.encode('utf-8').decode('unicode_escape')
+            try:
+                body_str = codecs.decode(body_str, 'unicode_escape')
+            except UnicodeDecodeError:
+                # 如果解码失败（例如，反斜杠在字符串末尾），跳过解码
+                pass
             # 解析 JSON
             body_json = json.loads(body_str)
             raise HTTPException(status_code=500, detail=f"{body_json}")
@@ -459,7 +464,11 @@ async def update_resources(
         if match:
             body_str = match.group(1)
             # 处理转义字符
-            body_str = body_str.encode('utf-8').decode('unicode_escape')
+            try:
+                body_str = codecs.decode(body_str, 'unicode_escape')
+            except UnicodeDecodeError:
+                # 如果解码失败（例如，反斜杠在字符串末尾），跳过解码
+                pass
             # 解析 JSON
             body_json = json.loads(body_str)
             raise HTTPException(status_code=500, detail=f"{body_json}")

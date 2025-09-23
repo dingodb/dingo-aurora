@@ -246,7 +246,8 @@ class ClusterService:
                         floating_ip=False,
                         etcd=False,
                         image_id=node.image,
-                        port_forwards=cluster_new.port_forwards
+                        port_forwards=cluster_new.port_forwards,
+                        use_local_disk = True,
                     )
                     instance_db = InstanceDB()
                     instance_db.id = str(uuid.uuid4())
