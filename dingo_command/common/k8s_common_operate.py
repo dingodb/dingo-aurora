@@ -79,13 +79,14 @@ class K8sCommonOperate:
         return create_namespaced_stateful_set_pod_thread.get()
 
     def create_cci_jupter_service(self, core_v1: client.CoreV1Api(), namespace: str, service_name: str):
-        """创建ClusterIP Service"""
+        """创建ClusterIP Service (幂等版本)"""
+        full_service_name = service_name + "-" + DEV_TOOL_JUPYTER
         service = client.V1Service(
-            metadata=client.V1ObjectMeta(name=service_name + "-" + DEV_TOOL_JUPYTER,
+            metadata=client.V1ObjectMeta(name=full_service_name,
                                          labels={RESOURCE_TYPE_KEY: PRODUCT_TYPE_CCI}),
             spec=client.V1ServiceSpec(
                 selector={"app": service_name,
-                          RESOURCE_TYPE_KEY: PRODUCT_TYPE_CCI},  # 定义标签
+                          RESOURCE_TYPE_KEY: PRODUCT_TYPE_CCI},
                 ports=[
                     client.V1ServicePort(
                         name=DEV_TOOL_JUPYTER,
@@ -93,83 +94,130 @@ class K8sCommonOperate:
                         target_port=8888,
                         protocol="TCP"
                     )
-                ],  # 定义port、target_port端口号
+                ],
                 type="ClusterIP",
             )
         )
 
         try:
+            # 首先尝试创建
             create_namespaced_service_thread = core_v1.create_namespaced_service(
                 namespace=namespace,
                 body=service,
                 async_req=True
             )
             create_namespaced_service = create_namespaced_service_thread.get()
-            print(f"success create jupter service {create_namespaced_service.metadata.name}")
+            print(f"Successfully created jupyter service {create_namespaced_service.metadata.name}")
             return create_namespaced_service.metadata.uid
-        except client.exceptions.ApiException as e:
-            print(f"Jupter service {service_name}  cerate failed:{e}")
+
+        except client.rest.ApiException as e:
+            # 如果异常原因是 409 Conflict，则尝试更新已有的 Service
+            if e.status == 409:
+                print(f"Service '{full_service_name}' already exists, attempting update...")
+                try:
+                    update_namespaced_service_thread = core_v1.replace_namespaced_service(
+                        name=full_service_name,
+                        namespace=namespace,
+                        body=service,
+                        async_req=True
+                    )
+                    updated_service = update_namespaced_service_thread.get()
+                    print(f"Successfully updated jupyter service {updated_service.metadata.name}")
+                    return updated_service.metadata.uid
+                except Exception as update_e:
+                    print(f"Failed to update service '{full_service_name}': {update_e}")
+                    import traceback
+                    traceback.print_exc()
+                    raise update_e
+            else:
+                # 如果是其他错误，直接抛出
+                print(f"Failed to create jupyter service '{full_service_name}': {e}")
+                import traceback
+                traceback.print_exc()
+                raise e
+
+    def create_cci_metallb_service(self, core_v1: client.CoreV1Api, namespace: str, service_name: str,
+                                   cci_service_ip: str, is_account: bool, available_ports_map):
+        """
+        创建带有特定注解的MetalLB Service (幂等版本)
+        """
+        # 定义Service端口
+        ports = [
+            client.V1ServicePort(name="ssh", protocol="TCP", port=available_ports_map['22'], target_port=22),
+            client.V1ServicePort(name="port-9001", protocol="TCP", port=available_ports_map['9001'], target_port=9001),
+            client.V1ServicePort(name="port-9002", protocol="TCP", port=available_ports_map['9002'], target_port=9002)
+        ]
+
+        if is_account:
+            metallb_share = namespace
+        else:
+            metallb_share = CCI_SHARE_METALLB
+
+        # 定义Service的metadata，包含名称、命名空间、标签和关键的MetalLB注解
+        metadata = client.V1ObjectMeta(
+            name=service_name,
+            namespace=namespace,
+            labels={RESOURCE_TYPE_KEY: PRODUCT_TYPE_CCI},
+            annotations={
+                "metallb.universe.tf/allow-shared-ip": metallb_share,
+                "metallb.universe.tf/loadBalancerIPs": cci_service_ip
+            }
+        )
+
+        # 定义Service的spec
+        spec = client.V1ServiceSpec(
+            type="LoadBalancer",
+            allocate_load_balancer_node_ports=False,
+            ports=ports,
+            selector={
+                "app": service_name,
+                RESOURCE_TYPE_KEY: PRODUCT_TYPE_CCI
+            }
+        )
+
+        # 构建Service对象
+        service = client.V1Service(api_version="v1", kind="Service", metadata=metadata, spec=spec)
+
+        try:
+            # 首先尝试创建
+            create_namespaced_service_thread = core_v1.create_namespaced_service(
+                namespace=namespace,
+                body=service,
+                async_req=True
+            )
+            create_namespaced_service = create_namespaced_service_thread.get()
+            print(f"Successfully created MetalLB service {create_namespaced_service.metadata.name}")
+            return create_namespaced_service.metadata.uid
+
+        except client.rest.ApiException as e:
+            # 如果异常原因是 409 Conflict，则尝试更新已有的 Service
+            if e.status == 409:
+                print(f"Service '{service_name}' already exists, attempting update...")
+                try:
+                    update_namespaced_service_thread = core_v1.replace_namespaced_service(
+                        name=service_name,
+                        namespace=namespace,
+                        body=service,
+                        async_req=True
+                    )
+                    updated_service = update_namespaced_service_thread.get()
+                    print(f"Successfully updated MetalLB service {updated_service.metadata.name}")
+                    return updated_service.metadata.uid
+                except Exception as update_e:
+                    print(f"Failed to update service '{service_name}': {update_e}")
+                    import traceback
+                    traceback.print_exc()
+                    raise update_e
+            else:
+                # 如果是其他错误，直接抛出
+                print(f"Failed to create MetalLB service '{service_name}': {e}")
+                import traceback
+                traceback.print_exc()
+                raise e
+        except Exception as e:
+            print(f"Unexpected error during service creation: {e}")
             import traceback
             traceback.print_exc()
-            raise e
-
-    def create_cci_metallb_service(self, core_v1: client.CoreV1Api(), namespace: str, service_name: str, cci_service_ip: str, is_account: bool, available_ports_map):
-        """
-        创建带有特定注解的MetalLB Service
-        """
-        try:
-            # 定义Service端口
-            ports = [
-                V1ServicePort(name="ssh", protocol="TCP", port=available_ports_map['22'], target_port=22),  # 第一个端口映射
-                V1ServicePort(name="port-9001", protocol="TCP", port=available_ports_map['9001'], target_port=9001),  # 第二个端口映射
-                V1ServicePort(name="port-9002", protocol="TCP", port=available_ports_map['9002'], target_port=9002)  # 第三个端口映射
-            ]
-
-            if is_account:
-                metallb_share = namespace
-            else:
-                metallb_share = CCI_SHARE_METALLB
-
-            # 定义Service的metadata，包含名称、命名空间、标签和关键的MetalLB注解
-            metadata = V1ObjectMeta(
-                name=service_name,
-                namespace=namespace,
-                labels={RESOURCE_TYPE_KEY: PRODUCT_TYPE_CCI},
-
-                annotations={
-                    "metallb.universe.tf/allow-shared-ip": metallb_share,  # 共享IP的标识
-                    "metallb.universe.tf/loadBalancerIPs": cci_service_ip  # 指定的固定IP
-                }
-            )
-
-            # 定义Service的spec
-            spec = V1ServiceSpec(
-                type="LoadBalancer",  # 类型为LoadBalancer，由MetalLB提供实现
-                allocate_load_balancer_node_ports=False,
-                ports=ports,
-                selector={
-                    "app": service_name,
-                    RESOURCE_TYPE_KEY: PRODUCT_TYPE_CCI
-                },  # 定义标签  # 选择器，指向拥有此标签的Pod
-            )
-
-            # 构建Service对象
-            service = V1Service(api_version="v1", kind="Service", metadata=metadata, spec=spec)
-            # 创建Service
-            create_namespaced_service_thread = core_v1.create_namespaced_service(
-                namespace=namespace,
-                body=service,
-                async_req=True
-            )
-            create_namespaced_service = create_namespaced_service_thread.get()
-            print(f"success create metallb service {create_namespaced_service.metadata.name}")
-            return create_namespaced_service.metadata.uid
-        except ApiException as e:
-            print(f"创建Metallb Service时发生Kubernetes API异常: {e}")
-            print(f"异常详情: {e.body}")
-            raise e
-        except Exception as e:
-            print(f"创建Service时发生系统异常: {e}")
             raise e
 
     def create_jupyter_configmap(self, core_v1: client.CoreV1Api, namespace, configmap_name, nb_prefix, nb_init_password):
@@ -181,28 +229,28 @@ class K8sCommonOperate:
             configmap_name (str): ConfigMap 名称
             jupyter_config_content (str): Jupyter Notebook 配置文件内容
         """
+        # 定义ConfigMap数据
+        configmap_data = {
+            "NB_INIT_PASSWORD": nb_init_password,  # 使用传入的变量值
+            "NOTEBOOK_ENABLE_PROXY": "False",
+            "PIP_SOURCE": "nexus",
+            "CONDA_SOURCE": "tsinghua",
+            "APT_SOURCE": "nexus",
+            "NB_PREFIX": nb_prefix
+        }
+
+        # 创建ConfigMap对象
+        configmap = client.V1ConfigMap(
+            api_version="v1",
+            kind="ConfigMap",
+            metadata=client.V1ObjectMeta(
+                name=configmap_name,
+                namespace=namespace
+            ),
+            data=configmap_data
+        )
+
         try:
-            # 定义ConfigMap数据
-            configmap_data = {
-                "NB_INIT_PASSWORD": nb_init_password,  # 使用传入的变量值
-                "NOTEBOOK_ENABLE_PROXY": "False",
-                "PIP_SOURCE": "nexus",
-                "CONDA_SOURCE": "tsinghua",
-                "APT_SOURCE": "nexus",
-                "NB_PREFIX": nb_prefix
-            }
-
-            # 创建ConfigMap对象
-            configmap = client.V1ConfigMap(
-                api_version="v1",
-                kind="ConfigMap",
-                metadata=client.V1ObjectMeta(
-                    name=configmap_name,
-                    namespace=namespace
-                ),
-                data=configmap_data
-            )
-
             # 创建 ConfigMap
             api_response = core_v1.create_namespaced_config_map(
                 namespace=namespace,
@@ -210,9 +258,27 @@ class K8sCommonOperate:
             )
             LOG.info(f"ConfigMap '{configmap_name}' 创建成功. API 响应: {api_response.metadata.name}")
             return api_response
-
+        except client.rest.ApiException as e:
+            # 如果异常原因是 409 Conflict，则尝试更新已有的 ConfigMap
+            if e.status == 409:
+                LOG.warning(f"ConfigMap '{configmap_name}' 已存在，尝试更新...")
+                try:
+                    api_response = core_v1.replace_namespaced_config_map(
+                        name=configmap_name,
+                        namespace=namespace,
+                        body=configmap
+                    )
+                    LOG.info(f"ConfigMap '{configmap_name}' 更新成功.")
+                    return api_response
+                except Exception as replace_e:
+                    LOG.error(f"更新 ConfigMap '{configmap_name}' 失败: {replace_e}")
+                    raise replace_e
+            else:
+                # 如果是其他错误，直接抛出
+                LOG.error(f"创建 ConfigMap '{configmap_name}' 时发生 API 异常: {e}")
+                raise e
         except Exception as e:
-            LOG.error(f"创建 ConfigMap[{namespace}/{configmap_name}]时发生异常: {e}")
+            LOG.error(f"create jupyter ConfigMap[{namespace}/{configmap_name}]时发生异常: {e}")
             raise e
 
     def create_configmap(self, core_v1: client.CoreV1Api, namespace, configmap_name, nb_prefix):
@@ -260,7 +326,7 @@ class K8sCommonOperate:
             return api_response
 
         except ApiException as e:
-            LOG.error(f"创建 ConfigMap 时发生异常: {e}")
+            LOG.error(f"create jupyter ConfigMap {configmap_name}, {nb_prefix} 时发生异常: {e}")
             raise e
 
     def delete_configmap(self, core_v1: client.CoreV1Api, namespace, configmap_name):
@@ -292,41 +358,41 @@ class K8sCommonOperate:
                 LOG.error(f"删除 ConfigMap {configmap_name} 时发生异常: {e}")
             raise e
 
-    def create_cci_ingress_rule(self, networking_v1: client.NetworkingV1Api, namespace: str, service_name: str, host_domain: str, nb_prefix: str):
-        """创建Ingress Service"""
+    def create_cci_ingress_rule(self, networking_v1: client.NetworkingV1Api, namespace: str, service_name: str,
+                                host_domain: str, nb_prefix: str):
+        """创建Ingress Service (幂等版本)"""
         # 定义变量
         ingress_name = f"{service_name}-{INGRESS_SIGN}"
         user_cci_pod_service_name = service_name + "-" + DEV_TOOL_JUPYTER  # 替换为实际 jupter Service 名称
 
         # 创建 Ingress 对象
-        ingress = V1Ingress(
+        ingress = client.V1Ingress(
             api_version="networking.k8s.io/v1",
             kind="Ingress",
-            metadata=V1ObjectMeta(
+            metadata=client.V1ObjectMeta(
                 name=ingress_name,
                 namespace=namespace,
                 annotations={
-                    # "nginx.ingress.kubernetes.io/rewrite-target": "/$1",
                     "nginx.ingress.kubernetes.io/ssl-redirect": "true",
-                    "nginx.ingress.kubernetes.io/websocket-services": service_name + "-" + DEV_TOOL_JUPYTER,
+                    "nginx.ingress.kubernetes.io/websocket-services": user_cci_pod_service_name,
                     "nginx.ingress.kubernetes.io/proxy-read-timeout": "3600",
                     "nginx.ingress.kubernetes.io/proxy-send-timeout": "3600",
                 },
             ),
-            spec=V1IngressSpec(
+            spec=client.V1IngressSpec(
                 ingress_class_name="nginx",
                 rules=[
-                    V1IngressRule(
+                    client.V1IngressRule(
                         host=host_domain,
-                        http=V1HTTPIngressRuleValue(
+                        http=client.V1HTTPIngressRuleValue(
                             paths=[
-                                V1HTTPIngressPath(
+                                client.V1HTTPIngressPath(
                                     path=nb_prefix,
                                     path_type="Prefix",
-                                    backend=V1IngressBackend(
-                                        service=V1IngressServiceBackend(
+                                    backend=client.V1IngressBackend(
+                                        service=client.V1IngressServiceBackend(
                                             name=user_cci_pod_service_name,
-                                            port=V1ServiceBackendPort(number=8888),
+                                            port=client.V1ServiceBackendPort(number=8888),
                                         )
                                     ),
                                 )
@@ -337,15 +403,40 @@ class K8sCommonOperate:
             ),
         )
 
-        # 创建 Ingress
         try:
+            # 首先尝试创建
             api_response = networking_v1.create_namespaced_ingress(
                 namespace=namespace,
                 body=ingress,
             )
             print(f"Ingress created successfully: {api_response.metadata.name}")
+            return api_response
+
+        except client.rest.ApiException as e:
+            # 如果异常原因是 409 Conflict，则尝试更新已有的 Ingress
+            if e.status == 409:
+                print(f"Ingress '{ingress_name}' already exists, attempting update...")
+                try:
+                    api_response = networking_v1.replace_namespaced_ingress(
+                        name=ingress_name,
+                        namespace=namespace,
+                        body=ingress,
+                    )
+                    print(f"Ingress updated successfully: {api_response.metadata.name}")
+                    return api_response
+                except Exception as update_e:
+                    print(f"Failed to update Ingress '{ingress_name}': {update_e}")
+                    import traceback
+                    traceback.print_exc()
+                    raise update_e
+            else:
+                # 如果是其他错误，直接抛出
+                print(f"Failed to create Ingress '{ingress_name}': {e}")
+                import traceback
+                traceback.print_exc()
+                raise e
         except Exception as e:
-            print(f"Error creating Ingress: {e}")
+            print(f"Unexpected error during Ingress creation: {e}")
             import traceback
             traceback.print_exc()
             raise e

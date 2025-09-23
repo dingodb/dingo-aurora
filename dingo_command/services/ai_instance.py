@@ -46,7 +46,7 @@ k8s_common_operate = K8sCommonOperate()
 harbor_service = HarborService()
 
 # 全局线程池
-task_executor = ThreadPoolExecutor(max_workers=min(32, (os.cpu_count() or 1) * 4))
+task_executor = ThreadPoolExecutor(max_workers=min(32, (os.cpu_count() or 1) * 6))
 
 def _create_retry_decorator():
     """创建支持智能重试判断的装饰器工厂"""
@@ -262,11 +262,10 @@ class AiInstanceService:
                     nerdctl_api_pod = self._get_nerdctl_api_pod(core_k8s_client, sts_pod_info['node_name'])
 
                     # 立即返回响应，后续操作异步执行
-                    self._start_async_save_task(
-                        id, core_k8s_client, nerdctl_api_pod,
-                        sts_pod_info['container_id'], image_registry, harbor_username, harbor_password,
-                        image_name, image_tag
-                    )
+                    queuedThreadPool.submit(partial(self.sava_ai_instance_to_imag_async_task_in_thread,
+                                                    id, core_k8s_client, nerdctl_api_pod,
+                                                    sts_pod_info['container_id'], image_registry, harbor_username, harbor_password, image_name, image_tag
+                                                    ))
 
                     return {
                         "status": "accepted",
@@ -283,81 +282,89 @@ class AiInstanceService:
             # 记录日志并重新抛出异常
             print(f"Failed to start save operation for instance {id}: {str(e)}")
             raise Fail(f"Failed to start save operation: {str(e)}")
+    def sava_ai_instance_to_imag_async_task_in_thread(self, id, core_k8s_client, nerdctl_api_pod,
+                                    clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag):
+        """
+        同步包装函数：在线程内创建事件循环并运行异步任务。
+        """
+        # 为当前线程创建一个新的事件循环
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)  # 设置为当前线程的循环
+        try:
+            # 在新的循环中运行异步任务直到完成
+            loop.run_until_complete(self.sava_ai_instance_to_image_task( id, core_k8s_client, nerdctl_api_pod,
+                                    clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag))
+        except Exception as e:
+            print(f"Error in async task wrapper for instance {id}: {e}")
+        finally:
+            # 无论成功与否，最后都关闭循环
+            loop.close()
 
-    def _start_async_save_task(self, id, core_k8s_client, nerdctl_api_pod,
+
+    async def sava_ai_instance_to_image_task(self, id, core_k8s_client, nerdctl_api_pod,
                                     clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag):
         """启动后台检查任务"""
-        def _run_task():
-            loop = None
-            try:
-                # 创建新的事件循环（每个线程独立）
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+        try:
+            await asyncio.wait_for(self.async_save_cci_to_image(
+                id, core_k8s_client, nerdctl_api_pod,
+                clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag
+            ),
+            timeout= CCI_TIME_OUT_DEFAULT)
+        except Exception as e:
+            print(
+                f"{time.strftime('%Y-%m-%d %H:%M:%S')} Background task sava_ai_instance_to_image_task failed or timeout for instance {id}: {str(e)}")
+            ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
+            ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
+            ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
+            ai_instance_info_db.error_msg = str(e)
+            AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
 
-                loop.run_until_complete(
-                    # 执行检查任务
-                    asyncio.wait_for(
-                        self._async_save_operation(
-                            id, core_k8s_client, nerdctl_api_pod,
-                            clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag
-                        ),
-                        timeout=CCI_TIME_OUT_DEFAULT
-                    )
-                )
-            except Exception as e:
-                print(f"Background task failed: {str(e)}")
-                ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
-                ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
-                ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
-                ai_instance_info_db.error_msg = str(e)
-                AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+            # 副本数改成0
+            self.set_k8s_sts_replica_by_instance_id(id, 0)
+        finally:
+            self.get_or_set_update_k8s_node_resource_redis()
+            print(
+                f"{time.strftime('%Y-%m-%d %H:%M:%S')} Task for instance {id} has finished (success, timeout, or error), thread should be released.")
 
-                self.get_or_set_update_k8s_node_resource_redis()
+    def stop_save_to_image_async_task_in_thread(self, id):
+        """
+        同步包装函数：在线程内创建事件循环并运行异步任务。
+        """
+        # 为当前线程创建一个新的事件循环
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)  # 设置为当前线程的循环
+        try:
+            # 在新的循环中运行异步任务直到完成
+            loop.run_until_complete(self.stop_save_cci_to_image_task(id))
+        except Exception as e:
+            print(f"Error in async task wrapper for instance {id}: {e}")
+        finally:
+            # 无论成功与否，最后都关闭循环
+            loop.close()
 
-                # 副本数改成0
-                self.set_k8s_sts_replica_by_instance_id(id, 0)
-            finally:
-                if loop:
-                    loop.close()
-
-                redis_connection.delete_redis_key(SAVE_TO_IMAGE_CCI_PREFIX + id + "_flag")
-
-        # 使用线程池提交任务
-        task_executor.submit(_run_task)
-
-    def _stop_save_cci_to_image_task(self, id):
+    async def stop_save_cci_to_image_task(self, id):
         """启动后台检查任务"""
-        def _run_task():
-            loop = None
+        try:
+            # 执行检查任务
+            await asyncio.wait_for(self.stop_cci_to_save_image(id), timeout = CCI_TIME_OUT_DEFAULT)
+        except Exception as e:
+            print(
+                f"{time.strftime('%Y-%m-%d %H:%M:%S')} Background task stop_save_cci_to_image_task failed or timeout for instance {id}: {str(e)}")
             try:
-                # 创建新的事件循环（每个线程独立）
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+                ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
+                if ai_instance_info_db:
+                    ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
+                    ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
+                    ai_instance_info_db.error_msg = str(e)
+                    AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+                    # 副本数改成0
+                    self.set_k8s_sts_replica_by_instance_id(id, 0)
+            except Exception as inner_e:
+                print(f"Error during exception handling for instance {id}: {inner_e}")
+        finally:
+            self.get_or_set_update_k8s_node_resource_redis()
+            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Task for instance {id} has finished (success, timeout, or error), thread should be released.")
 
-                loop.run_until_complete(
-                    asyncio.wait_for(self.sava_ai_instance_to_image_backup(id), timeout = CCI_TIME_OUT_DEFAULT)
-                )
-            except Exception as e:
-                print(
-                    f"{time.strftime('%Y-%m-%d %H:%M:%S')} Background task _stop_save_cci_to_image_task failed or timeout for instance {id}: {str(e)}")
-                try:
-                    ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
-                    if ai_instance_info_db:
-                        ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
-                        ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
-                        ai_instance_info_db.error_msg = str(e)
-                        AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
-                        # 副本数改成0
-                        self.set_k8s_sts_replica_by_instance_id(id, 0)
-                except Exception as inner_e:
-                    print(f"Error during exception handling for instance {id}: {inner_e}")
-            finally:
-                if loop:
-                    loop.close()
-                self.get_or_set_update_k8s_node_resource_redis()
-                print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Task for instance {id} has finished (success, timeout, or error), thread should be released.")
-        # 使用线程池提交任务
-        task_executor.submit(_run_task)
 
     def sava_ai_instance_to_image_process_status(self, id):
         """
@@ -450,8 +457,8 @@ class AiInstanceService:
             'namespace': nerdctl_api_pod[0].metadata.namespace
         }
 
-    async def _async_save_operation(self, id, core_k8s_client, nerdctl_api_pod,
-                                    clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag):
+    async def async_save_cci_to_image(self, id, core_k8s_client, nerdctl_api_pod,
+                                      clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag):
         """
         实际的异步保存操作（受分布式锁保护）
         """
@@ -721,17 +728,14 @@ class AiInstanceService:
             instance_config=json.dumps(ai_instance.instance_config.dict()) if ai_instance.instance_config else None,
             instance_volumes=json.dumps(ai_instance.volumes.dict()) if ai_instance.volumes else None,
             instance_envs=json.dumps(ai_instance.instance_envs) if ai_instance.instance_envs else None,
-            instance_description=ai_instance.description
+            instance_description=ai_instance.description,
+            ssh_root_password=''.join(random.choices(string.ascii_letters + string.digits, k=10))
         )
         return ai_instance_info_db
 
     def _create_single_instance(self, ai_instance, ai_instance_db, namespace_name):
         """创建单个实例"""
         resource_config = self._prepare_resource_config(ai_instance.instance_config)
-        # 组装和创建
-        # instance_result = self._assemble_and_create_instance(
-        #     ai_instance, ai_instance_db, namespace_name, resource_config
-        # )
 
         # 设置实例ID
         ai_instance_db.id = ai_instance.instance_id or uuid.uuid4().hex
@@ -740,10 +744,8 @@ class AiInstanceService:
         # 保存数据库信息
         AiInstanceSQL.update_ai_instance_info(ai_instance_db)
 
-        # 后台检查pod状态
-        self._create_async_check_task(
-            ai_instance, ai_instance_db, namespace_name, resource_config,
-        )
+        # 启异步任务执行创建k8s资源及检查pod状态, 提交任务时使用这个包装函数
+        queuedThreadPool.submit(partial(self.async_create_cci_task, ai_instance, ai_instance_db, namespace_name, resource_config))
 
         return [self.assemble_ai_instance_return_result(ai_instance_db)]
 
@@ -843,11 +845,9 @@ class AiInstanceService:
         self._wait_for_resource(self.core_k8s_client, self.app_k8s_client, self.networking_k8s_client, namespace_name, configmap_name, client.V1ConfigMap)
 
         # 2、挂载jupyter config
-        nb_init_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-        ai_instance_db.ssh_root_password = nb_init_password
         k8s_common_operate.create_jupyter_configmap(self.core_k8s_client, namespace_name,
-                                                    ai_instance_db.instance_real_name, nb_prefix, nb_init_password)
-        self._wait_for_resource(self.core_k8s_client, self.app_k8s_client, self.networking_k8s_client, namespace_name,  ai_instance_db.instance_real_name, client.V1ConfigMap)
+                                                    ai_instance_db.instance_real_name, nb_prefix, ai_instance_db.ssh_root_password)
+        self._wait_for_resource(self.core_k8s_client, self.app_k8s_client, self.networking_k8s_client, namespace_name, ai_instance_db.instance_real_name, client.V1ConfigMap)
 
         # 3、创建jupter的service服务，包括默认端口8888
         k8s_common_operate.create_cci_jupter_service(
@@ -910,10 +910,8 @@ class AiInstanceService:
                 elif resource_type == client.V1Ingress:
                     networking_v1_client.read_namespaced_ingress(name, namespace)
                     return
-
-                asyncio.sleep(2)
             except Exception as e:
-                asyncio.sleep(1)
+                time.sleep(2)
                 print(f"{namespace}/{name} resource_type:{resource_type} fail: {e}")
         raise TimeoutError(f"Resource {name} not ready in {timeout}s")
 
@@ -1200,14 +1198,13 @@ class AiInstanceService:
             ai_instance_info_db.error_msg = None
             AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
 
-            # 后台检查pod状态
-            self._start_cci_async_check_task(
-                core_k8s_client,
-                ai_instance_info_db.instance_k8s_id,
-                ai_instance_info_db.id,
-                f"{ai_instance_info_db.instance_real_name}-0",
-                CCI_NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id
-            )
+
+            # 启异步任务检查pod状态, 提交任务时使用这个包装函数
+            queuedThreadPool.submit(
+                partial(self.start_cci_async_check_task_in_thread,  core_k8s_client,
+                                                       ai_instance_info_db.id,
+                                                       f"{ai_instance_info_db.instance_real_name}-0",
+                                                       CCI_NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id))
             return {"id": id, "status": ai_instance_info_db.instance_status}
         except Exception as e:
             import traceback
@@ -1272,15 +1269,6 @@ class AiInstanceService:
         existing_sts.metadata.resource_version = None
         existing_sts.spec.replicas = 1
         existing_sts.spec.template.metadata = V1ObjectMeta(labels=pod_template_labels, annotations = {"dc.com/quota.xfs.size": f"{system_disk_size}g"})
-        # existing_sts.spec.template.spec.node_selector = node_selector_gpu
-        # existing_sts.spec.template.spec.tolerations = toleration_gpus
-        # existing_sts.spec.template.spec.affinity = affinity
-        # existing_sts.spec.template.spec.node_name = self.choose_k8s_node(ai_instance_db.instance_k8s_id,
-        #                                        int(ai_instance.instance_config.compute_cpu),
-        #                                        int(ai_instance.instance_config.compute_memory),
-        #                                        int(ai_instance.instance_config.system_disk_size),
-        #                                        self.find_gpu_key_by_display(ai_instance.instance_config.gpu_model),
-        #                                        ai_instance.instance_config.gpu_count),
         existing_sts.spec.template.spec.containers[0].name = ai_instance_info_db.instance_real_name
         existing_sts.spec.template.spec.containers[0].image = image_name
         existing_sts.spec.template.spec.containers[0].image_pull_policy = "Always"
@@ -1351,7 +1339,7 @@ class AiInstanceService:
             print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} start to stop ai instance[{id}]")
 
             # 异步保存镜像
-            self._stop_save_cci_to_image_task(id)
+            queuedThreadPool.submit(partial(self.stop_save_to_image_async_task_in_thread, id))
 
             return {"id": id, "status": AiInstanceStatus.STOPPING.name}
         except Fail:
@@ -1413,11 +1401,12 @@ class AiInstanceService:
         finally:
             self.get_or_set_update_k8s_node_resource_redis()
 
-    async def sava_ai_instance_to_image_backup(self, id, image_tag = "latest"):
+    async def stop_cci_to_save_image(self, id, image_tag ="latest"):
         """
         异步保存AI实例为镜像（立即返回，实际操作在后台执行）
         """
         try:
+            print(f"start time {time.strftime('%Y-%m-%d %H:%M:%S')} stop cci {id}")
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if ai_instance_info_db:
                 # 标记为 STOPPED
@@ -1430,7 +1419,7 @@ class AiInstanceService:
                 core_k8s_client, sts_pod_info = self._get_k8s_sts_pod_info(ai_instance_info_db)
                 nerdctl_api_pod = self._get_nerdctl_api_pod(core_k8s_client, sts_pod_info['node_name'])
                 # 异步保存关机镜像
-                await self._async_save_operation(
+                await self.async_save_cci_to_image(
                     id, core_k8s_client, nerdctl_api_pod,
                     sts_pod_info['container_id'], harbor_address, harbor_username, harbor_password,
                     image_name, image_tag
@@ -1465,10 +1454,15 @@ class AiInstanceService:
                 AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
 
         except Exception as e:
+            # 副本数改成0
+            self.set_k8s_sts_replica_by_instance_id(id, 0)
+
             print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} stop cci {id} to save image fail:{e}")
             import  traceback
             traceback.print_exc()
             raise e
+        finally:
+            self.get_or_set_update_k8s_node_resource_redis()
 
 
     def set_auto_close_instance_by_id(self, id: str, auto_close_time: str, auto_close: bool):
@@ -1525,45 +1519,59 @@ class AiInstanceService:
             traceback.print_exc()
             raise e
 
-    def _start_cci_async_check_task(self, core_k8s_client, k8s_id, instance_id, pod_name, namespace):
-        """启动后台检查任务"""
-
-        def _run_task():
-            loop = None
-            try:
-                # 创建新的事件循环（每个线程独立）
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-                # 执行检查任务
-                loop.run_until_complete(
-                    self.start_cci_safe_check_pod_status_and_node_name(
-                        core_k8s_client,
-                        k8s_id,
-                        instance_id,
-                        pod_name,
-                        namespace
-                    )
-                )
-            except Exception as e:
-                print(f"Background task failed: {str(e)}")
-            finally:
-                if loop:
-                    loop.close()
-
-        # 使用线程池提交任务
-        task_executor.submit(_run_task)
-
-    async def start_cci_safe_check_pod_status_and_node_name(self, *args):
-        """受保护的检查任务"""
+    def async_create_cci_task(self, *args, **kwargs):
+        """
+           一个同步包装函数，用于在线程内运行异步函数。
+           """
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
-            await self.start_cci_check_pod_status_node_name_and_update_db(*args)
+            return loop.run_until_complete(self.create_check_pod_status_node_name_and_update_db(*args, **kwargs))
         except Exception as e:
-            print(f"Pod status check failed: {str(e)}")
+            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} create cci - args: {args}, kwargs: {kwargs} fail:{e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            if loop:
+                loop.close()
+
+    def start_cci_async_check_task_in_thread(self, *args, **kwargs):
+        """
+           一个同步包装函数，用于在线程内运行异步函数。
+           """
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(self.start_cci_async_check_task(*args, **kwargs))
+        except Exception as e:
+            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} start cci - args: {args}, kwargs: {kwargs} fail:{e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            if loop:
+                loop.close()
+
+    async def start_cci_async_check_task(self, core_k8s_client, instance_id, pod_name, namespace):
+        """启动后台检查任务"""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            # 执行检查任务
+            await asyncio.wait_for(
+                self.start_cci_check_pod_status_node_name_and_update_db(
+                    core_k8s_client,
+                    instance_id,
+                    pod_name,
+                    namespace
+                ), timeout=CCI_TIME_OUT_DEFAULT
+            )
+        except Exception as e:
+            print(f"cci {instance_id} start_cci_async_check_task task failed: {str(e)}")
+            import traceback
+            traceback.print_exc()
 
     async def start_cci_check_pod_status_node_name_and_update_db(self,
                                                        core_k8s_client,
-                                                       k8s_id: str,
                                                        instance_id: str,
                                                        pod_name: str,
                                                        namespace: str,
@@ -1643,10 +1651,7 @@ class AiInstanceService:
             return
 
 
-    async def create_check_pod_status_node_name_and_update_db(self,
-                                                       ai_instance, ai_instance_db, namespace_name, resource_config,
-                                                       timeout: int = CCI_TIME_OUT_DEFAULT
-                                                       ):
+    async def create_check_pod_status_node_name_and_update_db(self, ai_instance, ai_instance_db, namespace_name, resource_config, timeout: int = CCI_TIME_OUT_DEFAULT):
         """
         异步检查 Pod 状态并更新数据库
 
@@ -1656,17 +1661,18 @@ class AiInstanceService:
         :param timeout: 超时时间(秒)，默认5分钟(300秒)
         """
         try:
-            start_time = datetime.now()
+
             pod_real_status = None
             pod_located_node_name = None
+            pod_name = ai_instance_db.instance_real_name + "-0"
+            namespace = CCI_NAMESPACE_PREFIX + ai_instance_db.instance_tenant_id
+            start_time = datetime.now()
+
+            # 创建K8s资源
+            self._create_cci_k8s_resources(ai_instance, ai_instance_db, namespace_name, resource_config)
 
             while (datetime.now() - start_time).total_seconds() < timeout:
-                pod_name = ai_instance_db.instance_real_name + "-0"
-                namespace = CCI_NAMESPACE_PREFIX + ai_instance_db.instance_tenant_id
                 try:
-                    # 创建K8s资源
-                    self._create_cci_k8s_resources(ai_instance, ai_instance_db, namespace_name, resource_config)
-
                     # 查询 Pod 状态
                     pod = k8s_common_operate.get_pod_info(self.core_k8s_client, pod_name, namespace)
 
@@ -2104,40 +2110,15 @@ class AiInstanceService:
             traceback.print_exc()
             raise e
 
-    def _create_async_check_task(self,ai_instance, ai_instance_db, namespace_name, resource_config):
-        """启动后台检查任务"""
-        def _run_task():
-            loop = None
-            try:
-                # 创建新的事件循环（每个线程独立）
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-                # 执行检查任务
-                loop.run_until_complete(
-                    self.create_safe_check_pod_status_and_node_name(
-                        ai_instance, ai_instance_db, namespace_name, resource_config
-                    )
-                )
-            except Exception as e:
-                print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance {ai_instance_db.id} Background task failed: {e}")
-                import traceback
-                traceback.print_exc()
-            finally:
-                if loop:
-                    loop.close()
-
-        # 使用线程池提交任务
-        task_executor.submit(_run_task)
-
-    async def create_safe_check_pod_status_and_node_name(self, *args):
-        """受保护的检查任务"""
-        try:
-            await self.create_check_pod_status_node_name_and_update_db(*args)
-        except Exception as e:
-            print(f"Pod status check failed: {e}")
-            import traceback
-            traceback.print_exc()
+    #
+    # async def create_safe_check_pod_status_and_node_name(self, *args):
+    #     """受保护的检查任务"""
+    #     try:
+    #         await self.create_check_pod_status_node_name_and_update_db(*args)
+    #     except Exception as e:
+    #         print(f"Pod status check failed: {e}")
+    #         import traceback
+    #         traceback.print_exc()
 
     def convert_cpu_to_core(self, cpu_str):
         """将CPU字符串转换为 核"""

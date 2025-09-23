@@ -315,6 +315,7 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
                     ai_instance_db.instance_real_status = K8sStatus.ERROR.value
                     ai_instance_db.error_msg = "k8s not exist this pod"
                     AiInstanceSQL.update_ai_instance_info(ai_instance_db)
+                    ai_instance_service.set_k8s_sts_replica_by_instance_id(instance_db.id, 0)
                 else:
                     print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} change instance_status:{ai_instance_db.instance_status} to stopped")
                     ai_instance_db.instance_status = AiInstanceStatus.STOPPED.name
