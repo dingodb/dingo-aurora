@@ -305,22 +305,13 @@ class AiInstanceService:
                                     clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag):
         """启动后台检查任务"""
         try:
-            await asyncio.wait_for(self.async_save_cci_to_image(
+            await self.async_save_cci_to_image(
                 id, core_k8s_client, nerdctl_api_pod,
                 clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag
-            ),
-            timeout= CCI_TIME_OUT_DEFAULT)
+            )
         except Exception as e:
             print(
                 f"{time.strftime('%Y-%m-%d %H:%M:%S')} Background task sava_ai_instance_to_image_task failed or timeout for instance {id}: {str(e)}")
-            ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
-            ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
-            ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
-            ai_instance_info_db.error_msg = str(e)
-            AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
-
-            # 副本数改成0
-            self.set_k8s_sts_replica_by_instance_id(id, 0)
         finally:
             self.get_or_set_update_k8s_node_resource_redis()
             print(
