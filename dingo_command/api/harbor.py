@@ -21,6 +21,12 @@ async def get_public_base_image(
     page: int = Query(1, description="页码"),
     page_size: int = Query(10, description="页数量大小"),
 ):
+    if page_size > 100:
+        return {
+            "status": False,
+            "code": 400,
+            "message": "页数量大小不能大于100",
+        }
     try:
         result = harbor_service.get_public_base_image(
             project_name=project_name,
@@ -81,14 +87,14 @@ async def add_custom_projects(
     project_name: str = Body(..., description="项目名称"),
     public: str = Body(..., description="是否公开"),
     storage_limit: int = Body(..., description="存储限制"),
-    user_name: str = Body(..., description="用户名"),
+    tenant_id: str = Body(..., description="租户id"),
 ):
     try:
         result = harbor_service.add_custom_projects(
             project_name=project_name,
             public=public,
             storage_limit=storage_limit,
-            user_name=user_name,
+            tenant_id=tenant_id,
         )
         return result
     except Exception as e:
@@ -110,11 +116,11 @@ async def update_custom_projects(
     project_name: str = Body(..., description="项目名称"),
     public: str = Body(..., description="是否公开"),
     storage_limit: int = Body(..., description="存储限制"),
-    user_name: str = Body(..., description="用户名"),
+    tenant_id: str = Body(..., description="租户id"),
 ):
     try:
         result = harbor_service.update_custom_projects(
-            project_name=project_name, public=public, storage_limit=storage_limit, user_name=user_name
+            project_name=project_name, public=public, storage_limit=storage_limit, tenant_id=tenant_id
         )
         return result
     except Exception as e:
@@ -133,10 +139,10 @@ async def update_custom_projects(
     description="获取自定义镜像仓库",
 )
 async def get_custom_projects(
-    user_name: str = Query(..., description="用户名"),
+    tenant_id: str = Query(..., description="租户id"),
 ):
     try:
-        result = harbor_service.get_custom_projects(user_name=user_name)
+        result = harbor_service.get_custom_projects(tenant_id=tenant_id,user_name='')
         return result
     except Exception as e:
         import traceback

@@ -199,6 +199,16 @@ class HarborAPI:
             self._auth = (self.config["robot_username"], self.config["robot_token"])
         else:
             raise ValueError(f"不支持的认证方式: {auth_type}")
+    # 请求
+    def request(self, method, url, **kwargs):
+        return requests.request(
+            method,
+            url,
+            auth=self._auth,
+            headers={"Content-Type": "application/json"},
+            # verify=False,
+            **kwargs,
+        )
 
     def return_response(
         self, status: bool, code: int, message: str, data: Any = None
@@ -266,65 +276,6 @@ class HarborAPI:
             "message": message,
             "data": data,
         }
-
-    # 请求
-    def request(self, method: str, url: str, **kwargs) -> requests.Response:
-        """
-        发送HTTP请求到Harbor API
-
-        这是一个底层的HTTP请求方法，自动处理认证、请求头和SSL验证等配置。
-        所有其他API方法都通过此方法发送请求。
-
-        Args:
-            method (str): HTTP请求方法
-                - 支持的方法：GET, POST, PUT, DELETE, PATCH
-                - 示例：'GET', 'POST', 'PUT', 'DELETE'
-
-            url (str): 请求的完整URL
-                - 可以是相对路径或绝对路径
-                - 相对路径会自动添加base_url前缀
-                - 示例：'/api/v2.0/users', 'https://harbor.example.com/api/v2.0/users'
-
-            **kwargs: 传递给requests.request的其他参数
-                - json: JSON数据（自动设置Content-Type）
-                - params: URL查询参数
-                - headers: 自定义请求头
-                - timeout: 请求超时时间
-                - 其他requests库支持的参数
-
-        Returns:
-            requests.Response: HTTP响应对象
-                - status_code: HTTP状态码
-                - json(): 解析JSON响应
-                - text: 响应文本内容
-                - headers: 响应头信息
-
-        Example:
-            # GET请求
-            response = client.request('GET', '/api/v2.0/users')
-            users = response.json()
-
-            # POST请求
-            user_data = {"username": "test", "email": "test@example.com"}
-            response = client.request('POST', '/api/v2.0/users', json=user_data)
-
-            # 带查询参数的请求
-            response = client.request('GET', '/api/v2.0/projects', params={'page': 1, 'page_size': 10})
-
-        Note:
-            - 自动添加认证信息到请求头
-            - 自动设置Content-Type为application/json
-            - SSL验证默认关闭（verify=False）
-            - 支持所有requests库的高级功能
-        """
-        return requests.request(
-            method,
-            url,
-            auth=self._auth,
-            headers={"Content-Type": "application/json"},
-            # verify=False,
-            **kwargs,
-        )
 
     # 创建用户
     def create_user(
@@ -1091,7 +1042,7 @@ class HarborAPI:
             - 建议结合add_project_member管理项目成员
         """
         try:
-            url = f"{self.base_url}/api/v2.0/projects/{project_name}/members"
+            url = f"{self.base_url}/api/v2.0/projects/{project_name}/members?page=1&page_size=10"
             response = self.request("GET", url)
             if response.status_code == 200:
                 return self.return_response(
@@ -1520,17 +1471,14 @@ class HarborAPI:
         try:
             # 更新是否公开
             url = f"{self.base_url}/api/v2.0/projects/{project_name}"
-            response = self.request(
-                "PUT",
-                url,
-                json={
-                    "project_name": f"{project_name}",
-                    "public": bool(public),
-                    "metadata": {
-                        "public": f"{public}",
-                    },
+            payload = {
+                "project_name": f"{project_name}",
+                "public": True if public == 'true' else False,
+                "metadata": {
+                    "public": 'true' if public == 'true' else 'false',
                 },
-            )
+            }
+            response = self.request("PUT", url, json=payload)
             if response.status_code == 200:
                 return self.return_response(
                     True,
