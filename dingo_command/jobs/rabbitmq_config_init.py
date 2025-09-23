@@ -20,7 +20,8 @@ message_service = MessageService()
 def start():
     rabbitmq_scheduler.add_job(auto_set_shovel, 'date', run_date=run_time_10s)
     rabbitmq_scheduler.add_job(auto_connect_message_queue, 'date', run_date=run_time_30s)
-    rabbitmq_scheduler.add_job(auto_send_message_to_dingodb, 'interval', seconds=60*5, next_run_time=datetime.now())
+    # 任务体的锁的时间就是60s 任务的频率改成60s就可以
+    rabbitmq_scheduler.add_job(auto_send_message_to_dingodb, 'interval', seconds=60, next_run_time=datetime.now())
     # rabbitmq_scheduler.add_job(check_rabbitmq_shovel_status, 'interval', seconds=60*5, next_run_time=datetime.now())
     rabbitmq_scheduler.start()
 
