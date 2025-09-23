@@ -36,7 +36,7 @@ def fetch_ai_k8s_node_resource_4operate():
 
 def fetch_ai_k8s_node_resource():
     # 获取redis的锁，自动释放时间是60s
-    with RedisLock(redis_connection.redis_connection, "dingo_command_ai_k8s_node_resource_lock", expire_time=120) as lock:
+    with RedisLock(redis_connection.redis_master_connection, "dingo_command_ai_k8s_node_resource_lock", expire_time=120) as lock:
         if lock:
             start_time = datetime.now()
             print(f"sync k8s node resource start time: {start_time}")
@@ -278,9 +278,7 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
             node_resource_db.cpu_used = str(total_usage['cpu'])
             node_resource_db.memory_used = str(total_usage['memory'])
             node_resource_db.storage_used = str(total_usage['ephemeral-storage'])
-            if gpu_model and gpu_model in node_resource_db.gpu_model:
-                node_resource_db.gpu_used = str(total_usage['gpu'])
-
+            node_resource_db.gpu_used = str(total_usage['gpu'])
             AiInstanceSQL.update_k8s_node_resource(node_resource_db)
             return True
 
