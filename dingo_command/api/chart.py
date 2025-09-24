@@ -402,9 +402,14 @@ async def get_repo_charts(cluster_id: str = Query(None, description="集群id"),
                     need_install= True if chart.name in util.need_install_chart else False
                 )
                 chart_tmp_list.append(chart_info)
+            chart_tmp_list_sorted = sorted(
+                chart_tmp_list,
+                key=lambda chart: chart.need_install,
+                reverse=True
+            )
             data = ListChartInfoObject(
                 total=data.get("total"),
-                data=chart_tmp_list,
+                data=chart_tmp_list_sorted,
                 currentPage=data.get("currentPage"),
                 pageSize=data.get("pageSize"),
                 totalPages=data.get("totalPages")

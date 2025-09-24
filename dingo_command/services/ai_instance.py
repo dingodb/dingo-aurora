@@ -1146,6 +1146,13 @@ class AiInstanceService:
             namespace_name = CCI_NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id
             real_name = ai_instance_info_db.instance_real_name
 
+            # 获取最新的configmap的信息
+            configmap_name = CONFIGMAP_PREFIX + ai_instance_info_db.instance_user_id
+            k8s_common_operate.create_ns_configmap(
+                core_k8s_client, namespace_name, configmap_name, ai_instance_info_db,
+                {"authorized_keys": ""}
+            )
+
             # 原sts 数据
             existing_sts = k8s_common_operate.read_sts_info(app_k8s_client, real_name, namespace_name)
 
