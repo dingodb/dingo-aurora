@@ -11,6 +11,7 @@ from datetime import datetime
 from pip._vendor import requests
 import time
 
+from dingo_command.common.common import dingo_print
 from dingo_command.db.models.message.models import ExternalMessage
 from dingo_command.db.models.message.sql import MessageSQL
 from dingo_command.services.aliyundingodb import aliyun_dingodb_utils, aliyun_dingodb_read_utils
@@ -115,7 +116,7 @@ class MessageService:
         return message_db
 
     def callback(self, ch, method, properties, body):
-        print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Received queue: {RABBITMQ_EXTERNAL_MESSAGE_QUEUE}, message: {body}")
+        dingo_print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Received queue: {RABBITMQ_EXTERNAL_MESSAGE_QUEUE}, message: {body}")
         # 停止消费 判断是否消费了指定的数量
         # ch.stop_consuming()
         # 转换json对象
@@ -126,7 +127,7 @@ class MessageService:
             import traceback
             traceback.print_exc()
         if not message_json:
-            print(f"message is not valid: {body}")
+            dingo_print(f"message is not valid: {body}")
             return
         self.create_external_message(message_json)
 
@@ -134,7 +135,7 @@ class MessageService:
     def connect_mq_queue(self):
         # 目前只有中心region才需要连接队列，因为目前是从普通region铲消息到中心region
         if CENTER_REGION_FLAG is False:
-            print("current region is not center region, no need to connect mq shovel queue")
+            dingo_print("current region is not center region, no need to connect mq shovel queue")
             return
         # 消费报送数据的消息
         rabbitmq_config_service.consume_queue_message(RABBITMQ_EXTERNAL_MESSAGE_QUEUE, self.callback)
@@ -152,7 +153,7 @@ class MessageService:
                 raise Fail("message param not exists", error_message="报送JSON数据对象参数不完整")
             # 发送message
             rabbitmq_config_service.publish_message_to_queue(RABBITMQ_EXTERNAL_MESSAGE_QUEUE, json.dumps(message))
-            print("current region is not center region, no need to connect mq shovel queue")
+            dingo_print("current region is not center region, no need to connect mq shovel queue")
             # 返回成功标志
             return "SUCCESS"
         except Fail as e:
@@ -167,19 +168,19 @@ class MessageService:
     def send_message_to_dingodb(self):
         # 目前只有中心region才需要发送数据到dingodb
         if CENTER_REGION_FLAG is False:
-            print("current region is not center region, no need to send message to dingodb")
+            dingo_print("current region is not center region, no need to send message to dingodb")
             return
         try:
             # 获取redis的锁，自动释放时间是60s
             with RedisLock(redis_connection.redis_connection, "dingo_command_report_message_lock", expire_time=60) as lock:
                 if lock:
-                    print("get dingo_command_report_message_lock redis lock success")
+                    dingo_print("get dingo_command_report_message_lock redis lock success")
                     # 遍历message_type_table 按照类型进行插入数据
                     for message_type_key, message_dingo_table in MESSAGE_TYPE_TABLE.items():
                         # 检查当前类型的数据是否存在ERROR状态的数据，如果存在ERROR状态数据则需要告警，并且不再报送数据
                         error_status_number = MessageSQL.get_external_message_number_by_status(message_type_key, MessageStatusEnum.ERROR)
                         if error_status_number > 0:
-                            print(f"message type {message_type_key} has error status message, please check it")
+                            dingo_print(f"message type {message_type_key} has error status message, please check it")
                             continue
                         # 每次读取1000条
                         query_params = {"message_type":message_type_key}
@@ -187,7 +188,7 @@ class MessageService:
                         _, message_list = MessageSQL.list_external_message(query_params, 1, 1000, "create_date", "ascend")
                         # 判空 进入下一种类型
                         if not message_list:
-                            print(f"{message_type_key} message type no message to send")
+                            dingo_print(f"{message_type_key} message type no message to send")
                             continue
                         # 报送的数据结构可能是变化的，兼容不同的结构，生产不同的插入语句,不同的插入语句对应不同的数据内容
                         insert_dingodb_sql_value_map = {}
@@ -196,13 +197,13 @@ class MessageService:
                         for temp_message in message_list:
                             # 判断message是否合规
                             if not temp_message.message_data:
-                                print(f"message is not valid: {temp_message}")
+                                dingo_print(f"message is not valid: {temp_message}")
                                 continue
                             # message_data转化为json对象
                             message_data_json = self.load_message_data_json(temp_message)
                             # 判空
                             if not message_data_json:
-                                print(f"message_data_json is not valid: {temp_message}")
+                                dingo_print(f"message_data_json is not valid: {temp_message}")
                                 continue
                             # 组装sql
                             insert_dingodb_sql = self.create_dingodb_insert_sql(message_data_json, message_dingo_table)
@@ -213,7 +214,7 @@ class MessageService:
                         # 批量多个数据
                         self.insert_many_message_to_dingodb(insert_dingodb_sql_value_map, insert_dingodb_sql_message_id_map)
                 else:
-                    print("get dingo_command_report_message_lock redis lock failed")
+                    dingo_print("get dingo_command_report_message_lock redis lock failed")
         except Fail as e:
             raise e
         except Exception as e:
@@ -275,7 +276,7 @@ class MessageService:
     def insert_many_message_to_dingodb(self, insert_dingodb_sql_value_map, insert_dingodb_sql_message_id_map)  :
         # 判空
         if not insert_dingodb_sql_value_map or not insert_dingodb_sql_message_id_map:
-            print("no message to insert to dingodb")
+            dingo_print("no message to insert to dingodb")
             return
         # 当前处理的message_id
         message_ids = None
@@ -290,7 +291,7 @@ class MessageService:
                 # 成功之后删除掉当前数据
                 MessageSQL.delete_external_message_by_ids(message_ids)
                 # 成功记录成功的操作日志
-                print(f"success insert message to dingodb: {message_ids}")
+                dingo_print(f"success insert message to dingodb: {message_ids}")
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -306,7 +307,7 @@ class MessageService:
             # 成功之后删除掉当前数据
             MessageSQL.delete_external_message(temp_message.id)
             # 成功记录成功的操作日志
-            print(f"success insert message to dingodb: {temp_message}")
+            dingo_print(f"success insert message to dingodb: {temp_message}")
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -320,8 +321,8 @@ class MessageService:
         try:
             # 执行插入语句
             aliyun_dingodb_utils.insert_one(insert_dingodb_sql, insert_dingodb_values)
-            print(f"success execute sql: {insert_dingodb_sql}")
-            print(f"success insert message to dingodb: {insert_dingodb_values}")
+            dingo_print(f"success execute sql: {insert_dingodb_sql}")
+            dingo_print(f"success insert message to dingodb: {insert_dingodb_values}")
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -334,8 +335,8 @@ class MessageService:
         try:
             # 执行插入语句
             aliyun_dingodb_utils.insert_many(insert_dingodb_sql, insert_dingodb_values)
-            print(f"success execute sql: {insert_dingodb_sql}")
-            print(f"success insert message to dingodb: {insert_dingodb_values}")
+            dingo_print(f"success execute sql: {insert_dingodb_sql}")
+            dingo_print(f"success insert message to dingodb: {insert_dingodb_values}")
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -409,42 +410,42 @@ class MessageService:
         try:
             # 目前中心region不需要检测rabbitmq shovel status
             if CENTER_REGION_FLAG:
-                print("current region is center region, no need to check shovel status")
+                dingo_print("current region is center region, no need to check shovel status")
                 return
             # 没有shovel配置
             if not RABBITMQ_SHOVEL_QUEUE:
-                print("rabbit shovel queue is empty")
+                dingo_print("rabbit shovel queue is empty")
                 return
             # mq的transport_url是空
             if not TRANSPORT_URL or not CENTER_TRANSPORT_URL:
-                print("rabbit mq transport_url or center_transport_url is empty ")
+                dingo_print("rabbit mq transport_url or center_transport_url is empty ")
                 return
             # 解析mq的url
             transport_url_array, center_transport_url_array = rabbitmq_config_service.get_convert_mq_url_array()
             # 空
             if transport_url_array is None or len(transport_url_array) <= 0:
-                print("rabbit mq transport url array is empty ")
+                dingo_print("rabbit mq transport url array is empty ")
                 return
             # 空
             if center_transport_url_array is None or len(center_transport_url_array) <= 0:
-                print("center region rabbit mq transport url array is empty ")
+                dingo_print("center region rabbit mq transport url array is empty ")
                 return
             # 读取当前的mq的用户名、密码、mq的url
             user_name, password, src_mq_url = rabbitmq_config_service.get_current_mq_config_info()
             # 判空
             if not user_name or not password or not src_mq_url:
-                print("rabbit mq user name or password or src_mq_url is empty ")
+                dingo_print("rabbit mq user name or password or src_mq_url is empty ")
                 return
 
             first_node_ip = transport_url_array[0].split('@')[1].split(':')[0]
-            print(f"first node ip: ", first_node_ip)
+            dingo_print(f"first node ip: ", first_node_ip)
             if first_node_ip != MY_IP:
-                print(f"no-first node ip [{MY_IP}], not need to check rabbitmq shovel status")
+                dingo_print(f"no-first node ip [{MY_IP}], not need to check rabbitmq shovel status")
                 return
 
             # 当前环境的mq管理地址RabbitMQ 管理 API 的 URL 和认证信息
             shovel_url = "http://" + MY_IP + ":" + MQ_MANAGE_PORT + "/api/shovels"
-            print("shovel_url: " + shovel_url)
+            dingo_print("shovel_url: " + shovel_url)
             # 默认用户名和密码
             auth = (user_name, password)
 
@@ -457,14 +458,14 @@ class MessageService:
             if shovel_data:  # 更Pythonic的空值检查方式
                 for shovel in shovel_data:
                     if shovel['name'].startswith('dingo_command_external_message_shovel_'):
-                        print(
+                        dingo_print(
                             f"Shovel Name: {shovel['name']}, Status: {shovel['state']}, Blocked Status: {shovel['blocked_status']}")
 
                         # 检查状态是否正常
                         if shovel['state'] != 'running' or shovel['blocked_status'] != "running":
                             # 增加错误计数
                             shovel_error_count[shovel['name']] = shovel_error_count.get(shovel['name'], 0) + 1
-                            print(f"Shovel {shovel['name']} error count: {shovel_error_count[shovel['name']]}")
+                            dingo_print(f"Shovel {shovel['name']} error count: {shovel_error_count[shovel['name']]}")
 
                             # 检查是否达到6次错误
                             if shovel_error_count[shovel['name']] >= 6:
@@ -476,7 +477,7 @@ class MessageService:
                             # 状态正常，重置计数器
                             shovel_error_count[shovel['name']] = 0
             else:
-                print("No shovel data returned")
+                dingo_print("No shovel data returned")
         except Exception as e:
             import traceback
             traceback.print_exc()

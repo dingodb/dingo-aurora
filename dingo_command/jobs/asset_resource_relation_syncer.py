@@ -3,6 +3,7 @@ import json
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
+from dingo_command.common.common import dingo_print
 from dingo_command.common.ironic_client import IronicClient
 from dingo_command.common.nova_client import NovaClient
 from dingo_command.db.models.asset_resoure_relation.models import AssetResourceRelationInfo
@@ -25,20 +26,20 @@ def start():
 
 def fetch_relation_info():
     # 读取所有裸机数据、读取所有资产数据，对比数据根据ip进行比对，相同的ip则建立关联关系
-    print(f"同步资源与资产的关联关系开始时间: {datatime_util.get_now_time_in_timestamp_format()}")
+    dingo_print(f"同步资源与资产的关联关系开始时间: {datatime_util.get_now_time_in_timestamp_format()}")
     try:
         # 1、读取裸金属列表
         node_list = IronicClient().ironic_list_nodes()
-        # print(f"裸金属列表数据: {node_list}")
+        # dingo_print(f"裸金属列表数据: {node_list}")
         # 2、读取所有的资产数据
         asset_list = get_all_asset_list()
-        print(f"资产数据数目：{len(asset_list)}, 裸机节点数目：{len(node_list)}")
+        dingo_print(f"资产数据数目：{len(asset_list)}, 裸机节点数目：{len(node_list)}")
         # 3、查询所有虚拟机
         # server_list = NovaClient().nova_list_servers()
-        # print(f"虚拟机列表数据: {server_list}")
+        # dingo_print(f"虚拟机列表数据: {server_list}")
         # 数据判空
         if not node_list:
-            print("裸金属列表数据为空，清除资源相关数据")
+            dingo_print("裸金属列表数据为空，清除资源相关数据")
             # 删除资源与资产关联表中的数据
             AssetResourceRelationSQL.delete_all_asset_resource_relation_data()
             # 删除资源metrics表中数据
@@ -48,21 +49,21 @@ def fetch_relation_info():
         asset_resource_relation_list = []
         resource_id_list = []
         for temp_node in node_list:
-            # print(f"裸金属数据:{temp_node}")
+            # dingo_print(f"裸金属数据:{temp_node}")
             # uuid是裸金属的id  instance_uuid是对应的虚拟机的id
             if temp_node.get('uuid') in resource_id_list:
-                print(f"resource_id_list中已存在裸金属的id：{temp_node.get('uuid')}")
+                dingo_print(f"resource_id_list中已存在裸金属的id：{temp_node.get('uuid')}")
                 continue
             else:
                 resource_id_list.append(temp_node.get('uuid'))
-            #print(f"裸金属列表数据:{temp_node.get('uuid')}")
+            #dingo_print(f"裸金属列表数据:{temp_node.get('uuid')}")
             server_detail = None
             if temp_node.get('instance_uuid'):
                 try:
                     server_detail = NovaClient().nova_get_server_detail(temp_node.get('instance_uuid'))
-                    #print(f"虚拟机详情数据: {server_detail}")
+                    #dingo_print(f"虚拟机详情数据: {server_detail}")
                 except Exception as e:
-                    print(f"虚拟机[{temp_node.get('instance_uuid')}]详情数据失败: {e}")
+                    dingo_print(f"虚拟机[{temp_node.get('instance_uuid')}]详情数据失败: {e}")
             # 裸金属的ipmi的ip地址
             ipmi_address = temp_node.get('driver_info').get('ipmi_address') if temp_node.get('driver_info') else None
             # 与裸机对应的资产的id
@@ -114,8 +115,8 @@ def fetch_relation_info():
         # 处理资产表中未关联资源的数据的标识状态
         handle_asset_table_relation_resource_flag()
     except Exception as e:
-        print(f"同步资源与资产关系失败: {e}")
-    print(f"同步资源与资产的关联关系结束时间: {datatime_util.get_now_time_in_timestamp_format()}")
+        dingo_print(f"同步资源与资产关系失败: {e}")
+    dingo_print(f"同步资源与资产的关联关系结束时间: {datatime_util.get_now_time_in_timestamp_format()}")
 
 # 初始化资源与资产关联关系
 def init_asset_resource_relation(temp_node, asset_id, server_detail):
@@ -191,7 +192,7 @@ def get_all_asset_list():
                 if asset_result and asset_result.get('data'):
                     asset_list.extend(asset_result.get('data'))
     except Exception as e:
-        print(f"查询资产列表失败: {e}")
+        dingo_print(f"查询资产列表失败: {e}")
     # 返回资产列表
     return asset_list
 
@@ -206,18 +207,18 @@ def get_asset_ip(asset):
         # 获取ip地址
         return extra_json["ip"] if extra_json and "ip" in extra_json else None
     except Exception as e:
-        print(f"解析资产扩展字段失败: {e}")
+        dingo_print(f"解析资产扩展字段失败: {e}")
 
 # 读取资源的监控数据项数据
 def fetch_resource_metrics_info():
     # 读取资源的监控数据项数据
-    print(f"读取资源的监控数据项数据开始: {datatime_util.get_now_time_in_timestamp_format()}")
+    dingo_print(f"读取资源的监控数据项数据开始: {datatime_util.get_now_time_in_timestamp_format()}")
     try:
         # 读取所有资源需要的指标配置项
         resource_metrics_config_list = AssetResourceRelationSQL.get_all_resource_metrics_config()
         # 空
         if not resource_metrics_config_list:
-            print("资源的监控数据项配置数据为空，不需要采集资源的监控指标数据")
+            dingo_print("资源的监控数据项配置数据为空，不需要采集资源的监控指标数据")
             return
         # 读取所有裸机关联关系数据
         asset_resource_relation_list = AssetResourceRelationSQL.get_all_asset_resource_relation()
@@ -229,7 +230,7 @@ def fetch_resource_metrics_info():
                 if not temp_relation.resource_name:
                     continue
                 # 通过config的metrics查询资源的使用率信息
-                print(f"当前的资源：{temp_relation.resource_id}")
+                dingo_print(f"当前的资源：{temp_relation.resource_id}")
                 resource_id_list.append(temp_relation.resource_id)
                 # 资源的监控数据项
                 temp_resource_metrics_dict = {}
@@ -237,7 +238,7 @@ def fetch_resource_metrics_info():
                 for temp_config in resource_metrics_config_list:
                     # 读取配置项的查询query字符串，写入参数，组装promql
                     promql = temp_config.query.replace("{host_name}", temp_relation.resource_name)
-                    print(f"查询promql语句是{promql}")
+                    dingo_print(f"查询promql语句是{promql}")
                     try:
                         metrics_json = BigScreensService.fetch_metrics_with_promql(promql)
                         # if temp_config.name == "gpu_count":
@@ -248,28 +249,28 @@ def fetch_resource_metrics_info():
                         #     metrics_json = {"status":"success","data":{"resultType":"vector","result":[{"metric":{"hostname":"hd03-gpu2-0001","ib_addr":"192.168.1.1","instance":"10.201.49.1:9100","job":"consul","node_role":"k8s","region":"hd-03"},"value":[1747031684.197,"27.14990270986004"]}],"analysis":{}}}
                         # elif temp_config.name == "gpu_power":
                         #     metrics_json = {"status":"success","data":{"resultType":"vector","result":[{"metric":{"hostname":"hd03-gpu2-0001","ib_addr":"192.168.1.1","instance":"10.201.49.1:9100","job":"consul","node_role":"k8s","region":"hd-03"},"value":[1747031684.197,"27.14990270986004"]}],"analysis":{}}}
-                        print(f"监控项：{temp_config.name}数据:{metrics_json}")
+                        dingo_print(f"监控项：{temp_config.name}数据:{metrics_json}")
                         metrics_value = handle_metrics_json(metrics_json)
                         temp_resource_metrics_dict[temp_config.name] = metrics_value
                     except Exception as e:
-                        print(f"查询promql[{promql}]监控数据失败: {e}")
+                        dingo_print(f"查询promql[{promql}]监控数据失败: {e}")
                 # 存入数据库
                 resource_service.update_resource_metrics(temp_relation.resource_id, temp_resource_metrics_dict)
 
             # 删除资源metrics中资源已经不存在的数据
-            print(f"资源ID列表：{resource_id_list}")
+            dingo_print(f"资源ID列表：{resource_id_list}")
             if not resource_id_list:
                 AssetResourceRelationSQL.delete_all_resource_metrics()
             else:
                 AssetResourceRelationSQL.delete_resource_metrics_outside_resource_id_list(resource_id_list)
         else: # 资源与资产关联表为空，则删除资源metrics表中所有数据
-            print("资源与资产关联表为空，删除资源metrics表中所有数据")
+            dingo_print("资源与资产关联表为空，删除资源metrics表中所有数据")
             AssetResourceRelationSQL.delete_all_resource_metrics()
 
         # 读取每一个资源的监控数据信息
-        print(f"读取资源的监控数据项数据开始: {datatime_util.get_now_time_in_timestamp_format()}")
+        dingo_print(f"读取资源的监控数据项数据开始: {datatime_util.get_now_time_in_timestamp_format()}")
     except Exception as e:
-        print(f"读取资源的监控数据项失败: {e}")
+        dingo_print(f"读取资源的监控数据项失败: {e}")
 
 
 # 处理prometheus的返回数据
@@ -288,7 +289,7 @@ def handle_metrics_json(metrics_json):
                     # "value":[1747031802.721,"8"], 其中第一个数据1747031802.721为时间戳，第二个数据"8"为需要的数据
                     return json_data_result[0]['value'][1]
     except Exception as e:
-        print(f"解析监控数据项失败: {e}")
+        dingo_print(f"解析监控数据项失败: {e}")
     # 返回None
     return None
 
@@ -299,7 +300,7 @@ def handle_asset_table_relation_resource_flag():
     if relation_resources is not None:
         asset_id_list_in_relation_resource = [getattr(r, "asset_id") for r in relation_resources]
 
-    print(f"资源关联资产表中资产ID集合: {asset_id_list_in_relation_resource}")
+    dingo_print(f"资源关联资产表中资产ID集合: {asset_id_list_in_relation_resource}")
     if asset_id_list_in_relation_resource is None:
         # 修改所有资产关联资源标识为True的数据为false
         set_all_asset_relation_resource_flag_to_false()
