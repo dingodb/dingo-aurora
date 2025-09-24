@@ -5,6 +5,7 @@ from typing import Optional
 
 from kubernetes import client, config
 
+from dingo_command.common.common import dingo_print
 from dingo_command.db.models.ai_instance.models import AiK8sConfigs
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
 import yaml
@@ -53,7 +54,7 @@ def get_k8s_client(k8s_id: str,client_type: Type[T], **kwargs: Any) -> T:
             config_file=config_file,
             context=context_name  # None 时自动使用 current-context
         )
-        print(f"loaded kubeconfig: config_file={config_file}, context={context_name or 'current-context'}")
+        dingo_print(f"loaded kubeconfig: config_file={config_file}, context={context_name or 'current-context'}")
     except Exception as e:
         error_msg = f"load kubeconfig fail: {str(e)}"
         logger.error(error_msg)
