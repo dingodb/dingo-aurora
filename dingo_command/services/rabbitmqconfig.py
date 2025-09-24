@@ -4,6 +4,7 @@ import pika
 import requests
 from oslo_config import cfg
 
+from dingo_command.common.common import dingo_print
 from dingo_command.utils.constant import MQ_MANAGE_PORT, MQ_SHOVEL_ADD_URL, RABBITMQ_SHOVEL_QUEUE, MQ_PORT
 
 # 默认文件配置
@@ -41,31 +42,31 @@ class RabbitMqConfigService:
         try:
             # 中心region不需要创建铲子，现在是从普通region铲消息到中心region
             if CENTER_REGION_FLAG:
-                print("current region is center region, no need to add shovel")
+                dingo_print("current region is center region, no need to add shovel")
                 return
             # 没有shovel配置
             if not RABBITMQ_SHOVEL_QUEUE:
-                print("rabbit shovel queue is empty")
+                dingo_print("rabbit shovel queue is empty")
                 return
             # mq的transport_url是空
             if not TRANSPORT_URL or not CENTER_TRANSPORT_URL:
-                print("rabbit mq transport_url or center_transport_url is empty ")
+                dingo_print("rabbit mq transport_url or center_transport_url is empty ")
                 return
             # 解析mq的url
             transport_url_array, center_transport_url_array = self.get_convert_mq_url_array()
             # 空
             if transport_url_array is None or len(transport_url_array) <= 0:
-                print("rabbit mq transport url array is empty ")
+                dingo_print("rabbit mq transport url array is empty ")
                 return
             # 空
             if center_transport_url_array is None or len(center_transport_url_array) <= 0:
-                print("center region rabbit mq transport url array is empty ")
+                dingo_print("center region rabbit mq transport url array is empty ")
                 return
             # 读取当前的mq的用户名、密码、mq的url
             user_name, password, src_mq_url = self.get_current_mq_config_info()
             # 判空
             if not user_name or not password or not src_mq_url:
-                print("rabbit mq user name or password or src_mq_url is empty ")
+                dingo_print("rabbit mq user name or password or src_mq_url is empty ")
                 return
             # 与中心region的连接方式使用1对1的队列方式
             center_transport_url_index = 0
@@ -73,7 +74,7 @@ class RabbitMqConfigService:
             for shovel_name, queue_name in RABBITMQ_SHOVEL_QUEUE.items():
                 # 当前环境的mq管理地址RabbitMQ 管理 API 的 URL 和认证信息
                 shovel_url = "http://" + MY_IP + ":" + MQ_MANAGE_PORT + MQ_SHOVEL_ADD_URL + shovel_name + "_" +  MY_IP
-                print("shovel_url: " + shovel_url)
+                dingo_print("shovel_url: " + shovel_url)
                 # 遍历中心region的mq的url
                 # dest_mq_url_array = []
                 # for temp_url in center_transport_url_array:
@@ -98,14 +99,14 @@ class RabbitMqConfigService:
                 }
                 # 创建前删除掉原来的shovel
                 delete_response = requests.delete(shovel_url, auth=auth)
-                print(f"Shovel Deleted,状态码：{delete_response.status_code}, 响应内容：{delete_response.text} ")
+                dingo_print(f"Shovel Deleted,状态码：{delete_response.status_code}, 响应内容：{delete_response.text} ")
                 # 发送 HTTP 请求创建 Shovel
                 response = requests.put(shovel_url, auth=auth, json=shovel_config)
                 # 检查响应状态
                 if response.status_code == 201:
-                    print("Shovel 创建成功！")
+                    dingo_print("Shovel 创建成功！")
                 else:
-                    print(f"Shovel 创建失败，状态码：{response.status_code}, 响应内容：{response.text}")
+                    dingo_print(f"Shovel 创建失败，状态码：{response.status_code}, 响应内容：{response.text}")
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -121,7 +122,7 @@ class RabbitMqConfigService:
         transport_url_array, _ = self.get_convert_mq_url_array()
         # 判空
         if transport_url_array is None or len(transport_url_array) <= 0:
-            print("rabbit mq transport url array is empty ")
+            dingo_print("rabbit mq transport url array is empty ")
             return None
         # 遍历
         for temp_url in transport_url_array:
@@ -153,8 +154,8 @@ class RabbitMqConfigService:
         channel.queue_declare(queue=queue, durable=True)
         # 发送数据到队列中
         channel.basic_publish(exchange='', routing_key=queue, body=message, properties=pika.BasicProperties(delivery_mode=2,))
-        print("send mq message success")
-        print(f"message: {message}")
+        dingo_print("send mq message success")
+        dingo_print(f"message: {message}")
         # 关闭连接
         connection.close()
 
@@ -170,5 +171,5 @@ class RabbitMqConfigService:
         channel.queue_declare(queue=queue, durable=True)
         # 订阅队列并设置回调函数
         channel.basic_consume(queue=queue, on_message_callback=callback, auto_ack=True)
-        print(f'Waiting for {queue} queue json messages.')
+        dingo_print(f'Waiting for {queue} queue json messages.')
         channel.start_consuming()
