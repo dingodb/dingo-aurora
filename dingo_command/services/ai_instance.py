@@ -97,10 +97,17 @@ class AiInstanceService:
         if not ai_instance_info_db:
             dingo_print("ai instance[{id}] is not found")
             return
-        # 更新状态为删除中
-        ai_instance_info_db.instance_status="DELETING"
+        # 更新状态为deleting
+        ai_instance_info_db.instance_status = "DELETING"
         AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
-        # 优先尝试删除 K8s 资源（Service、StatefulSet）
+        # 优先尝试delete K8s 资源（Service、StatefulSet）
+        queuedThreadPool.submit(partial(self.delete_cci_related_resource, ai_instance_info_db, id))
+
+        # delete 数据库记录
+        AiInstanceSQL.delete_ai_instance_info_by_id(id)
+        return {"data": "success", "uuid": id}
+
+    def delete_cci_related_resource(self, ai_instance_info_db, id):
         try:
             core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
             app_k8s_client = get_k8s_app_client(ai_instance_info_db.instance_k8s_id)
@@ -111,37 +118,40 @@ class AiInstanceService:
             try:
                 k8s_common_operate.delete_service_by_name(core_k8s_client, real_name, namespace_name)
             except Exception as e:
-                dingo_print(f"删除Service失败, name={real_name}, ns={namespace_name}, err={e}")
+                dingo_print(f"delete Service失败, name={real_name}, ns={namespace_name}, err={e}")
 
             try:
-                k8s_common_operate.delete_service_by_name(core_k8s_client, real_name + "-" + DEV_TOOL_JUPYTER, namespace_name)
+                k8s_common_operate.delete_service_by_name(core_k8s_client, real_name + "-" + DEV_TOOL_JUPYTER,
+                                                          namespace_name)
             except Exception as e:
-                dingo_print(f"删除 jupyter Service失败, name={real_name}, ns={namespace_name}, err={e}")
+                dingo_print(f"delete  jupyter Service失败, name={real_name}, ns={namespace_name}, err={e}")
 
             try:
-                # 删除 ingress rule
+                # delete  ingress rule
                 k8s_common_operate.delete_namespaced_ingress(networking_k8s_client, real_name, namespace_name)
             except Exception as e:
-                dingo_print(f"删除ingress资源[{namespace_name}/{real_name}-jupyter]失败: {str(e)}")
+                dingo_print(f"delete ingress资源[{namespace_name}/{real_name}-jupyter]失败: {str(e)}")
 
             try:
-                # 删除 jupyter configMap
+                # delete  jupyter configMap
                 k8s_common_operate.delete_configmap(core_k8s_client, namespace_name, real_name)
             except Exception as e:
-                dingo_print(f"删除jupyter configMap资源[{namespace_name}/{real_name}]失败: {str(e)}")
+                dingo_print(f"delete jupyter configMap资源[{namespace_name}/{real_name}]失败: {str(e)}")
 
             try:
-                # 删除镜像库中保存的关机镜像
+                # delete 镜像库中保存的关机镜像
                 k8s_configs_db = AiInstanceSQL.get_k8s_configs_info_by_k8s_id(ai_instance_info_db.instance_k8s_id)
                 harbor_address = k8s_configs_db.harbor_address
                 image_name = SAVE_TO_IMAGE_CCI_PREFIX + ai_instance_info_db.id
                 project_name = self.extract_project_and_image_name(harbor_address)
-                delete_project_repository_response = harbor_service.delete_custom_projects_images(project_name, image_name)
-                dingo_print(f"ai instance [{id}] project_name:{project_name}, image_name:{image_name}, delete_project_repository_response:{delete_project_repository_response}")
+                delete_project_repository_response = harbor_service.delete_custom_projects_images(project_name,
+                                                                                                  image_name)
+                dingo_print(
+                    f"ai instance [{id}] project_name:{project_name}, image_name:{image_name}, delete_project_repository_response:{delete_project_repository_response}")
             except Exception as e:
-                dingo_print(f"删除容器实例[{id}]的关机镜像失败: {e}")
+                dingo_print(f"delete 容器实例[{id}]的关机镜像失败: {e}")
 
-            # 删除metallb的默认端口
+            # delete metallb的默认端口
             AiInstanceSQL.delete_ai_instance_ports_info_by_instance_id(id)
 
             try:
@@ -156,10 +166,6 @@ class AiInstanceService:
             raise e
         finally:
             self.get_or_set_update_k8s_node_resource_redis()
-
-        # 删除数据库记录
-        AiInstanceSQL.delete_ai_instance_info_by_id(id)
-        return {"data": "success", "uuid": id}
 
     # ================= 账户相关 =================
     def create_ai_account(self, account: str, vip: str, metallb_ip: str):
