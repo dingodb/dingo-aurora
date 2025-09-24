@@ -1,5 +1,6 @@
 import json
 import pika
+from dingo_command.common.common import dingo_print
 from dingo_command.services.bigscreens import BigScreensService
 from dingo_command.services.bigscreenshovel import SHOVEL_QUEUE, MY_IP, CENTER_REGION_FLAG, TRANSPORT_URL
 
@@ -12,7 +13,7 @@ class BigScreenSyncService:
     @classmethod
     def handle_big_screen_message(cls, body):
         # 在这里处理大屏幕消息
-        print(f"Handling big screen message: {body}")
+        dingo_print(f"Handling big screen message: {body}")
         # 转换json对象
         big_screen_message = None
         try:
@@ -22,29 +23,29 @@ class BigScreenSyncService:
             traceback.print_exc()
         # 判空
         if big_screen_message is None:
-            print("big_screen_message is none, no need to handle")
+            dingo_print("big_screen_message is none, no need to handle")
             return None
         # 存入数据库
         metrics_dict = big_screen_message["metrics_dict"] if "metrics_dict" in big_screen_message else None
         specify_region = big_screen_message["region_name"] if "region_name" in big_screen_message else None
         # 判空
         if metrics_dict is None or specify_region is None:
-            print("metrics_dict is none, no need to save db. region_name is none, no need to save db")
+            dingo_print("metrics_dict is none, no need to save db. region_name is none, no need to save db")
             return None
         # 存入数据库
         bigScreensService.batch_upgrade_metrics_data_by_region(metrics_dict, specify_region)
-        print("metrics_dict save db successfully.")
+        dingo_print("metrics_dict save db successfully.")
 
     @classmethod
     def callback(cls, ch, method, properties, body):
-        print(f"Received {body}")
+        dingo_print(f"Received {body}")
         cls.handle_big_screen_message(body)
 
     @classmethod
     def connect_mq_queue(cls):
         # 目前只有中心region才需要连接队列，因为目前是从普通region铲消息到中心region
         if CENTER_REGION_FLAG is False:
-            print("current region is not center region, no need to connect mq shovel queue")
+            dingo_print("current region is not center region, no need to connect mq shovel queue")
             return
         # 连接到当前节点的RabbitMQ的服务器
         username, password = cls.get_mq_name_password()
@@ -56,7 +57,7 @@ class BigScreenSyncService:
         channel.queue_declare(queue=SHOVEL_QUEUE, durable=True)
         # 订阅队列并设置回调函数
         channel.basic_consume(queue=SHOVEL_QUEUE, on_message_callback=cls.callback, auto_ack=True)
-        print('Waiting for messages.')
+        dingo_print('Waiting for messages.')
         channel.start_consuming()
 
     @classmethod
@@ -68,7 +69,7 @@ class BigScreenSyncService:
         transport_url_array = transport_url.split(',')
         # 空
         if transport_url_array is None or len(transport_url_array) <= 0:
-            print("rabbit mq transport url array is empty ")
+            dingo_print("rabbit mq transport url array is empty ")
             return
         # 遍历
         for temp_url in transport_url_array:
@@ -90,7 +91,7 @@ class BigScreenSyncService:
     def send_mq_message(cls, message):
         # 中心region的话，不需要发送mq消息
         if CENTER_REGION_FLAG is True:
-            print("current region is center region, no need to send mq message")
+            dingo_print("current region is center region, no need to send mq message")
             return
         try:
             # 连接到当前节点的RabbitMQ的服务器，连接到队列然后发送消息
@@ -110,8 +111,8 @@ class BigScreenSyncService:
                     delivery_mode=2,
                 )
             )
-            print("send mq message success")
-            print(f"message: {message}")
+            dingo_print("send mq message success")
+            dingo_print(f"message: {message}")
             # 关闭连接
             connection.close()
         except Exception as e:
