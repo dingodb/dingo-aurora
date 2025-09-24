@@ -6,6 +6,7 @@ import json
 
 from kubernetes.client import V1StatefulSet, ApiException
 from kubernetes import client
+from dingo_command.common.common import dingo_print
 
 from dingo_command.utils.constant import RESOURCE_TYPE_KEY, PRODUCT_TYPE_CCI, DEV_TOOL_JUPYTER, INGRESS_SIGN, \
     CCI_SHARE_METALLB
@@ -27,9 +28,9 @@ class K8sCommonOperate:
 
             # 2. 创建命名空间
             core_v1.create_namespace(body=namespace)
-            print(f"namespace {namespace_name} create success")
+            dingo_print(f"namespace {namespace_name} create success")
         except Exception as e:
-            print(f"namespace {namespace_name} create failed")
+            dingo_print(f"namespace {namespace_name} create failed")
             import traceback
             traceback.print_exc()
             raise e
@@ -65,9 +66,9 @@ class K8sCommonOperate:
                 body=stateful_set_pod_data,
                 async_req=async_req
             )
-            print(f"Successfully created sts {namespace_name}/{stateful_set_pod_data.metadata.name}")
+            dingo_print(f"Successfully created sts {namespace_name}/{stateful_set_pod_data.metadata.name}")
         except Exception as e:
-            print(f"create statefulset pod  {namespace_name}/{stateful_set_pod_data.metadata.name} failed:{e}")
+            dingo_print(f"create statefulset pod  {namespace_name}/{stateful_set_pod_data.metadata.name} failed:{e}")
             import traceback
             traceback.print_exc()
             raise e
@@ -104,13 +105,13 @@ class K8sCommonOperate:
                 async_req=True
             )
             create_namespaced_service = create_namespaced_service_thread.get()
-            print(f"Successfully created jupyter service {create_namespaced_service.metadata.name}")
+            dingo_print(f"Successfully created jupyter service {create_namespaced_service.metadata.name}")
             return create_namespaced_service.metadata.uid
 
         except client.rest.ApiException as e:
             # 如果异常原因是 409 Conflict，则尝试更新已有的 Service
             if e.status == 409:
-                print(f"Service '{full_service_name}' already exists, attempting update...")
+                dingo_print(f"Service '{full_service_name}' already exists, attempting update...")
                 try:
                     update_namespaced_service_thread = core_v1.replace_namespaced_service(
                         name=full_service_name,
@@ -119,16 +120,16 @@ class K8sCommonOperate:
                         async_req=True
                     )
                     updated_service = update_namespaced_service_thread.get()
-                    print(f"Successfully updated jupyter service {updated_service.metadata.name}")
+                    dingo_print(f"Successfully updated jupyter service {updated_service.metadata.name}")
                     return updated_service.metadata.uid
                 except Exception as update_e:
-                    print(f"Failed to update service '{full_service_name}': {update_e}")
+                    dingo_print(f"Failed to update service '{full_service_name}': {update_e}")
                     import traceback
                     traceback.print_exc()
                     raise update_e
             else:
                 # 如果是其他错误，直接抛出
-                print(f"Failed to create jupyter service '{full_service_name}': {e}")
+                dingo_print(f"Failed to create jupyter service '{full_service_name}': {e}")
                 import traceback
                 traceback.print_exc()
                 raise e
@@ -183,13 +184,13 @@ class K8sCommonOperate:
                 async_req=True
             )
             create_namespaced_service = create_namespaced_service_thread.get()
-            print(f"Successfully created MetalLB service {namespace}/{create_namespaced_service.metadata.name}")
+            dingo_print(f"Successfully created MetalLB service {namespace}/{create_namespaced_service.metadata.name}")
             return create_namespaced_service.metadata.uid
 
         except client.rest.ApiException as e:
             # 如果异常原因是 409 Conflict，则尝试更新已有的 Service
             if e.status == 409:
-                print(f"Service '{service_name}' already exists, attempting update...")
+                dingo_print(f"Service '{service_name}' already exists, attempting update...")
                 try:
                     update_namespaced_service_thread = core_v1.replace_namespaced_service(
                         name=service_name,
@@ -198,21 +199,21 @@ class K8sCommonOperate:
                         async_req=True
                     )
                     updated_service = update_namespaced_service_thread.get()
-                    print(f"Successfully updated MetalLB service {namespace}/{updated_service.metadata.name}")
+                    dingo_print(f"Successfully updated MetalLB service {namespace}/{updated_service.metadata.name}")
                     return updated_service.metadata.uid
                 except Exception as update_e:
-                    print(f"Failed to update service {namespace}/{service_name}: {update_e}")
+                    dingo_print(f"Failed to update service {namespace}/{service_name}: {update_e}")
                     import traceback
                     traceback.print_exc()
                     raise update_e
             else:
                 # 如果是其他错误，直接抛出
-                print(f"Failed to create MetalLB service {namespace}/{service_name}: {e}")
+                dingo_print(f"Failed to create MetalLB service {namespace}/{service_name}: {e}")
                 import traceback
                 traceback.print_exc()
                 raise e
         except Exception as e:
-            print(f"Unexpected error during service creation: {e}")
+            dingo_print(f"Unexpected error during service creation: {e}")
             import traceback
             traceback.print_exc()
             raise e
@@ -253,29 +254,29 @@ class K8sCommonOperate:
                 namespace=namespace,
                 body=configmap
             )
-            print(f" create ConfigMap {namespace}/{configmap_name} succeed")
+            dingo_print(f" create ConfigMap {namespace}/{configmap_name} succeed")
             return api_response
         except client.rest.ApiException as e:
             # 如果异常原因是 409 Conflict，则尝试更新已有的 ConfigMap
             if e.status == 409:
-                print(f"ConfigMap {namespace}/{configmap_name} always exists, to update...")
+                dingo_print(f"ConfigMap {namespace}/{configmap_name} always exists, to update...")
                 try:
                     api_response = core_v1.replace_namespaced_config_map(
                         name=configmap_name,
                         namespace=namespace,
                         body=configmap
                     )
-                    print(f"ConfigMap {namespace}/{configmap_name} update succeed.")
+                    dingo_print(f"ConfigMap {namespace}/{configmap_name} update succeed.")
                     return api_response
                 except Exception as replace_e:
-                    print(f"update ConfigMap {namespace}/{configmap_name} failed: {replace_e}")
+                    dingo_print(f"update ConfigMap {namespace}/{configmap_name} failed: {replace_e}")
                     raise replace_e
             else:
                 # 如果是其他错误，直接抛出
-                print(f"create jupyter ConfigMap {namespace}/{configmap_name} failed: {e}")
+                dingo_print(f"create jupyter ConfigMap {namespace}/{configmap_name} failed: {e}")
                 raise e
         except Exception as e:
-            print(f"create jupyter ConfigMap[{namespace}/{configmap_name}] failed: {e}")
+            dingo_print(f"create jupyter ConfigMap[{namespace}/{configmap_name}] failed: {e}")
             raise e
 
     def create_configmap(self, core_v1: client.CoreV1Api, namespace, configmap_name, nb_prefix):
@@ -319,11 +320,11 @@ class K8sCommonOperate:
                 namespace=namespace,
                 body=configmap_manifest
             )
-            print(f" create ConfigMap {namespace}/{configmap_name}, {nb_prefix} succeed")
+            dingo_print(f" create ConfigMap {namespace}/{configmap_name}, {nb_prefix} succeed")
             return api_response
 
         except ApiException as e:
-            print(f"create jupyter ConfigMap {namespace}/{configmap_name}, {nb_prefix} failed: {e}")
+            dingo_print(f"create jupyter ConfigMap {namespace}/{configmap_name}, {nb_prefix} failed: {e}")
             raise e
 
     def delete_configmap(self, core_v1: client.CoreV1Api, namespace, configmap_name):
@@ -345,14 +346,14 @@ class K8sCommonOperate:
                 namespace=namespace,
                 body=delete_options
             )
-            print(f"delete ConfigMap {namespace}/{configmap_name} succeed")
+            dingo_print(f"delete ConfigMap {namespace}/{configmap_name} succeed")
             return api_response
 
         except ApiException as e:
             if e.status == 404:
-                print(f"ConfigMap {namespace}/{configmap_name} not exist")
+                dingo_print(f"ConfigMap {namespace}/{configmap_name} not exist")
             else:
-                print(f"delete ConfigMap {namespace}/{configmap_name} failed: {e}")
+                dingo_print(f"delete ConfigMap {namespace}/{configmap_name} failed: {e}")
             raise e
 
     def create_cci_ingress_rule(self, networking_v1: client.NetworkingV1Api, namespace: str, service_name: str,
@@ -407,34 +408,34 @@ class K8sCommonOperate:
                 namespace=namespace,
                 body=ingress,
             )
-            print(f"Ingress created successfully: {api_response.metadata.name}")
+            dingo_print(f"Ingress created successfully: {api_response.metadata.name}")
             return api_response
 
         except client.rest.ApiException as e:
             # 如果异常原因是 409 Conflict，则尝试更新已有的 Ingress
             if e.status == 409:
-                print(f"Ingress '{ingress_name}' already exists, attempting update...")
+                dingo_print(f"Ingress '{ingress_name}' already exists, attempting update...")
                 try:
                     api_response = networking_v1.replace_namespaced_ingress(
                         name=ingress_name,
                         namespace=namespace,
                         body=ingress,
                     )
-                    print(f"Ingress updated successfully: {api_response.metadata.name}")
+                    dingo_print(f"Ingress updated successfully: {api_response.metadata.name}")
                     return api_response
                 except Exception as update_e:
-                    print(f"Failed to update Ingress '{ingress_name}': {update_e}")
+                    dingo_print(f"Failed to update Ingress '{ingress_name}': {update_e}")
                     import traceback
                     traceback.print_exc()
                     raise update_e
             else:
                 # 如果是其他错误，直接抛出
-                print(f"Failed to create Ingress '{ingress_name}': {e}")
+                dingo_print(f"Failed to create Ingress '{ingress_name}': {e}")
                 import traceback
                 traceback.print_exc()
                 raise e
         except Exception as e:
-            print(f"Unexpected error during Ingress creation: {e}")
+            dingo_print(f"Unexpected error during Ingress creation: {e}")
             import traceback
             traceback.print_exc()
             raise e
@@ -485,7 +486,7 @@ class K8sCommonOperate:
         try:
             return core_v1.read_namespaced_pod(name, namespace)
         except Exception as e:
-            print(f"查询 Pod {namespace}/{name} 失败: {e}")
+            dingo_print(f"查询 Pod {namespace}/{name} 失败: {e}")
             raise e
 
 
@@ -502,7 +503,7 @@ class K8sCommonOperate:
         try:
             return app_v1.read_namespaced_stateful_set(name, namespace)
         except Exception as e:
-            print(f"查询 Pod {namespace}/{name} 失败: {e}")
+            dingo_print(f"查询 Pod {namespace}/{name} 失败: {e}")
             raise e
 
 
@@ -525,22 +526,22 @@ class K8sCommonOperate:
                 namespace=namespace_name,
                 body=delete_options
             )
-            print(f"StatefulSet '{namespace_name}/{real_name}' 删除命令已发出.")
+            dingo_print(f"StatefulSet '{namespace_name}/{real_name}' 删除命令已发出.")
 
             # 2. 等待 StatefulSet 资源完全删除
             if not self.wait_for_sts_deletion(apps_v1, real_name, namespace_name, timeout=120):
-                print(f"警告: 等待 StatefulSet '{real_name}' 删除超时，但仍尝试继续操作。")
+                dingo_print(f"警告: 等待 StatefulSet '{real_name}' 删除超时，但仍尝试继续操作。")
 
             # 3. 创建新的 StatefulSet
             created_sts = apps_v1.create_namespaced_stateful_set(
                 namespace=namespace_name,
                 body=modified_sts_data
             )
-            print(f"StatefulSet '{namespace_name}/{real_name}' 已重新创建.")
+            dingo_print(f"StatefulSet '{namespace_name}/{real_name}' 已重新创建.")
             return created_sts
 
         except Exception as e:
-            print(f"替换 StatefulSet {namespace_name}/{real_name} 时发生错误: {e}")
+            dingo_print(f"替换 StatefulSet {namespace_name}/{real_name} 时发生错误: {e}")
             import traceback
             traceback.print_exc()
             raise e
@@ -567,15 +568,15 @@ class K8sCommonOperate:
                 time.sleep(interval)
             except ApiException as e:
                 if e.status == 404:  # Not Found
-                    print(f"StatefulSet '{namespace}/{sts_name}' 已确认删除。")
+                    dingo_print(f"StatefulSet '{namespace}/{sts_name}' 已确认删除。")
                     return True
                 else:
                     # 其他API错误，可能需要根据情况处理
                     raise
             except Exception as e:
-                print(f"检查 StatefulSet 删除状态时发生未知错误: {e}")
+                dingo_print(f"检查 StatefulSet 删除状态时发生未知错误: {e}")
                 time.sleep(interval)
-        print(f"等待 StatefulSet '{namespace}/{sts_name}' 删除超时 (超时时间: {timeout} 秒)。")
+        dingo_print(f"等待 StatefulSet '{namespace}/{sts_name}' 删除超时 (超时时间: {timeout} 秒)。")
         return False
 
     def list_pods_by_label_and_node(self, core_v1: client.CoreV1Api,
@@ -621,7 +622,7 @@ class K8sCommonOperate:
                 if not continue_token:
                     break
         except Exception as e:
-            print(f"list_namespaced_stateful_set failed:{e}")
+            dingo_print(f"list_namespaced_stateful_set failed:{e}")
             raise e
 
         return all_pods
@@ -661,7 +662,7 @@ class K8sCommonOperate:
                 if not continue_token:
                     break
         except Exception as e:
-            print(f"list_namespaced_stateful_set failed:{e}")
+            dingo_print(f"list_namespaced_stateful_set failed:{e}")
             raise e
         return all_sts
 
@@ -714,7 +715,7 @@ class K8sCommonOperate:
                     break
 
         except Exception as e:
-            print(f"list_svc_by_label failed: {e}")
+            dingo_print(f"list_svc_by_label failed: {e}")
             raise e
 
         return all_svcs
@@ -745,13 +746,13 @@ class K8sCommonOperate:
                 propagation_policy=propagation_policy,
                 body=client.V1DeleteOptions()
             )
-            print(f"delete StatefulSet: {namespace}/{real_sts_name} succeed")
+            dingo_print(f"delete StatefulSet: {namespace}/{real_sts_name} succeed")
         except ApiException as e:
             if e.status == 404:
-                print(f"StatefulSet not exist: {namespace}/{real_sts_name})")
+                dingo_print(f"StatefulSet not exist: {namespace}/{real_sts_name})")
                 return
             else:
-                print(f"delete {namespace}/{real_sts_name} failed: {e.reason}")
+                dingo_print(f"delete {namespace}/{real_sts_name} failed: {e.reason}")
             return False
 
     def delete_service_by_name(self,
@@ -775,17 +776,17 @@ class K8sCommonOperate:
                 grace_period_seconds=grace_period_seconds,
                 body=client.V1DeleteOptions()
             )
-            print(f"delete service: {namespace}/{service_name} succeed")
+            dingo_print(f"delete service: {namespace}/{service_name} succeed")
             return True
 
         except ApiException as e:
             import traceback
             traceback.print_exc()
             if e.status == 404:
-                print(f"service {namespace}/{service_name} not found: {service_name}")
+                dingo_print(f"service {namespace}/{service_name} not found: {service_name}")
                 return
             else:
-                print(f"delete service {namespace}/{service_name} failed: {e}")
+                dingo_print(f"delete service {namespace}/{service_name} failed: {e}")
             raise e
 
     def delete_namespaced_ingress(self, networking_v1: client.NetworkingV1Api, ingress_name: str, namespace: str):
@@ -806,9 +807,9 @@ class K8sCommonOperate:
                     grace_period_seconds=0  # 宽限期秒数，0表示立即删除
                 )
             )
-            print(f"Ingress '{ingress_name}' in namespace '{namespace}' deleted successfully. API Response status: {api_response.status}")
+            dingo_print(f"Ingress '{ingress_name}' in namespace '{namespace}' deleted successfully. API Response status: {api_response.status}")
         except Exception as e:
-            print(f"Exception when calling NetworkingV1Api->delete_namespaced_ingress {ingress_name}: {e}")
+            dingo_print(f"Exception when calling NetworkingV1Api->delete_namespaced_ingress {ingress_name}: {e}")
             raise e
 
     def list_node(self, core_v1: client.CoreV1Api, label_selector="kubernetes.io/role=node"):
@@ -824,7 +825,7 @@ class K8sCommonOperate:
             }
             return core_v1.list_node(**kwargs).items
         except ApiException as e:
-            print(f"查询Node失败: {e.reason} (状态码: {e.status})")
+            dingo_print(f"查询Node失败: {e.reason} (状态码: {e.status})")
             raise e.reason
 
     def read_node(self, core_v1: client.CoreV1Api, node_name: str):
@@ -841,7 +842,7 @@ class K8sCommonOperate:
             return node
         except ApiException as e:
             error_msg = f"read node {node_name} fail: {e.reason} (status: {e.status})"
-            print(error_msg)
+            dingo_print(error_msg)
             raise Exception(error_msg) from e
 
     def create_ns_configmap(self, core_v1: client.CoreV1Api, namespace_name: str, configmap_name: str, ai_instance_db,
@@ -906,7 +907,7 @@ class K8sCommonOperate:
             except ApiException as e:
                 if e.status == 404:
                     # ConfigMap 不存在，创建新的
-                    print(f"ConfigMap {configmap_name} not found in namespace {namespace_name}. Creating new one.")
+                    dingo_print(f"ConfigMap {configmap_name} not found in namespace {namespace_name}. Creating new one.")
                     # 创建新的 ConfigMap 对象
                     new_configmap = client.V1ConfigMap(
                         api_version="v1",
@@ -923,7 +924,7 @@ class K8sCommonOperate:
                             namespace=namespace_name,
                             body=new_configmap
                         )
-                        print(f"Successfully created new ConfigMap {configmap_name} with the SSH public key.")
+                        dingo_print(f"Successfully created new ConfigMap {configmap_name} with the SSH public key.")
                     except ApiException as e:
                         if e.status == 409:
                             time.sleep(retry_delay)
@@ -973,14 +974,14 @@ class K8sCommonOperate:
         try:
             # 在指定命名空间中创建 Secret
             core_v1.create_namespaced_secret(namespace=namespace, body=secret)
-            print(f"Secret '{secret_name}' created successfully in namespace '{namespace}'.")
+            dingo_print(f"Secret '{secret_name}' created successfully in namespace '{namespace}'.")
         except ApiException as e:
             if e.status == 409:  # 如果 Secret 已存在，则更新它
-                print(f"Secret '{secret_name}' already exists in namespace '{namespace}'. Updating it.")
+                dingo_print(f"Secret '{secret_name}' already exists in namespace '{namespace}'. Updating it.")
                 core_v1.replace_namespaced_secret(name=secret_name, namespace=namespace, body=secret)
-                print(f"Secret '{secret_name}' updated successfully in namespace '{namespace}'.")
+                dingo_print(f"Secret '{secret_name}' updated successfully in namespace '{namespace}'.")
             else:
-                print(f"Failed to create/update secret '{secret_name}': {e}")
+                dingo_print(f"Failed to create/update secret '{secret_name}': {e}")
                 raise
 
     def patch_default_service_account(self, core_v1: client.CoreV1Api, namespace, secret_name):
@@ -1001,15 +1002,15 @@ class K8sCommonOperate:
                 sa.image_pull_secrets.append(client.V1LocalObjectReference(name=secret_name))
                 # 更新 ServiceAccount
                 core_v1.replace_namespaced_service_account(name="default", namespace=namespace, body=sa)
-                print(
+                dingo_print(
                     f"Successfully added secret '{secret_name}' to default ServiceAccount in namespace '{namespace}'.")
             else:
-                print(
+                dingo_print(
                     f"Secret '{secret_name}' already exists in imagePullSecrets of default ServiceAccount in namespace '{namespace}'.")
         except ApiException as e:
-            print(f"Failed to patch default ServiceAccount in namespace '{namespace}': {e}")
+            dingo_print(f"Failed to patch default ServiceAccount in namespace '{namespace}': {e}")
             if e.status == 404:
-                print(f"Default ServiceAccount in namespace '{namespace}' not ready yet")
+                dingo_print(f"Default ServiceAccount in namespace '{namespace}' not ready yet")
                 # 构造 image_pull_secrets
                 image_pull_secrets = [client.V1LocalObjectReference(name=secret_name)]
 
@@ -1025,13 +1026,13 @@ class K8sCommonOperate:
                         namespace=namespace,
                         body=body
                     )
-                    print(f"ServiceAccount {secret_name} 创建成功")
+                    dingo_print(f"ServiceAccount {secret_name} 创建成功")
                     return api_response
                 except ApiException as e:
-                    print(f"创建 ServiceAccount 时发生异常: {e}")
+                    dingo_print(f"创建 ServiceAccount 时发生异常: {e}")
                     if e.status == 409:
-                        print(f"Default ServiceAccount in namespace '{namespace}' ready yet")
+                        dingo_print(f"Default ServiceAccount in namespace '{namespace}' ready yet")
                     raise
             else:
-                print(f"Failed to patch default ServiceAccount in namespace '{namespace}': {e}")
+                dingo_print(f"Failed to patch default ServiceAccount in namespace '{namespace}': {e}")
                 raise
