@@ -27,7 +27,7 @@ from dingo_command.db.models.cluster.models import Cluster as ClusterDB
 from dingo_command.db.models.node.models import NodeInfo as NodeDB
 from dingo_command.db.models.instance.models import Instance as InstanceDB
 from dingo_command.common import neutron
-from dingo_command.common.nova_client import NovaClient
+from dingo_command.common.nova_client import nova_client
 from dingo_command.services.custom_exception import Fail
 from dingo_command.services.system import SystemService
 from dingo_command.services import CONF
@@ -74,8 +74,8 @@ class ClusterService:
         worker_node = []
         for idx, node in enumerate(cluster.node_config):
             if node.role == "master" and node.type == "vm":
-                cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
-                operation_system = self.get_image_info(node.image)
+                cpu, gpu, mem, disk = nova_client.get_flavor_info(node.flavor_id)
+                operation_system = nova_client.get_image_info(node.image)
                 for i in range(node.count):
                     k8s_masters[f"master-{int(master_index)}"] = NodeGroup(
                         az=self.get_az_value(node.type),
@@ -146,8 +146,8 @@ class ClusterService:
                     node_db_list.append(node_db)
                     master_index=master_index+1
             if node.role == "worker" and node.type == "vm":
-                cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
-                operation_system = self.get_image_info(node.image)
+                cpu, gpu, mem, disk = nova_client.get_flavor_info(node.flavor_id)
+                operation_system = nova_client.get_image_info(node.image)
                 for i in range(node.count):
                     # 设置端口转发的外部端口
                     if cluster.port_forwards is not None:
@@ -230,8 +230,8 @@ class ClusterService:
                     node_index=node_index+1
                     worker_node.append(node)
             if node.role == "worker" and node.type == "baremetal":
-                cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
-                operation_system = self.get_image_info(node.image)
+                cpu, gpu, mem, disk = nova_client.get_flavor_info(node.flavor_id)
+                operation_system = nova_client.get_image_info(node.image)
                 for i in range(node.count):
                     # 设置端口转发的外部端口
                     if cluster.port_forwards is not None:
@@ -839,7 +839,7 @@ class ClusterService:
         else:
             cluster_info_db.kube_info = None
         # 计算集群中的cpu、mem、gpu、gpu_mem
-        nova_client = NovaClient()
+
         cpu_total = 0
         mem_total = 0
         gpu_total = 0
@@ -847,29 +847,23 @@ class ClusterService:
         for idx, node in enumerate(cluster.node_config):
             # 在这里添加master节点的cpu、mem等信息
             if node.role == "master" and node.type == "vm":
-                cpu, gpu, mem, disk, flavor_id = self.get_master_flavor_info(node.flavor_id)
+                cpu, gpu, mem, disk = nova_client.get_flavor_info(node.flavor_id)
                 cpu_total += cpu * node.count
                 mem_total += mem * node.count
                 gpu_total += gpu * node.count
             if node.role == "worker" and node.type == "vm":
-                flavor = nova_client.nova_get_flavor(node.flavor_id)
-                if flavor is not None:
-                    cpu_total = cpu_total + flavor['vcpus'] * node.count
-                    mem_total = mem_total + flavor['ram'] * node.count
-                    if "extra_specs" in flavor and "pci_passthrough:alias" in flavor["extra_specs"]:
-                        pci_alias = flavor['extra_specs']['pci_passthrough:alias']
-                        if ':' in pci_alias:
-                            gpu_value = pci_alias.split(':')[1].strip("'")
-                            gpu_total = gpu_total + int(gpu_value) *  node.count
+                cpu, gpu, mem, disk = nova_client.get_flavor_info(node.flavor_id)
+                cpu_total = cpu_total + cpu * node.count
+                mem_total = mem_total + mem * node.count
+                gpu_total = gpu_total + gpu * node.count
                     #gpu_mem_total += flavor['extra_specs']['gpu_mem']
                 #查询flavor信息
             elif node.role == "worker" and node.type == "baremetal":
-                flavor = nova_client.nova_get_flavor(node.flavor_id)
-                cpu_total = cpu_total + flavor['vcpus'] * node.count
-                mem_total = mem_total + flavor['ram'] * node.count
-                if "extra_specs" in flavor and "resources:GPU" in flavor["extra_specs"]:
-                    gpu_value = int(flavor["extra_specs"])
-                    gpu_total = gpu_total + int(gpu_value) *  node.count
+                cpu, gpu, mem, disk = nova_client.get_flavor_info(node.flavor_id)
+                cpu_total = cpu_total + cpu * node.count
+                mem_total = mem_total + mem * node.count
+                gpu_total = gpu_total + gpu * node.count
+
         cluster_info_db.gpu = gpu_total
         cluster_info_db.cpu = cpu_total
         cluster_info_db.mem = mem_total
@@ -888,8 +882,8 @@ class ClusterService:
         cluster_new = copy.deepcopy(cluster)
         for idx, node in enumerate(cluster.node_config):
             if node.role == "worker" and node.type == "vm":
-                cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
-                operation_system = self.get_image_info(node.image)
+                cpu, gpu, mem, disk = nova_client.get_flavor_info(node.flavor_id)
+                operation_system = nova_client.get_image_info(node.image)
                 for i in range(node.count):
                     if cluster.port_forwards is not None:
                         for index, port_forward in enumerate(cluster.port_forwards):
@@ -936,8 +930,8 @@ class ClusterService:
                     cluster_new = copy.deepcopy(cluster)
                     node_index = node_index + 1
             if node.role == "worker" and node.type == "baremetal":
-                cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
-                operation_system = self.get_image_info(node.image)
+                cpu, gpu, mem, disk = nova_client.get_flavor_info(node.flavor_id)
+                operation_system = nova_client.get_image_info(node.image)
                 for i in range(node.count):
                     if cluster.port_forwards is not None:
                         for index, port_forward in enumerate(cluster.port_forwards):
@@ -1009,35 +1003,7 @@ class ClusterService:
         res = ParamSQL.list()
         return res[1]
 
-    def get_flavor_info(self, flavor_id):
-        nova_client = NovaClient()
-        flavor = nova_client.nova_get_flavor(flavor_id)
-        cpu = 0
-        gpu = 0
-        mem = 0
-        disk = 0
-        if flavor is not None:
-            cpu = flavor['vcpus']
-            mem = flavor['ram']
-            disk = flavor['disk']
-            if "extra_specs" in flavor and "pci_passthrough:alias" in flavor["extra_specs"]:
-                pci_alias = flavor['extra_specs']['pci_passthrough:alias']
-                if ':' in pci_alias:
-                    gpu = pci_alias.split(':')[1]
-        return int(cpu), int(gpu), int(mem), int(disk)
 
-    def get_image_info(self, image_id):
-        operation_system = ""
-        nova_client = NovaClient()
-        image = nova_client.glance_get_image(image_id)
-        if image is not None:
-            if image.get("os_version"):
-                operation_system = image.get("os_version")
-            elif image.get("os_distro"):
-                operation_system = image.get("os_distro")
-            else:
-                operation_system = image.get("name")
-        return operation_system
 
     def get_key_file(self, cluster_id:str, instance_id:str):
         # 根据id查询集群
@@ -1076,36 +1042,6 @@ class ClusterService:
             else:
                 raise Fail("找不到集群对应的私钥文件")
         return private_key
-
-    def get_master_flavor_info(self, master_flavor_name):
-        nova_client = NovaClient()
-        flavor = nova_client.nova_get_flavor(master_flavor_name)
-        cpu = 0
-        gpu = 0
-        mem = 0
-        disk = 0
-        if flavor is not None:
-            cpu = flavor['vcpus']
-            mem = flavor['ram']
-            disk = flavor['disk']
-            if "extra_specs" in flavor and "pci_passthrough:alias" in flavor["extra_specs"]:
-                pci_alias = flavor['extra_specs']['pci_passthrough:alias']
-                if ':' in pci_alias:
-                    gpu = pci_alias.split(':')[1]
-        return int(cpu), int(gpu), int(mem), int(disk), flavor.get("id")
-
-    def get_master_image_info(self, master_image_name):
-        operation_system = ""
-        nova_client = NovaClient()
-        image = nova_client.glance_get_image(master_image_name)
-        if image:
-            if image.get("os_version"):
-                operation_system = image.get("os_version")
-            elif image.get("os_distro"):
-                operation_system = image.get("os_distro")
-            else:
-                operation_system = image.get("name")
-        return operation_system, image.get("id")
     def create_cluster_with_netns(self, cluster: ClusterObject, token):
         """
         在集群网络命名空间中创建集群
@@ -1406,3 +1342,4 @@ class TaskService:
             import traceback
             traceback.print_exc()
             raise e
+

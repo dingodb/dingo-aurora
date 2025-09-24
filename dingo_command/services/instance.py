@@ -21,7 +21,7 @@ from dingo_command.db.engines.mysql import get_session
 from dingo_command.common import neutron
 
 from dingo_command.services.custom_exception import Fail
-from dingo_command.common.nova_client import NovaClient
+from dingo_command.common.nova_client import nova_client
 
 from dingo_command.services import CONF
 
@@ -137,35 +137,7 @@ class InstanceService:
         db_cluster.update_time = datetime.now()
         return db_cluster
 
-    def get_flavor_info(self, flavor_id):
-        nova_client = NovaClient()
-        flavor = nova_client.nova_get_flavor(flavor_id)
-        cpu = 0
-        gpu = 0
-        mem = 0
-        disk = 0
-        if flavor is not None:
-            cpu = flavor['vcpus']
-            mem = flavor['ram']
-            disk = flavor['disk']
-            if "extra_specs" in flavor and "pci_passthrough:alias" in flavor["extra_specs"]:
-                pci_alias = flavor['extra_specs']['pci_passthrough:alias']
-                if ':' in pci_alias:
-                    gpu = pci_alias.split(':')[1]
-        return int(cpu), int(gpu), int(mem), int(disk)
 
-    def get_image_info(self, image_id):
-        operation_system = ""
-        nova_client = NovaClient()
-        image = nova_client.glance_get_image(image_id)
-        if image is not None:
-            if image.get("os_version"):
-                operation_system = image.get("os_version")
-            elif image.get("os_distro"):
-                operation_system = image.get("os_distro")
-            else:
-                operation_system = image.get("name")
-        return operation_system
 
     def generate_random_port(self):
         """从 20000 到 40000 范围内随机生成一个端口号"""
@@ -181,8 +153,8 @@ class InstanceService:
             node_index = 1
         for idx, node in enumerate(cluster.node_config):
             if node.role == "worker" and node.type == "vm":
-                cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
-                operation_system = self.get_image_info(node.image)
+                cpu, gpu, mem, disk = nova_client.get_flavor_info(node.flavor_id)
+                operation_system = nova_client.get_image_info(node.image)
                 for i in range(node.count):
                     forward_rules_new = []
                     if forward_rules:
@@ -233,8 +205,8 @@ class InstanceService:
                     instance_db_list.append(instance_db)
                     node_index = node_index + 1
             if node.role == "worker" and node.type == "baremetal":
-                cpu, gpu, mem, disk = self.get_flavor_info(node.flavor_id)
-                operation_system = self.get_image_info(node.image)
+                cpu, gpu, mem, disk = nova_client.get_flavor_info(node.flavor_id)
+                operation_system = nova_client.get_image_info(node.image)
                 for i in range(node.count):
                     forward_rules_new = []
                     if forward_rules:
@@ -448,29 +420,8 @@ class InstanceService:
 
     def convert_instance_todb(self, instance_info):
         instance_info_db_list = []
-        nova_client = NovaClient()
-        flavor = nova_client.nova_get_flavor(instance_info.flavor_id)
-        operation_system = ""
-        image = nova_client.glance_get_image(instance_info.image_id)
-        if image is not None:
-            if image.get("os_version"):
-                operation_system = image.get("os_version")
-            elif image.get("os_distro"):
-                operation_system = image.get("os_distro")
-            else:
-                operation_system = image.get("name")
-        cpu = 0
-        gpu = 0
-        mem = 0
-        disk = 0
-        if flavor is not None:
-            cpu = flavor['vcpus']
-            mem = flavor['ram']
-            disk = flavor['disk']
-            if "extra_specs" in flavor and "pci_passthrough:alias" in flavor["extra_specs"]:
-                pci_alias = flavor['extra_specs']['pci_passthrough:alias']
-                if ':' in pci_alias:
-                    gpu = pci_alias.split(':')[1]
+        operation_system = nova_client.get_image_info(instance_info.image_id)
+        cpu, gpu, mem, disk = nova_client.get_flavor_info(instance_info.flavor_id)
         user, password, network_id, cluster_id, cluster_name, sshkey_name = "", "", "", "", "", ""
         if instance_info.user:
             user = instance_info.user
