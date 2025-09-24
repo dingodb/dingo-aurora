@@ -1161,11 +1161,11 @@ class AiInstanceService:
             else:
                 resource_config = self._prepare_resource_config(json.loads(ai_instance_info_db.instance_config))
 
-            project_name = None
             image_name_temp = SAVE_TO_IMAGE_CCI_PREFIX + id
             if request and request.image:
                 image_name = request.image
             else:
+                project_name = None
                 harbor_address, harbor_username, harbor_password = self.get_harbor_info(
                     ai_instance_info_db.instance_k8s_id)
                 if harbor_address.endswith('/'):
@@ -1175,10 +1175,11 @@ class AiInstanceService:
                     image_name = harbor_address + "/" + image_name_temp + ":latest"
                     project_name = harbor_address.split('/')[-1]
 
-            # 判断镜像是否存在，不存在用初始镜像
-            if not self._check_image_exists(core_k8s_client, image_name_temp, project_name):
-                image_name = ai_instance_info_db.instance_image
-            print(f"ai instance [{id}] image {image_name}")
+                # 判断是否有保存的镜像存在，不存在用初始镜像
+                if not self._check_image_exists(core_k8s_client, image_name_temp, project_name):
+                    image_name = ai_instance_info_db.instance_image
+
+            print(f"Start ai instance id: [{id}] image_name: {image_name}")
 
             updated_sts = self.build_updated_sts(
                 existing_sts, resource_config, image_name, ai_instance_info_db, request
