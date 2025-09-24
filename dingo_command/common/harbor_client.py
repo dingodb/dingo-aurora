@@ -458,6 +458,17 @@ class HarborAPI:
         except Exception as e:
             return self.return_response(False, 500, f"获取所有用户异常: {str(e)}")
 
+    def get_project_quotas(self, project_id: str) -> Dict[str, Any]:
+        """
+        获取指定项目的存储配额信息
+        """
+        try:
+            url = f"{self.base_url}/api/v2.0/quotas?reference_id={project_id}"
+            response = self.request("GET", url)
+            return self.return_response(True, response.status_code, '获取指定项目配额成功', response.json())
+        except Exception as e:
+            return self.return_response(False, 500, f"获取指定项目配额异常: {str(e)}")
+
     def get_all_quotas(self) -> Dict[str, Any]:
         """
         获取Harbor中所有项目的存储配额信息
@@ -525,70 +536,6 @@ class HarborAPI:
                 )
         except Exception as e:
             return self.return_response(False, 500, f"获取项目配额异常异常: {str(e)}")
-
-
-    def get_project_quotas(self, quota_id: int) -> Dict[str, Any]:
-        """
-        获取指定项目的存储配额详细信息
-
-        该方法会查询指定配额ID对应的项目存储配额配置，包括存储限制、
-        已使用量、创建时间等详细信息。
-
-        Args:
-            quota_id (int): 配额ID
-                - 必须是有效的配额ID
-                - 可以通过get_all_quotas方法获取
-                - 示例：123, 456
-
-        Returns:
-            Dict[str, Any]: 包含配额信息的响应字典
-                - status (bool): 操作是否成功
-                - code (int): HTTP状态码
-                - message (str): 操作结果描述
-                - data (dict): 配额详细信息，包含：
-                    - id (int): 配额ID
-                    - ref (dict): 引用信息
-                        - name (str): 项目名称
-                        - owner_name (str): 所有者名称
-                    - hard (dict): 硬限制
-                        - storage (int): 存储限制（字节）
-                    - used (dict): 已使用量
-                        - storage (int): 已使用存储（字节）
-                    - creation_time (str): 创建时间
-                    - update_time (str): 更新时间
-
-        Raises:
-            Exception: 当API调用失败时抛出异常
-
-        Example:
-            # 获取指定项目的配额信息
-            result = harbor_client.get_project_quotas(123)
-
-            if result["status"]:
-                quota = result["data"]
-                project_name = quota['ref']['name']
-                hard_gb = quota['hard']['storage'] / (1024**3) if quota['hard']['storage'] else 0
-                used_gb = quota['used']['storage'] / (1024**3) if quota['used']['storage'] else 0
-                print(f"项目: {project_name}")
-                print(f"存储限制: {hard_gb:.2f} GB")
-                print(f"已使用: {used_gb:.2f} GB")
-            else:
-                print(f"获取失败: {result['message']}")
-
-        Note:
-            - 配额ID必须通过get_all_quotas方法获取
-            - 存储大小以字节为单位，需要自行转换为GB
-            - 如果项目没有设置存储限制，hard字段可能为空
-            - 建议先调用get_all_quotas获取配额列表
-        """
-        try:
-            url = f"{self.base_url}/api/v2.0/quotas/{quota_id}"
-            response = self.request("GET", url)
-            return self.return_response(
-                True, response.status_code, "获取指定项目配额成功", response.json()
-            )
-        except Exception as e:
-            return self.return_response(False, 500, f"获取指定项目配额异常: {str(e)}")
 
     def get_project_repositories(
         self, project_name: str, page: int = 1, page_size: int = 100, get_all: bool = False
@@ -990,6 +937,20 @@ class HarborAPI:
         except Exception as e:
             return self.return_response(False, 500, f"获取项目信息异常: {str(e)}")
 
+    def get_project_summary(self, project_name: str) -> Dict[str, Any]:
+        """
+        获取指定项目的概览信息
+        """
+        try:
+            url = f"{self.base_url}/api/v2.0/projects/{project_name}/summary"
+            response = self.request("GET", url)
+            return self.return_response(
+                True, response.status_code, "获取项目概览信息成功", response.json()
+            )
+        except Exception as e:
+            return self.return_response(False, 500, f"获取项目概览信息异常: {str(e)}")
+
+    # 获取项目成员
     def get_project_members(self, project_name: str) -> Dict[str, Any]:
         """
         获取指定项目的所有成员信息

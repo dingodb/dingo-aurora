@@ -805,9 +805,15 @@ class HarborService:
         get_custom_projects_response = self.get_custom_projects(user_name)
         total_hard = 0
         project_name_list = []
+        old_public_status = ''
+        old_storage_limit = 0
+        project_id = ''
         for i in get_custom_projects_response["data"]:
             if i['name'] == project_name:
                 total_hard += storage_limit * 1024 * 1024 * 1024
+                old_public_status = i['public']
+                old_storage_limit = i['quota_info']['hard']
+                project_id = i['project_id']
             else:
                 total_hard += i['quota_info']['hard']
             project_name_list.append(i['name'])
@@ -816,31 +822,27 @@ class HarborService:
         if total_hard > all_quota:
             return self.return_response(False, 400, f"仓库配额超出限制100GB: {project_name}")
 
-        # 更新项目公开性设置
-        update_custom_projects_response = self.harbor.update_custom_projects(
-            project_name, public
-        )
-        if update_custom_projects_response["status"]:
-            # 仓库大小无法使用该接口更改，通过单独调用update_project_quotas接口更改
-            quotas = self.harbor.get_all_quotas()
-            for quota in quotas["data"]:
-                if quota["ref"].get("name") == project_name:
-                    quota_id = quota["id"]
-                    update_project_quotas_response = self.harbor.update_project_quotas(
-                        quota_id, storage_limit
-                    )
-                    if update_project_quotas_response["status"]:
-                        update_custom_projects_response["message"] = (
-                            f"仓库更新成功: {project_name} "
-                        )
-                        return update_custom_projects_response
-                    else:
-                        update_custom_projects_response["message"] = (
-                            f"仓库更新失败: {project_name} "
-                        )
-                        return update_custom_projects_response
-        else:
-            return update_custom_projects_response
+        if old_public_status != public:
+            # 更新项目公开性设置
+            update_custom_projects_response = self.harbor.update_custom_projects(
+                project_name, public
+            )
+            if not update_custom_projects_response["status"]:
+                return update_custom_projects_response
+        if old_storage_limit != storage_limit * 1024 * 1024 * 1024:
+            # 更新项目存储限制, 仓库大小无法使用该接口更改，通过单独调用update_project_quotas接口更改
+            get_project_quotas_response = self.harbor.get_project_quotas(project_id)
+            if get_project_quotas_response["status"]:
+                quota_id = get_project_quotas_response["data"][0]["id"]
+                update_project_quotas_response = self.harbor.update_project_quotas(
+                    quota_id, storage_limit
+                )
+                if not update_project_quotas_response["status"]:
+                    return update_project_quotas_response
+            else:
+                return get_project_quotas_response
+
+        return self.return_response(True, 200, "仓库更新成功", '')
 
     # 获取自定义镜像仓库
     # Harbor 的 GET /projects?owner=username 参数并不是用来查询"某个用户参与的项目"，而是用来查询"某个用户创建的项目"。
@@ -916,57 +918,39 @@ class HarborService:
         else:
             user_name = user_name
 
-        # 获取自定义仓库配额信息
-        get_all_quotas_response = self.harbor.get_all_quotas()
         # 获取所有项目，判断用户是否为项目成员
         get_projects_response = self.harbor.get_projects()
         if get_projects_response["status"]:
             for project in get_projects_response["data"]:
                 project_name = project["name"]
-                # 获取项目成员
+                creation_time = project["creation_time"]
+                repo_count = project["repo_count"]
+                project_id = project["project_id"]
+                public = project['metadata'].get("public")
+                # 过滤特殊项目
                 if 'alayanew' in project_name or 'aladdinedu' in project_name:
                     continue
                 project_members_response = self.harbor.get_project_members(project_name)
                 if project_members_response["status"]:
                     for member in project_members_response["data"]:
                         if member["entity_name"] == user_name:
-                            # 获取自定义镜像仓库
-                            get_project_info_response = self.harbor.get_project_info(
-                                project_name
-                            )
-
-                            # 获取仓库配额信息
-                            for quota in get_all_quotas_response["data"]:
-                                if quota["ref"].get("name") == project_name:
-                                    quota_id = quota["id"]
-                                    get_project_quotas_response = (
-                                        self.harbor.get_project_quotas(quota_id)
-                                    )
-                                    if get_project_quotas_response["status"]:
-                                        quota_info = get_project_quotas_response["data"]
-                                        hard = quota_info["hard"].get("storage")
-                                        used = quota_info["used"].get("storage")
-                                        temp_dict = {
-                                            "creation_time": get_project_info_response[
-                                                "data"
-                                            ]["creation_time"],
-                                            "name": get_project_info_response["data"][
-                                                "name"
-                                            ],
-                                            "quota_info": (
-                                                dict(
-                                                    hard=hard,
-                                                    used=used,
-                                                )
-                                            ),
-                                            "repo_count": get_project_info_response[
-                                                "data"
-                                            ]["repo_count"],
-                                            "project_id": get_project_info_response[
-                                                "data"
-                                            ]["project_id"],
-                                        }
-                                        custom_projects_list.append(temp_dict)
+                            get_project_summary_response = self.harbor.get_project_summary(project_name)
+                            if get_project_summary_response["status"]:
+                                summary_info = get_project_summary_response["data"]
+                                hard = summary_info["quota"]['hard'].get("storage")
+                                used = summary_info["quota"]['used'].get("storage")
+                                temp_dict = {
+                                    "creation_time": creation_time,
+                                    "name": project_name,
+                                    "quota_info": {
+                                        "hard": hard,
+                                        "used": used,
+                                    },
+                                    "repo_count": repo_count,
+                                    "project_id": project_id,
+                                    "public": public,
+                                }
+                                custom_projects_list.append(temp_dict)
                 else:
                     return project_members_response
         else:
