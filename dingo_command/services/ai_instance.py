@@ -81,8 +81,8 @@ def _create_retry_decorator():
             reraise=True  # 重试耗尽后抛出原始异常
         )
         @wraps(func)
-        async def wrapper(*args, **kwargs):
-            return await func(*args, **kwargs)
+        def wrapper(*args, **kwargs):
+            return func(*args, **kwargs)
 
         return wrapper
 
