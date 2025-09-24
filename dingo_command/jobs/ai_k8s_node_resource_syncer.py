@@ -5,6 +5,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from dingo_command.common.Enum.AIInstanceEnumUtils import AiInstanceStatus
 from dingo_command.common.k8s_common_operate import K8sCommonOperate
+from dingo_command.common.common import dingo_print
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
 from dingo_command.services.redis_connection import RedisLock, redis_connection
 from dingo_command.utils.constant import CPU_POD_SLOT_KEY, CCI_SYNC_K8S_NODE_REDIS_KEY
@@ -32,33 +33,33 @@ def fetch_ai_k8s_node_resource_4operate():
         # 同步
         fetch_ai_k8s_node_resource()
     except Exception as e:
-        print(e)
+        dingo_print(e)
 
 def fetch_ai_k8s_node_resource():
     # 获取redis的锁，自动释放时间是60s
     with RedisLock(redis_connection.redis_master_connection, "dingo_command_ai_k8s_node_resource_lock", expire_time=120) as lock:
         if lock:
             start_time = datetime.now()
-            print(f"sync k8s node resource start time: {start_time}")
+            dingo_print(f"sync k8s node resource start time: {start_time}")
             try:
                 # 查询所有k8s集群配置
                 k8s_configs = AiInstanceSQL.list_k8s_configs()
                 if not k8s_configs:
-                    print("ai k8s kubeconfig configs is temp")
+                    dingo_print("ai k8s kubeconfig configs is temp")
                     return
 
                 for k8s_kubeconfig_db in k8s_configs:
                     if not k8s_kubeconfig_db.k8s_id:
-                        print(f"k8s cluster id empty")
+                        dingo_print(f"k8s cluster id empty")
                         continue
 
-                    print(f"handle K8s cluster: ID={k8s_kubeconfig_db.k8s_id}, Type={k8s_kubeconfig_db.k8s_type}")
+                    dingo_print(f"handle K8s cluster: ID={k8s_kubeconfig_db.k8s_id}, Type={k8s_kubeconfig_db.k8s_type}")
                     try:
                         # 获取client
                         core_client  = get_k8s_core_client(k8s_kubeconfig_db.k8s_id)
                         k8s_nodes = k8s_common_operate.list_node(core_client)
                         if not k8s_nodes:
-                            print(f"k8s cluster {k8s_kubeconfig_db.k8s_id} no available node, clear old data")
+                            dingo_print(f"k8s cluster {k8s_kubeconfig_db.k8s_id} no available node, clear old data")
                             AiInstanceSQL.delete_k8s_node_resource_by_k8s_id(k8s_kubeconfig_db.k8s_id)
                             continue
                         # k8s node 信息
@@ -69,7 +70,7 @@ def fetch_ai_k8s_node_resource():
                                     AiInstanceSQL.get_k8s_node_resource_by_k8s_id(k8s_kubeconfig_db.k8s_id)}
                         # 移除node 名称
                         removed_node_names = set(db_node_map.keys()) - set(k8s_node_map.keys())
-                        # print(f"fetch_ai_k8s_node_resource k8s_node_name:{json.dumps(k8s_node_map.keys())}, db_node_map:{json.dumps(db_node_map.keys())}, removed_node_names:{json.dumps(removed_node_names)}")
+                        # dingo_print(f"fetch_ai_k8s_node_resource k8s_node_name:{json.dumps(k8s_node_map.keys())}, db_node_map:{json.dumps(db_node_map.keys())}, removed_node_names:{json.dumps(removed_node_names)}")
 
                         # 处理节点删除场景
                         handle_removed_nodes(k8s_kubeconfig_db.k8s_id, removed_node_names)
@@ -85,18 +86,18 @@ def fetch_ai_k8s_node_resource():
                     except Exception as e:
                         import traceback
                         traceback.print_exc()
-                        print(f"get k8s[{k8s_kubeconfig_db.k8s_id}] client fail: {e}")
+                        dingo_print(f"get k8s[{k8s_kubeconfig_db.k8s_id}] client fail: {e}")
                         continue
 
             except Exception as e:
                 import traceback
                 traceback.print_exc()
-                print(f"sync k8s node resource fail: {e}")
+                dingo_print(f"sync k8s node resource fail: {e}")
             finally:
                 end_time = datetime.now()
-                print(f"sync k8s node resource end time: {end_time}, time-consuming：{(end_time - start_time).total_seconds()}s")
+                dingo_print(f"sync k8s node resource end time: {end_time}, time-consuming：{(end_time - start_time).total_seconds()}s")
         else:
-            print("get dingo_command_ai_k8s_node_resource_lock redis lock failed")
+            dingo_print("get dingo_command_ai_k8s_node_resource_lock redis lock failed")
 
 def handle_removed_nodes(k8s_id, removed_node_names):
     """处理被删除的节点"""
@@ -105,7 +106,7 @@ def handle_removed_nodes(k8s_id, removed_node_names):
             # 检查节点上是否还有关联的AI实例
             instances = AiInstanceSQL.get_instances_by_k8s_and_node(k8s_id, node_name)
             if instances:
-                print(f"node [{node_name}] deleted, {len(instances)}AI instances remain associated, flagged as abnormal status.")
+                dingo_print(f"node [{node_name}] deleted, {len(instances)}AI instances remain associated, flagged as abnormal status.")
                 for instance in instances:
                     update_data = {
                         'instance_real_status': None,
@@ -121,10 +122,10 @@ def handle_removed_nodes(k8s_id, removed_node_names):
 
             # 删除节点资源记录
             AiInstanceSQL.delete_k8s_node_resource(k8s_id, node_name)
-            print(f"Cleared resource records of deleted node [{node_name}]")
+            dingo_print(f"Cleared resource records of deleted node [{node_name}]")
 
         except Exception as e:
-            print(f"hande delete node [{node_name}] fail: {str(e)}")
+            dingo_print(f"hande delete node [{node_name}] fail: {str(e)}")
 
 def sync_node_and_pod_resources(k8s_id, k8s_node, core_client):
     """
@@ -132,15 +133,15 @@ def sync_node_and_pod_resources(k8s_id, k8s_node, core_client):
     """
     # 处理node资源总量
     if not sync_node_resource_total(k8s_id, k8s_node):
-        print(f"k8s [{k8s_id}] node  {k8s_node.metadata.name} resource total sync fail")
+        dingo_print(f"k8s [{k8s_id}] node  {k8s_node.metadata.name} resource total sync fail")
         return
 
     # 处理node资源使用量
     if not sync_pod_resource_usage(k8s_id, k8s_node.metadata.name, core_client):
-        print(f"k8s [{k8s_id}] node {k8s_node.metadata.name} POD resource used sync fail")
+        dingo_print(f"k8s [{k8s_id}] node {k8s_node.metadata.name} POD resource used sync fail")
         return
 
-    print(f"k8s [{k8s_id}] node {k8s_node.metadata.name} resource sync end")
+    dingo_print(f"k8s [{k8s_id}] node {k8s_node.metadata.name} resource sync end")
 
 
 def sync_node_resource_total(k8s_id, k8s_node):
@@ -153,10 +154,10 @@ def sync_node_resource_total(k8s_id, k8s_node):
     try:
         allocatable = k8s_node.status.allocatable
         if not allocatable:
-            print(f"Node {k8s_node.metadata.name} has no allocatable resources")
+            dingo_print(f"Node {k8s_node.metadata.name} has no allocatable resources")
             return False
         internal_ips  = [item.address for item in k8s_node.status.addresses if item.type == 'InternalIP']
-        print(f"sync k8s: {k8s_id} node name:{k8s_node.metadata.name}")
+        dingo_print(f"sync k8s: {k8s_id} node name:{k8s_node.metadata.name}")
 
         node_status = "UnReady"
         # 检查 Node 的状态条件
@@ -192,7 +193,7 @@ def sync_node_resource_total(k8s_id, k8s_node):
         process_node_total_resource(k8s_id, node_resource)
         return True
     except Exception as e:
-        print(f"sync node {k8s_node.metadata.name} resource total failed: {str(e)}")
+        dingo_print(f"sync node {k8s_node.metadata.name} resource total failed: {str(e)}")
         return False
 
 
@@ -210,7 +211,7 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
         if not pods:
             node_resource_db = AiInstanceSQL.get_k8s_node_resource_by_k8s_id_and_node_name(k8s_id, node_name)
             if node_resource_db:
-                print(f"sync_pod_resource_usage node_name:{node_name} pod is empty")
+                dingo_print(f"sync_pod_resource_usage node_name:{node_name} pod is empty")
                 node_resource_db.less_gpu_pod_count = 0
                 node_resource_db.gpu_pod_count = 0
                 node_resource_db.cpu_used = "0"
@@ -280,11 +281,11 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
             AiInstanceSQL.update_k8s_node_resource(node_resource_db)
             return True
 
-        print(f"Not found {k8s_id}/{node_name} resource data")
+        dingo_print(f"Not found {k8s_id}/{node_name} resource data")
         return False
 
     except Exception as e:
-        print(f"sync POD used resource failed: {str(e)}")
+        dingo_print(f"sync POD used resource failed: {str(e)}")
         return False
 
 def process_node_total_resource(k8s_id, node_resource):
@@ -311,7 +312,7 @@ def process_node_total_resource(k8s_id, node_resource):
         existing.gpu_model = gpu_model
         existing.gpu_total = gpu_total
         existing.node_ip = node_resource['node_ip']
-        print(f"Updating resource for node {node_name}")
+        dingo_print(f"Updating resource for node {node_name}")
         AiInstanceSQL.update_k8s_node_resource(existing)
     else:
         ai_k8s_node_resource_db = AiK8sNodeResourceInfo(
@@ -327,5 +328,5 @@ def process_node_total_resource(k8s_id, node_resource):
             cpu_slot_total=node_resource['standard_resources'][CPU_POD_SLOT_KEY]
         )
         ai_k8s_node_resource_db.id = uuid.uuid4().hex
-        print(f"Creating new resource for node {node_name}")
+        dingo_print(f"Creating new resource for node {node_name}")
         AiInstanceSQL.save_k8s_node_resource(ai_k8s_node_resource_db)

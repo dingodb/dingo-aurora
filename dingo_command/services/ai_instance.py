@@ -22,6 +22,7 @@ from kubernetes import client
 from kubernetes.stream import stream
 
 from dingo_command.api.model.aiinstance import AddPortModel
+from dingo_command.common.common import dingo_print
 from dingo_command.common.Enum.AIInstanceEnumUtils import AiInstanceStatus, K8sStatus
 from dingo_command.common.k8s_common_operate import K8sCommonOperate
 from dingo_command.db.models.ai_instance.models import AiInstanceInfo, AccountInfo, AiInstancePortsInfo
@@ -94,7 +95,7 @@ class AiInstanceService:
     def delete_ai_instance_by_id(self, id):
         ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
         if not ai_instance_info_db:
-            print("ai instance[{id}] is not found")
+            dingo_print("ai instance[{id}] is not found")
             return
         # 更新状态为删除中
         ai_instance_info_db.instance_status="DELETING"
@@ -110,24 +111,24 @@ class AiInstanceService:
             try:
                 k8s_common_operate.delete_service_by_name(core_k8s_client, real_name, namespace_name)
             except Exception as e:
-                print(f"删除Service失败, name={real_name}, ns={namespace_name}, err={e}")
+                dingo_print(f"删除Service失败, name={real_name}, ns={namespace_name}, err={e}")
 
             try:
                 k8s_common_operate.delete_service_by_name(core_k8s_client, real_name + "-" + DEV_TOOL_JUPYTER, namespace_name)
             except Exception as e:
-                print(f"删除 jupyter Service失败, name={real_name}, ns={namespace_name}, err={e}")
+                dingo_print(f"删除 jupyter Service失败, name={real_name}, ns={namespace_name}, err={e}")
 
             try:
                 # 删除 ingress rule
                 k8s_common_operate.delete_namespaced_ingress(networking_k8s_client, real_name, namespace_name)
             except Exception as e:
-                print(f"删除ingress资源[{namespace_name}/{real_name}-jupyter]失败: {str(e)}")
+                dingo_print(f"删除ingress资源[{namespace_name}/{real_name}-jupyter]失败: {str(e)}")
 
             try:
                 # 删除 jupyter configMap
                 k8s_common_operate.delete_configmap(core_k8s_client, namespace_name, real_name)
             except Exception as e:
-                print(f"删除jupyter configMap资源[{namespace_name}/{real_name}]失败: {str(e)}")
+                dingo_print(f"删除jupyter configMap资源[{namespace_name}/{real_name}]失败: {str(e)}")
 
             try:
                 # 删除镜像库中保存的关机镜像
@@ -136,9 +137,9 @@ class AiInstanceService:
                 image_name = SAVE_TO_IMAGE_CCI_PREFIX + ai_instance_info_db.id
                 project_name = self.extract_project_and_image_name(harbor_address)
                 delete_project_repository_response = harbor_service.delete_custom_projects_images(project_name, image_name)
-                print(f"ai instance [{id}] project_name:{project_name}, image_name:{image_name}, delete_project_repository_response:{delete_project_repository_response}")
+                dingo_print(f"ai instance [{id}] project_name:{project_name}, image_name:{image_name}, delete_project_repository_response:{delete_project_repository_response}")
             except Exception as e:
-                print(f"删除容器实例[{id}]的关机镜像失败: {e}")
+                dingo_print(f"删除容器实例[{id}]的关机镜像失败: {e}")
 
             # 删除metallb的默认端口
             AiInstanceSQL.delete_ai_instance_ports_info_by_instance_id(id)
@@ -146,10 +147,10 @@ class AiInstanceService:
             try:
                 k8s_common_operate.delete_sts_by_name(app_k8s_client, real_name, namespace_name)
             except Exception as e:
-                print(f"删除StatefulSet失败, name={real_name}, ns={namespace_name}, err={e}")
+                dingo_print(f"删除StatefulSet失败, name={real_name}, ns={namespace_name}, err={e}")
                 raise e
         except Exception as e:
-            print(f"获取 K8s 客户端失败或删除资源异常: {e}")
+            dingo_print(f"获取 K8s 客户端失败或删除资源异常: {e}")
             import traceback
             traceback.print_exc()
             raise e
@@ -270,12 +271,12 @@ class AiInstanceService:
                     }
 
                 else:
-                    print(f"未获取到锁{id}")
+                    dingo_print(f"未获取到锁{id}")
                     raise Fail(f"Ai instance [{id}] is saving, not allow to operation")
 
         except Exception as e:
             # 记录日志并重新抛出异常
-            print(f"Failed to start save operation for instance {id}: {str(e)}")
+            dingo_print(f"Failed to start save operation for instance {id}: {str(e)}")
             raise Fail(f"Failed to start save operation: {str(e)}")
 
 
@@ -288,12 +289,12 @@ class AiInstanceService:
                     # 使用 func_timeout 来执行方法，设置单次执行超时时间为15秒
                     func_timeout(CCI_TIME_OUT_DEFAULT, self.stop_cci_to_save_image, args=(id,))
                 except FunctionTimedOut:
-                    print(f"stop_cci_to_save_image single execution timed out after {CCI_TIME_OUT_DEFAULT} seconds!")
+                    dingo_print(f"stop_cci_to_save_image single execution timed out after {CCI_TIME_OUT_DEFAULT} seconds!")
                     # 可以选择跳出循环或进行其他处理
                     break
                 except Exception as e:
                     # 处理其他可能的异常
-                    print(f"stop_cci_to_save_image ai instance {id} execution occurred an error occurred: {e}")
+                    dingo_print(f"stop_cci_to_save_image ai instance {id} execution occurred an error occurred: {e}")
                     break
 
                 # 方法执行完后，立即检查总耗时（包括方法执行时间和之前所有循环的耗时）
@@ -306,7 +307,7 @@ class AiInstanceService:
                 time.sleep(5)
 
         except Exception as e:
-            print(
+            dingo_print(
                 f"{time.strftime('%Y-%m-%d %H:%M:%S')} Background task stop_save_cci_to_image_task failed or timeout for instance {id}: {str(e)}")
             try:
                 ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
@@ -318,10 +319,10 @@ class AiInstanceService:
                     # 副本数改成0
                     self.set_k8s_sts_replica_by_instance_id(id, 0)
             except Exception as inner_e:
-                print(f"Error during exception handling for instance {id}: {inner_e}")
+                dingo_print(f"Error during exception handling for instance {id}: {inner_e}")
         finally:
             self.get_or_set_update_k8s_node_resource_redis()
-            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Task for instance {id} has finished (success, timeout, or error), thread should be released.")
+            dingo_print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Task for instance {id} has finished (success, timeout, or error), thread should be released.")
 
 
     def sava_ai_instance_to_image_process_status(self, id):
@@ -339,7 +340,7 @@ class AiInstanceService:
                 }
 
         except Exception as e:
-            print(f"Failed to start save operation for instance {id}: {str(e)}")
+            dingo_print(f"Failed to start save operation for instance {id}: {str(e)}")
             raise Fail(f"Failed to query save cci to image operation: {str(e)}")
 
     def get_harbor_info(self, k8s_id):
@@ -431,19 +432,19 @@ class AiInstanceService:
 
             # 2. Commit操作
             image = f"{harbor_address}/{image_name}:{image_tag}"
-            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] commit image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] start")
+            dingo_print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] commit image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] start")
             self._commit_container(
                 core_k8s_client, nerdctl_api_pod, clean_container_id, image
             )
-            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] commit image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] finished, start push image")
+            dingo_print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] commit image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] finished, start push image")
 
             # 3. Push操作
             self._push_image(core_k8s_client, nerdctl_api_pod, image)
             # 判断是否完成标识
             redis_connection.set_redis_by_key_with_expire(redis_key + "_flag", "true", 10)
-            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] push image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] finished")
+            dingo_print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] push image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] finished")
         except Exception as e:
-            print(f"Async save operation failed for instance {id}: {str(e)}")
+            dingo_print(f"Async save operation failed for instance {id}: {str(e)}")
             raise e
         finally:
             redis_connection.delete_redis_key(redis_key)
@@ -480,7 +481,7 @@ class AiInstanceService:
             resp.close()
             return resp.returncode, "\n".join(output)
         except Exception as  e:
-            print(f"exec k8s pod {namespace}/{pod_name}  command {command} failed: {e}")
+            dingo_print(f"exec k8s pod {namespace}/{pod_name}  command {command} failed: {e}")
             import traceback
             traceback.print_exc()
         finally:
@@ -503,7 +504,7 @@ class AiInstanceService:
         )
 
         if returncode != 0:
-            print(f"Harbor login returncode:{returncode}, failed: {output}")
+            dingo_print(f"Harbor login returncode:{returncode}, failed: {output}")
             raise Exception(f"Harbor login returncode:{returncode}, failed: {output}")
 
     @_create_retry_decorator()  # 应用装饰器工厂
@@ -513,14 +514,14 @@ class AiInstanceService:
             'nerdctl', 'commit', clean_container_id, image_name,
             '--pause=true', '--namespace', 'k8s.io', '--insecure-registry', '--compression=zstd'
         ]
-        print(f"commit_command: {commit_command}")
+        dingo_print(f"commit_command: {commit_command}")
         returncode, output = self._execute_k8s_command(
             core_k8s_client, nerdctl_api_pod['name'], nerdctl_api_pod['namespace'], commit_command
         )
 
         if returncode != 0:
             error_msg = f"Container id {clean_container_id} Commit returncode:{returncode}, failed: {output}"
-            print(error_msg)
+            dingo_print(error_msg)
             # WARN[0000] Image lacks label "nerdctl/platform", assuming the platform to be "linux/amd64"
             if "nerdctl/platform" in output:
                 return output
@@ -535,14 +536,14 @@ class AiInstanceService:
             'nerdctl', 'push', image_name,
             '--namespace', 'k8s.io', '--insecure-registry'
         ]
-        print(f"push_command: {push_command}")
+        dingo_print(f"push_command: {push_command}")
         returncode, output = self._execute_k8s_command(
             core_k8s_client, nerdctl_api_pod['name'], nerdctl_api_pod['namespace'], push_command
         )
 
         if returncode != 0:
             error_msg = f"Image {image_name} Push returncode:{returncode}, failed: {output}"
-            print(error_msg)
+            dingo_print(error_msg)
             raise Exception(error_msg)
 
         return  output
@@ -622,7 +623,7 @@ class AiInstanceService:
             # 镜像全路径。格式：  域名/项目/镜像名+tag
             image_pull = ai_instance.image
             harbor_address = image_pull.split("/")[0]
-            print(f"create_ai_instance harbor_address:{harbor_address}")
+            dingo_print(f"create_ai_instance harbor_address:{harbor_address}")
             k8s_configs_db = AiInstanceSQL.get_k8s_configs_info_by_k8s_id(ai_instance.k8s_id)
             # 创建私有镜像默认拉取秘钥
             k8s_common_operate.create_docker_registry_secret(self.core_k8s_client, namespace_name, namespace_name + HARBOR_PULL_IMAGE_SUFFIX,
@@ -639,7 +640,7 @@ class AiInstanceService:
                 # 多副本场景
                 return self._create_multiple_instances(ai_instance, ai_instance_db, namespace_name)
         except Exception as e:
-            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Failed to create AI instance: {e}")
+            dingo_print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Failed to create AI instance: {e}")
             import traceback
             traceback.print_exc()
             raise e
@@ -672,7 +673,7 @@ class AiInstanceService:
 
         if not k8s_common_operate.check_ai_instance_ns_exists(self.core_k8s_client, namespace_name):
             k8s_common_operate.create_ai_instance_ns(self.core_k8s_client, namespace_name)
-            print(f"Created namespace: {namespace_name}")
+            dingo_print(f"Created namespace: {namespace_name}")
 
         return namespace_name
 
@@ -823,9 +824,9 @@ class AiInstanceService:
         # 端口：22、9001、9002 port需实时获取,防止冲突
         available_ports, available_ports_map = self.find_ai_instance_available_ports(instance_id=ai_instance_db.id, is_add=False, )
         if len(available_ports) < 3:
-            print(f"Not enough available ports or ai instance {ai_instance_db.id} not get redis lock")
+            dingo_print(f"Not enough available ports or ai instance {ai_instance_db.id} not get redis lock")
             raise Fail(f"Not enough available ports or ai instance {ai_instance_db.id} not get redis lock ", error_message="无足够可用端口")
-        print(f"ai instance [{ai_instance_db.id}] available_ports:{available_ports}")
+        dingo_print(f"ai instance [{ai_instance_db.id}] available_ports:{available_ports}")
 
         try:
             # 4、创建metallb的服务，包括默认端口22、9001、9002
@@ -836,7 +837,7 @@ class AiInstanceService:
                                     namespace_name, ai_instance_db.instance_real_name, client.V1Service)
 
         except Exception as e:
-            print(f"create cci pod fail:{e}")
+            dingo_print(f"create cci pod fail:{e}")
             import traceback
             traceback.print_exc()
             AiInstanceSQL.delete_ai_instance_ports_info_by_instance_id(ai_instance_db.id)
@@ -876,7 +877,7 @@ class AiInstanceService:
                     return
             except Exception as e:
                 time.sleep(2)
-                print(f"{namespace}/{name} resource_type:{resource_type} fail: {e}")
+                dingo_print(f"{namespace}/{name} resource_type:{resource_type} fail: {e}")
         raise TimeoutError(f"Resource {name} not ready in {timeout}s")
 
 
@@ -894,7 +895,7 @@ class AiInstanceService:
                     current_port += 1
 
                 if not available_ports:
-                    print("ai instance {instance_id} available port is empty")
+                    dingo_print("ai instance {instance_id} available port is empty")
                     raise Fail(f"ai instance {instance_id} available port is empty")
                 available_ports_map = {}
                 if is_add == False:
@@ -1152,7 +1153,7 @@ class AiInstanceService:
                 if not self._check_image_exists(core_k8s_client, image_name_temp, project_name):
                     image_name = ai_instance_info_db.instance_image
 
-            print(f"Start ai instance id: [{id}] image_name: {image_name}")
+            dingo_print(f"Start ai instance id: [{id}] image_name: {image_name}")
 
             updated_sts = self.build_updated_sts(
                 existing_sts, resource_config, image_name, ai_instance_info_db, request
@@ -1200,15 +1201,15 @@ class AiInstanceService:
                     if image['repository_name'] == image_name:
                         for tag in image['tags_list']:
                             if tag['tag_name'] == "latest":
-                                print(f"镜像 {image_name}:latest 存在")
+                                dingo_print(f"镜像 {image_name}:latest 存在")
                                 return True
             else:
-                print(f"获取镜像列表失败: {result['message']}")
+                dingo_print(f"获取镜像列表失败: {result['message']}")
                 return False
 
             return False
         except Exception as e:
-            print(f"Error checking image existence: {str(e)}")
+            dingo_print(f"Error checking image existence: {str(e)}")
             return False
 
     def get_and_validate_instance(self, instance_id):
@@ -1309,7 +1310,7 @@ class AiInstanceService:
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if not ai_instance_info_db:
                 raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
-            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} start to stop ai instance[{id}]")
+            dingo_print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} start to stop ai instance[{id}]")
 
             # 异步保存镜像
             queuedThreadPool.submit(partial(self.stop_save_cci_to_image_task, id))
@@ -1327,7 +1328,7 @@ class AiInstanceService:
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if not ai_instance_info_db:
                 raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
-            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} start to stop ai instance[{id}]")
+            dingo_print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} start to stop ai instance[{id}]")
 
             # 标记为 STOPPED
             ai_instance_info_db.instance_status = AiInstanceStatus.STOPPING.name
@@ -1344,7 +1345,7 @@ class AiInstanceService:
                     _preload_content=False
                 )
             except Exception as e:
-                print(f"关机失败，实例ID: {id}, 错误: {e}")
+                dingo_print(f"关机失败，实例ID: {id}, 错误: {e}")
                 ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
                 ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
                 ai_instance_info_db.error_msg = str(e)
@@ -1379,7 +1380,7 @@ class AiInstanceService:
         异步保存AI实例为镜像（立即返回，实际操作在后台执行）
         """
         try:
-            print(f"start time {time.strftime('%Y-%m-%d %H:%M:%S')} stop cci {id}")
+            dingo_print(f"start time {time.strftime('%Y-%m-%d %H:%M:%S')} stop cci {id}")
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if ai_instance_info_db:
                 # 标记为 STOPPED
@@ -1399,10 +1400,10 @@ class AiInstanceService:
                 )
 
                 commit_push_image_flag = redis_connection.get_redis_by_key(SAVE_TO_IMAGE_CCI_PREFIX + id + "_flag")
-                print(f"ai instance[{id}] push image flag: {commit_push_image_flag}")
+                dingo_print(f"ai instance[{id}] push image flag: {commit_push_image_flag}")
                 if commit_push_image_flag != "true":
                     error_msg =  f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] commit or push image image_tag: [{image_name}:{image_tag}] failed"
-                    print(error_msg)
+                    dingo_print(error_msg)
                     raise error_msg
 
 
@@ -1417,7 +1418,7 @@ class AiInstanceService:
                     )
                 except Exception as e:
                     error_msg = (f"stop k8s cci pod failed, id [{id}] : {e}")
-                    print(error_msg)
+                    dingo_print(error_msg)
                     raise error_msg
 
                 # 标记为 STOPPED
@@ -1430,7 +1431,7 @@ class AiInstanceService:
             # 副本数改成0
             self.set_k8s_sts_replica_by_instance_id(id, 0)
 
-            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} stop cci {id} to save image fail:{e}")
+            dingo_print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} stop cci {id} to save image fail:{e}")
             import  traceback
             traceback.print_exc()
             raise e
@@ -1525,10 +1526,10 @@ class AiInstanceService:
                         pod_real_status = current_real_status
                         pod_located_node_name = current_node_name
                         self.update_pod_status_and_node_name_in_db(instance_id, pod_real_status, pod_located_node_name, error_msg)
-                        print(f"Pod {pod_name} status/node name change to: {pod_real_status}_{pod_located_node_name}")
+                        dingo_print(f"Pod {pod_name} status/node name change to: {pod_real_status}_{pod_located_node_name}")
                         if current_real_status in ["Error", "CrashLoopBackOff", "ImagePullBackOff", "CreateContainerError",
                                                    "CreateContainerConfigError", "OOMKilled", "ContainerCannotRun", "Completed", "Failed"]:
-                            print(f"change Pod {pod_name} sts replica to 0")
+                            dingo_print(f"change Pod {pod_name} sts replica to 0")
                             # 副本数改成0
                             self.set_k8s_sts_replica_by_instance_id(instance_id, 0)
 
@@ -1538,7 +1539,7 @@ class AiInstanceService:
 
                     # 如果 Pod 处于 Running 状态，退出循环
                     if pod_real_status == "Running":
-                        print(f"Pod {pod_name} 已正常运行, node name:{current_node_name}")
+                        dingo_print(f"Pod {pod_name} 已正常运行, node name:{current_node_name}")
                         self.get_or_set_update_k8s_node_resource_redis()
 
                         # 明确退出函数
@@ -1556,7 +1557,7 @@ class AiInstanceService:
 
             # 5. 检查是否超时
             if (datetime.now() - start_time).total_seconds() >= timeout:
-                print(f"Pod {pod_name} 状态检查超时(5分钟)")
+                dingo_print(f"Pod {pod_name} 状态检查超时(5分钟)")
 
                 self.update_pod_status_and_node_name_in_db(instance_id, K8sStatus.ERROR.value, pod_located_node_name, "cci pod change to running timeout")
 
@@ -1567,7 +1568,7 @@ class AiInstanceService:
                 return
 
         except Exception as e:
-            print(f"检查Pod状态时发生未预期错误: {e}")
+            dingo_print(f"检查Pod状态时发生未预期错误: {e}")
             self.get_or_set_update_k8s_node_resource_redis()
             import traceback
             traceback.print_exc()
@@ -1607,10 +1608,10 @@ class AiInstanceService:
                         pod_real_status = current_real_status
                         pod_located_node_name = current_node_name
                         self.update_pod_status_and_node_name_in_db(ai_instance_db.id, pod_real_status, pod_located_node_name, error_msg)
-                        print(f"Pod {pod_name} status/node name change to: {pod_real_status}_{pod_located_node_name}")
+                        dingo_print(f"Pod {pod_name} status/node name change to: {pod_real_status}_{pod_located_node_name}")
                         if current_real_status in ["Error", "CrashLoopBackOff", "ImagePullBackOff", "CreateContainerError",
                                                    "CreateContainerConfigError", "OOMKilled", "ContainerCannotRun", "Completed", "Failed"]:
-                            print(f"change Pod {pod_name} sts replica to 0")
+                            dingo_print(f"change Pod {pod_name} sts replica to 0")
                             # 副本数改成0
                             self.set_k8s_sts_replica_by_instance_id(ai_instance_db.id, 0)
 
@@ -1620,7 +1621,7 @@ class AiInstanceService:
 
                     # 如果 Pod 处于 Running 状态，退出循环
                     if pod_real_status == "Running":
-                        print(f"Pod {pod_name} 已正常运行, node name:{current_node_name}")
+                        dingo_print(f"Pod {pod_name} 已正常运行, node name:{current_node_name}")
                         self.get_or_set_update_k8s_node_resource_redis()
 
                         # 明确退出函数
@@ -1638,7 +1639,7 @@ class AiInstanceService:
 
             # 5. 检查是否超时
             if (datetime.now() - start_time).total_seconds() >= timeout:
-                print(f"Pod {pod_name} 状态检查超时(5分钟)")
+                dingo_print(f"Pod {pod_name} 状态检查超时(5分钟)")
 
                 self.update_pod_status_and_node_name_in_db(ai_instance_db.id, K8sStatus.ERROR.value, pod_located_node_name, "cci pod change to running timeout")
 
@@ -1648,7 +1649,7 @@ class AiInstanceService:
                 self.get_or_set_update_k8s_node_resource_redis()
 
         except Exception as e:
-            print(f"检查Pod {ai_instance_db.id} 状态时发生未预期错误: {e}")
+            dingo_print(f"检查Pod {ai_instance_db.id} 状态时发生未预期错误: {e}")
             self.get_or_set_update_k8s_node_resource_redis()
             import traceback
             traceback.print_exc()
@@ -1706,13 +1707,13 @@ class AiInstanceService:
                     node_resource_db.less_gpu_pod_count += 1
 
                 AiInstanceSQL.update_k8s_node_resource(node_resource_db)
-                print(f"k8s[{k8s_id}] node[{node_name}] resource update success")
+                dingo_print(f"k8s[{k8s_id}] node[{node_name}] resource update success")
             except Exception as e:
-                print(f"save k8s node resource fail:{e}")
+                dingo_print(f"save k8s node resource fail:{e}")
                 import traceback
                 traceback.print_exc()
         else:
-            print(f"Not found k8s[{k8s_id}] node[{node_name}] resource info, can not to update used resource")
+            dingo_print(f"Not found k8s[{k8s_id}] node[{node_name}] resource info, can not to update used resource")
 
     def update_pod_status_and_node_name_in_db(self, id : str, k8s_status: str, node_name: str, error_msg: str = None):
         """
@@ -1728,10 +1729,10 @@ class AiInstanceService:
             ai_instance_db.instance_status = self.map_k8s_to_db_status(k8s_status, ai_instance_db.instance_status)
             ai_instance_db.instance_node_name = node_name
             ai_instance_db.error_msg = error_msg
-            print(f"异步更新容器实例[{ai_instance_db.instance_real_name}] instance_status：{ai_instance_db.instance_status}, node name:{ai_instance_db.instance_node_name}")
+            dingo_print(f"异步更新容器实例[{ai_instance_db.instance_real_name}] instance_status：{ai_instance_db.instance_status}, node name:{ai_instance_db.instance_node_name}")
             AiInstanceSQL.update_ai_instance_info(ai_instance_db)
         except Exception as e:
-            print(f"更新容器实例[{id}]数据库失败: {e}")
+            dingo_print(f"更新容器实例[{id}]数据库失败: {e}")
 
     @staticmethod
     def map_k8s_to_db_status(k8s_status: str, original_status: str):
@@ -1816,7 +1817,7 @@ class AiInstanceService:
 
                 core_k8s_client.patch_namespaced_service(name=service_name, namespace=namespace_name, body=svc)
             except Exception as e:
-                print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance {id} add port {target_port} fail: {e}")
+                dingo_print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance {id} add port {target_port} fail: {e}")
                 AiInstanceSQL.delete_ports_info_by_instance_id_target_port(id, target_port)
                 import traceback
                 traceback.print_exc()
@@ -2039,7 +2040,7 @@ class AiInstanceService:
     #     try:
     #         await self.create_check_pod_status_node_name_and_update_db(*args)
     #     except Exception as e:
-    #         print(f"Pod status check failed: {e}")
+    #         dingo_print(f"Pod status check failed: {e}")
     #         import traceback
     #         traceback.print_exc()
 
@@ -2154,7 +2155,7 @@ class AiInstanceService:
             cleaned_value = str(value).replace(',', '').replace('%', '').strip()
             return convert_type(cleaned_value)
         except (ValueError, TypeError) as e:
-            print(f"Convert failed: {value} to {convert_type.__name__}, error: {str(e)}")
+            dingo_print(f"Convert failed: {value} to {convert_type.__name__}, error: {str(e)}")
             return None
 
     def update_node_resources(self, node_resource_db, compute_resource_dict, operation='release'):
@@ -2167,7 +2168,7 @@ class AiInstanceService:
         """
         try:
             operation_factor = 1 if operation == 'allocate' else -1
-            print(f"============compute_resource_dict :{compute_resource_dict}")
+            dingo_print(f"============compute_resource_dict :{compute_resource_dict}")
             # 处理GPU资源（需要型号匹配）
             less_gpu_pod = True
             if ('gpu_model' in compute_resource_dict and 'gpu_count' in compute_resource_dict and
@@ -2209,7 +2210,7 @@ class AiInstanceService:
             return True
 
         except Exception as e:
-            print(f"{operation}节点资源失败: {str(e)}")
+            dingo_print(f"{operation}节点资源失败: {str(e)}")
             import traceback
             traceback.print_exc()
             return False
@@ -2246,7 +2247,7 @@ class AiInstanceService:
             )
             return resp
         except Exception as e:
-            print(f"ai_instance_web_ssh instance_id:{instance_id} fail")
+            dingo_print(f"ai_instance_web_ssh instance_id:{instance_id} fail")
             import traceback
             traceback.print_exc()
             raise e
@@ -2290,7 +2291,7 @@ class AiInstanceService:
                 _preload_content=False
             )
         except Exception as e:
-            print(f"实例设置副本数{replica}失败，实例ID: {id}, 错误: {e}")
+            dingo_print(f"实例设置副本数{replica}失败，实例ID: {id}, 错误: {e}")
 
     def get_pod_final_status(self, pod) -> str:
         """
@@ -2380,7 +2381,7 @@ class AiInstanceService:
     def choose_k8s_node(self, k8s_id: str, cpu: int, memory: int, disk: int = 50, gpu_model=None, gpu: int = 1):
         # 判断空
         if not k8s_id or not cpu or not memory:
-            print(f"指定的k8s{k8s_id},cpu：{cpu},memory：{memory},disk：{disk}")
+            dingo_print(f"指定的k8s{k8s_id},cpu：{cpu},memory：{memory},disk：{disk}")
             return None
         # 查询当前所有可用节点
         node_list = []
@@ -2389,7 +2390,7 @@ class AiInstanceService:
             node_list = self.get_k8s_node_resource_statistics(k8s_id)
             # node_list.append(node_resource_list_db)
         except Exception as e:
-            print(f"查询不到可用节点, 错误: {e}")
+            dingo_print(f"查询不到可用节点, 错误: {e}")
         # 空
         if not node_list:
             return None
@@ -2436,7 +2437,7 @@ class AiInstanceService:
             return None
         # 选择剩余 CPU 最小的节点（负载最均衡）
         chosen_node = min(available_nodes, key=lambda x: x[1])[0]
-        print(f"wwb chosen_node:{chosen_node}")
+        dingo_print(f"wwb chosen_node:{chosen_node}")
         # 返回选择好的节点
         return chosen_node['node_name']
 
@@ -2498,13 +2499,13 @@ class AiInstanceService:
             # 最小返回0.5 保留两位小数
             return max(MIN_CPU_REQUEST, round(result, 2))
         except Exception as e:
-            print(e)
+            dingo_print(e)
             return MIN_CPU_REQUEST  # 默认安全值
 
     def get_or_set_update_k8s_node_resource_redis(self):
         operator_flag = redis_connection.get_redis_by_key(CCI_SYNC_K8S_NODE_REDIS_KEY)
         if not operator_flag:
-            print("set ai instance k8s node resource key expire time  to 10s")
+            dingo_print("set ai instance k8s node resource key expire time  to 10s")
             redis_connection.set_redis_by_key_with_expire(CCI_SYNC_K8S_NODE_REDIS_KEY, "true", 10)
 
     def test_thread_pool(self):
