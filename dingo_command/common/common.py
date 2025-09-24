@@ -89,7 +89,7 @@ def dingo_print(*args, **kwargs):
     
     # Get current timestamp (optimize: use faster formatting)
     now = datetime.datetime.now()
-    current_time = f"{now.year}-{now.month:02d}-{now.day:02d} {now.hour:02d}:{now.minute:02d}:{now.second:02d}"
+    current_time = f"{now.year}-{now.month:02d}-{now.day:02d} {now.hour:02d}:{now.minute:02d}:{now.second:02d}.{now.microsecond//1000:03d}"
     
     # Create prefix with timestamp, file name, line number, and function name
     prefix = f"[{current_time}] [{file_name}] [Line {line_number}] [{function_name}]"
