@@ -4,16 +4,12 @@ import time
 from typing import Dict
 import json
 
-from kubernetes.client import V1StatefulSet, ApiException, V1Ingress, V1ObjectMeta, V1IngressSpec, \
-    V1IngressRule, V1HTTPIngressRuleValue, V1HTTPIngressPath, V1IngressBackend, V1IngressServiceBackend, \
-    V1ServiceBackendPort, V1ServicePort, V1Service, V1ServiceSpec
+from kubernetes.client import V1StatefulSet, ApiException
 from kubernetes import client
-from oslo_log import log
 
 from dingo_command.utils.constant import RESOURCE_TYPE_KEY, PRODUCT_TYPE_CCI, DEV_TOOL_JUPYTER, INGRESS_SIGN, \
     CCI_SHARE_METALLB
 
-LOG = log.getLogger(__name__)
 
 class K8sCommonOperate:
 
@@ -69,8 +65,9 @@ class K8sCommonOperate:
                 body=stateful_set_pod_data,
                 async_req=async_req
             )
+            print(f"Successfully created sts {namespace_name}/{stateful_set_pod_data.metadata.name}")
         except Exception as e:
-            LOG.info(f"create statefulset pod failed, namespace_name: {namespace_name}, stateful_set_pod_data: {json.dumps(stateful_set_pod_data)}")
+            print(f"create statefulset pod  {namespace_name}/{stateful_set_pod_data.metadata.name} failed:{e}")
             import traceback
             traceback.print_exc()
             raise e
@@ -186,7 +183,7 @@ class K8sCommonOperate:
                 async_req=True
             )
             create_namespaced_service = create_namespaced_service_thread.get()
-            print(f"Successfully created MetalLB service {create_namespaced_service.metadata.name}")
+            print(f"Successfully created MetalLB service {namespace}/{create_namespaced_service.metadata.name}")
             return create_namespaced_service.metadata.uid
 
         except client.rest.ApiException as e:
@@ -201,16 +198,16 @@ class K8sCommonOperate:
                         async_req=True
                     )
                     updated_service = update_namespaced_service_thread.get()
-                    print(f"Successfully updated MetalLB service {updated_service.metadata.name}")
+                    print(f"Successfully updated MetalLB service {namespace}/{updated_service.metadata.name}")
                     return updated_service.metadata.uid
                 except Exception as update_e:
-                    print(f"Failed to update service '{service_name}': {update_e}")
+                    print(f"Failed to update service {namespace}/{service_name}: {update_e}")
                     import traceback
                     traceback.print_exc()
                     raise update_e
             else:
                 # 如果是其他错误，直接抛出
-                print(f"Failed to create MetalLB service '{service_name}': {e}")
+                print(f"Failed to create MetalLB service {namespace}/{service_name}: {e}")
                 import traceback
                 traceback.print_exc()
                 raise e
@@ -256,29 +253,29 @@ class K8sCommonOperate:
                 namespace=namespace,
                 body=configmap
             )
-            LOG.info(f"ConfigMap '{configmap_name}' 创建成功. API 响应: {api_response.metadata.name}")
+            print(f" create ConfigMap {namespace}/{configmap_name} succeed")
             return api_response
         except client.rest.ApiException as e:
             # 如果异常原因是 409 Conflict，则尝试更新已有的 ConfigMap
             if e.status == 409:
-                LOG.warning(f"ConfigMap '{configmap_name}' 已存在，尝试更新...")
+                print(f"ConfigMap {namespace}/{configmap_name} always exists, to update...")
                 try:
                     api_response = core_v1.replace_namespaced_config_map(
                         name=configmap_name,
                         namespace=namespace,
                         body=configmap
                     )
-                    LOG.info(f"ConfigMap '{configmap_name}' 更新成功.")
+                    print(f"ConfigMap {namespace}/{configmap_name} update succeed.")
                     return api_response
                 except Exception as replace_e:
-                    LOG.error(f"更新 ConfigMap '{configmap_name}' 失败: {replace_e}")
+                    print(f"update ConfigMap {namespace}/{configmap_name} failed: {replace_e}")
                     raise replace_e
             else:
                 # 如果是其他错误，直接抛出
-                LOG.error(f"创建 ConfigMap '{configmap_name}' 时发生 API 异常: {e}")
+                print(f"create jupyter ConfigMap {namespace}/{configmap_name} failed: {e}")
                 raise e
         except Exception as e:
-            LOG.error(f"create jupyter ConfigMap[{namespace}/{configmap_name}]时发生异常: {e}")
+            print(f"create jupyter ConfigMap[{namespace}/{configmap_name}] failed: {e}")
             raise e
 
     def create_configmap(self, core_v1: client.CoreV1Api, namespace, configmap_name, nb_prefix):
@@ -322,11 +319,11 @@ class K8sCommonOperate:
                 namespace=namespace,
                 body=configmap_manifest
             )
-            LOG.info(f"ConfigMap '{configmap_name}' 创建成功. API 响应: {api_response.metadata.name}")
+            print(f" create ConfigMap {namespace}/{configmap_name}, {nb_prefix} succeed")
             return api_response
 
         except ApiException as e:
-            LOG.error(f"create jupyter ConfigMap {configmap_name}, {nb_prefix} 时发生异常: {e}")
+            print(f"create jupyter ConfigMap {namespace}/{configmap_name}, {nb_prefix} failed: {e}")
             raise e
 
     def delete_configmap(self, core_v1: client.CoreV1Api, namespace, configmap_name):
@@ -348,14 +345,14 @@ class K8sCommonOperate:
                 namespace=namespace,
                 body=delete_options
             )
-            LOG.info(f"ConfigMap '{configmap_name}' 删除请求已发送. 状态: {api_response.status}")
+            print(f"delete ConfigMap {namespace}/{configmap_name} succeed")
             return api_response
 
         except ApiException as e:
             if e.status == 404:
-                LOG.warning(f"ConfigMap '{configmap_name}' 在命名空间 '{namespace}' 中不存在")
+                print(f"ConfigMap {namespace}/{configmap_name} not exist")
             else:
-                LOG.error(f"删除 ConfigMap {configmap_name} 时发生异常: {e}")
+                print(f"delete ConfigMap {namespace}/{configmap_name} failed: {e}")
             raise e
 
     def create_cci_ingress_rule(self, networking_v1: client.NetworkingV1Api, namespace: str, service_name: str,
@@ -377,6 +374,7 @@ class K8sCommonOperate:
                     "nginx.ingress.kubernetes.io/websocket-services": user_cci_pod_service_name,
                     "nginx.ingress.kubernetes.io/proxy-read-timeout": "3600",
                     "nginx.ingress.kubernetes.io/proxy-send-timeout": "3600",
+                    "nginx.ingress.kubernetes.io/proxy-body-size": "50m",
                 },
             ),
             spec=client.V1IngressSpec(
@@ -747,13 +745,13 @@ class K8sCommonOperate:
                 propagation_policy=propagation_policy,
                 body=client.V1DeleteOptions()
             )
-            print(f"已删除 StatefulSet: {namespace}/{real_sts_name}")
+            print(f"delete StatefulSet: {namespace}/{real_sts_name} succeed")
         except ApiException as e:
             if e.status == 404:
-                print(f"StatefulSet 不存在 (StatefulSet: {namespace}/{real_sts_name})")
+                print(f"StatefulSet not exist: {namespace}/{real_sts_name})")
                 return
             else:
-                print(f"删除{namespace}/{real_sts_name}失败: {e.reason}")
+                print(f"delete {namespace}/{real_sts_name} failed: {e.reason}")
             return False
 
     def delete_service_by_name(self,
@@ -777,17 +775,17 @@ class K8sCommonOperate:
                 grace_period_seconds=grace_period_seconds,
                 body=client.V1DeleteOptions()
             )
-            print(f"已删除 Service: {namespace}/{service_name}")
+            print(f"delete service: {namespace}/{service_name} succeed")
             return True
 
         except ApiException as e:
             import traceback
             traceback.print_exc()
             if e.status == 404:
-                print(f"Service {namespace}/{service_name}不存在: {service_name}")
+                print(f"service {namespace}/{service_name} not found: {service_name}")
                 return
             else:
-                print(f"删除 {namespace}/{service_name}失败: {e.reason}")
+                print(f"delete service {namespace}/{service_name} failed: {e}")
             raise e
 
     def delete_namespaced_ingress(self, networking_v1: client.NetworkingV1Api, ingress_name: str, namespace: str):
@@ -903,7 +901,7 @@ class K8sCommonOperate:
         except ApiException as e:
             if e.status == 404:
                 # ConfigMap 不存在，创建新的
-                LOG.info("ConfigMap %s not found in namespace %s. Creating new one.", configmap_name, namespace_name)
+                print(f"ConfigMap {configmap_name} not found in namespace {namespace_name}. Creating new one.")
                 # 创建新的 ConfigMap 对象
                 new_configmap = client.V1ConfigMap(
                     api_version="v1",
@@ -920,7 +918,7 @@ class K8sCommonOperate:
                         namespace=namespace_name,
                         body=new_configmap
                     )
-                    LOG.info("Successfully created new ConfigMap %s with the SSH public key.", configmap_name)
+                    print("Successfully created new ConfigMap %s with the SSH public key.", configmap_name)
                 except ApiException as e:
                     raise e
             else:
