@@ -1,5 +1,9 @@
 from keystoneauth1 import loading as ks_loading
 from oslo_config import cfg
+import inspect
+import datetime
+
+import os  # Move import to module level
 
 _ADAPTER_VERSION_OPTS = ('version', 'min_version', 'max_version')
 
@@ -64,3 +68,38 @@ def register_ksa_opts(conf, group, default_service_type, include_auth=True,
     # Have to register dummies for the version-related opts we removed
     # for name in _ADAPTER_VERSION_OPTS:
     #     conf.register_opt(_dummy_opt(name), group=group)
+
+
+def dingo_print(*args, **kwargs):
+    """
+    Enhanced print function that adds timestamp, file name, line number, and function name information.
+    
+    This function works exactly like the built-in print function but prefixes
+    the output with the current timestamp, file name, line number, and function name.
+    
+    Args:
+        *args: Variable length argument list (same as print)
+        **kwargs: Arbitrary keyword arguments (same as print)
+    """
+    # Get caller information (optimize: get frame once and extract all info)
+    frame = inspect.currentframe().f_back
+    line_number = frame.f_lineno
+    function_name = frame.f_code.co_name
+    file_name = os.path.basename(frame.f_code.co_filename)
+    
+    # Get current timestamp (optimize: use faster formatting)
+    now = datetime.datetime.now()
+    current_time = f"{now.year}-{now.month:02d}-{now.day:02d} {now.hour:02d}:{now.minute:02d}:{now.second:02d}"
+    
+    # Create prefix with timestamp, file name, line number, and function name
+    prefix = f"[{current_time}] [{file_name}] [Line {line_number}] [{function_name}]"
+    
+    # If there are arguments to print
+    if args:
+        # Convert first argument to string and prepend prefix
+        first_arg = f"{prefix} {args[0]}"
+        # Call original print with modified first argument and remaining args
+        print(first_arg, *args[1:], **kwargs)
+    else:
+        # If no arguments, just print the prefix
+        print(prefix, **kwargs)
