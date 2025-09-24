@@ -1,15 +1,13 @@
 # ai实例的service层
-import asyncio
 import copy
 import json
-import os
 import random
 import re
 import string
 import time
 import uuid
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor
+from func_timeout import func_timeout, FunctionTimedOut
 from functools import wraps, partial
 
 from tenacity import retry, stop_after_attempt, retry_if_exception, wait_fixed
@@ -44,9 +42,6 @@ from dingo_command.services.custom_exception import Fail
 
 k8s_common_operate = K8sCommonOperate()
 harbor_service = HarborService()
-
-# 全局线程池
-task_executor = ThreadPoolExecutor(max_workers=min(32, (os.cpu_count() or 1) * 6))
 
 def _create_retry_decorator():
     """创建支持智能重试判断的装饰器工厂"""
@@ -262,7 +257,7 @@ class AiInstanceService:
                     nerdctl_api_pod = self._get_nerdctl_api_pod(core_k8s_client, sts_pod_info['node_name'])
 
                     # 立即返回响应，后续操作异步执行
-                    queuedThreadPool.submit(partial(self.sava_ai_instance_to_imag_async_task_in_thread,
+                    queuedThreadPool.submit(partial(self.async_save_cci_to_image,
                                                     id, core_k8s_client, nerdctl_api_pod,
                                                     sts_pod_info['container_id'], image_registry, harbor_username, harbor_password, image_name, image_tag
                                                     ))
@@ -282,62 +277,34 @@ class AiInstanceService:
             # 记录日志并重新抛出异常
             print(f"Failed to start save operation for instance {id}: {str(e)}")
             raise Fail(f"Failed to start save operation: {str(e)}")
-    def sava_ai_instance_to_imag_async_task_in_thread(self, id, core_k8s_client, nerdctl_api_pod,
-                                    clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag):
-        """
-        同步包装函数：在线程内创建事件循环并运行异步任务。
-        """
-        # 为当前线程创建一个新的事件循环
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)  # 设置为当前线程的循环
-        try:
-            # 在新的循环中运行异步任务直到完成
-            loop.run_until_complete(self.sava_ai_instance_to_image_task( id, core_k8s_client, nerdctl_api_pod,
-                                    clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag))
-        except Exception as e:
-            print(f"Error in async task wrapper for instance {id}: {e}")
-        finally:
-            # 无论成功与否，最后都关闭循环
-            loop.close()
 
 
-    async def sava_ai_instance_to_image_task(self, id, core_k8s_client, nerdctl_api_pod,
-                                    clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag):
+    def stop_save_cci_to_image_task(self, id):
         """启动后台检查任务"""
         try:
-            await self.async_save_cci_to_image(
-                id, core_k8s_client, nerdctl_api_pod,
-                clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag
-            )
-        except Exception as e:
-            print(
-                f"{time.strftime('%Y-%m-%d %H:%M:%S')} Background task sava_ai_instance_to_image_task failed or timeout for instance {id}: {str(e)}")
-        finally:
-            self.get_or_set_update_k8s_node_resource_redis()
-            print(
-                f"{time.strftime('%Y-%m-%d %H:%M:%S')} Task for instance {id} has finished (success, timeout, or error), thread should be released.")
+            start_time = datetime.now()
+            while True:
+                try:
+                    # 使用 func_timeout 来执行方法，设置单次执行超时时间为15秒
+                    func_timeout(CCI_TIME_OUT_DEFAULT, self.stop_cci_to_save_image, args=(id,))
+                except FunctionTimedOut:
+                    print(f"stop_cci_to_save_image single execution timed out after {CCI_TIME_OUT_DEFAULT} seconds!")
+                    # 可以选择跳出循环或进行其他处理
+                    break
+                except Exception as e:
+                    # 处理其他可能的异常
+                    print(f"stop_cci_to_save_image ai instance {id} execution occurred an error occurred: {e}")
+                    break
 
-    def stop_save_to_image_async_task_in_thread(self, id):
-        """
-        同步包装函数：在线程内创建事件循环并运行异步任务。
-        """
-        # 为当前线程创建一个新的事件循环
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)  # 设置为当前线程的循环
-        try:
-            # 在新的循环中运行异步任务直到完成
-            loop.run_until_complete(self.stop_save_cci_to_image_task(id))
-        except Exception as e:
-            print(f"Error in async task wrapper for instance {id}: {e}")
-        finally:
-            # 无论成功与否，最后都关闭循环
-            loop.close()
+                # 方法执行完后，立即检查总耗时（包括方法执行时间和之前所有循环的耗时）
+                current_total_seconds = (datetime.now() - start_time).total_seconds()
+                if current_total_seconds >= CCI_TIME_OUT_DEFAULT:
+                    error_msg = f"stop save cci to image exec timeout {CCI_TIME_OUT_DEFAULT}"
+                    raise Exception(error_msg)  # 建议使用具体的异常类型，而非 raise error_msg
 
-    async def stop_save_cci_to_image_task(self, id):
-        """启动后台检查任务"""
-        try:
-            # 执行检查任务
-            await asyncio.wait_for(self.stop_cci_to_save_image(id), timeout = CCI_TIME_OUT_DEFAULT)
+                # 如果还没超时，则等待5秒
+                time.sleep(5)
+
         except Exception as e:
             print(
                 f"{time.strftime('%Y-%m-%d %H:%M:%S')} Background task stop_save_cci_to_image_task failed or timeout for instance {id}: {str(e)}")
@@ -448,7 +415,7 @@ class AiInstanceService:
             'namespace': nerdctl_api_pod[0].metadata.namespace
         }
 
-    async def async_save_cci_to_image(self, id, core_k8s_client, nerdctl_api_pod,
+    def async_save_cci_to_image(self, id, core_k8s_client, nerdctl_api_pod,
                                       clean_container_id, harbor_address, harbor_username, harbor_password, image_name, image_tag):
         """
         实际的异步保存操作（受分布式锁保护）
@@ -460,18 +427,18 @@ class AiInstanceService:
             redis_connection.set_redis_by_key_with_expire(redis_key, f"{image_name}:{image_tag}", CCI_TIME_OUT_DEFAULT)
 
             # 1. Harbor登录
-            await self._harbor_login(core_k8s_client, nerdctl_api_pod, harbor_address, harbor_username, harbor_password)
+            self._harbor_login(core_k8s_client, nerdctl_api_pod, harbor_address, harbor_username, harbor_password)
 
             # 2. Commit操作
             image = f"{harbor_address}/{image_name}:{image_tag}"
             print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] commit image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] start")
-            await self._commit_container(
+            self._commit_container(
                 core_k8s_client, nerdctl_api_pod, clean_container_id, image
             )
             print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] commit image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] finished, start push image")
 
             # 3. Push操作
-            await self._push_image(core_k8s_client, nerdctl_api_pod, image)
+            self._push_image(core_k8s_client, nerdctl_api_pod, image)
             # 判断是否完成标识
             redis_connection.set_redis_by_key_with_expire(redis_key + "_flag", "true", 10)
             print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} ai instance[{id}] push image container ID: {clean_container_id}, image_tag: [{image_name}:{image_tag}] finished")
@@ -480,12 +447,12 @@ class AiInstanceService:
             raise e
         finally:
             redis_connection.delete_redis_key(redis_key)
+            self.get_or_set_update_k8s_node_resource_redis()
 
-    async def _execute_k8s_command(self, core_k8s_client, pod_name, namespace, command):
+    def _execute_k8s_command(self, core_k8s_client, pod_name, namespace, command):
         """异步执行K8s命令的辅助函数"""
-        loop = asyncio.get_event_loop()
-
-        def _sync_execute():
+        resp = None
+        try:
             resp = stream(
                 core_k8s_client.connect_get_namespaced_pod_exec,
                 pod_name,
@@ -512,10 +479,16 @@ class AiInstanceService:
 
             resp.close()
             return resp.returncode, "\n".join(output)
+        except Exception as  e:
+            print(f"exec k8s pod {namespace}/{pod_name}  command {command} failed: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            if resp is not None:
+                resp.close() #
 
-        return await loop.run_in_executor(None, _sync_execute)
 
-    async def _harbor_login(self, core_k8s_client, nerdctl_api_pod, harbor_address, harbor_username, harbor_password):
+    def _harbor_login(self, core_k8s_client, nerdctl_api_pod, harbor_address, harbor_username, harbor_password):
         """Harbor登录"""
         harbor_login_command = [
             'nerdctl', 'login',
@@ -525,7 +498,7 @@ class AiInstanceService:
             '--insecure-registry'
         ]
 
-        returncode, output = await self._execute_k8s_command(
+        returncode, output = self._execute_k8s_command(
             core_k8s_client, nerdctl_api_pod['name'], nerdctl_api_pod['namespace'], harbor_login_command
         )
 
@@ -534,14 +507,14 @@ class AiInstanceService:
             raise Exception(f"Harbor login returncode:{returncode}, failed: {output}")
 
     @_create_retry_decorator()  # 应用装饰器工厂
-    async def _commit_container(self, core_k8s_client, nerdctl_api_pod, clean_container_id, image_name):
+    def _commit_container(self, core_k8s_client, nerdctl_api_pod, clean_container_id, image_name):
         """执行commit操作"""
         commit_command = [
             'nerdctl', 'commit', clean_container_id, image_name,
             '--pause=true', '--namespace', 'k8s.io', '--insecure-registry', '--compression=zstd'
         ]
         print(f"commit_command: {commit_command}")
-        returncode, output = await self._execute_k8s_command(
+        returncode, output = self._execute_k8s_command(
             core_k8s_client, nerdctl_api_pod['name'], nerdctl_api_pod['namespace'], commit_command
         )
 
@@ -556,14 +529,14 @@ class AiInstanceService:
         return output
 
     @_create_retry_decorator()
-    async def _push_image(self, core_k8s_client, nerdctl_api_pod, image_name):
+    def _push_image(self, core_k8s_client, nerdctl_api_pod, image_name):
         """执行push操作"""
         push_command = [
             'nerdctl', 'push', image_name,
             '--namespace', 'k8s.io', '--insecure-registry'
         ]
         print(f"push_command: {push_command}")
-        returncode, output = await self._execute_k8s_command(
+        returncode, output = self._execute_k8s_command(
             core_k8s_client, nerdctl_api_pod['name'], nerdctl_api_pod['namespace'], push_command
         )
 
@@ -736,7 +709,7 @@ class AiInstanceService:
         AiInstanceSQL.save_ai_instance_info(ai_instance_db)
 
         # 启异步任务执行创建k8s资源及检查pod状态, 提交任务时使用这个包装函数
-        queuedThreadPool.submit(partial(self.async_create_cci_task, ai_instance, ai_instance_db, namespace_name, resource_config))
+        queuedThreadPool.submit(partial(self.create_check_pod_status_node_name_and_update_db, ai_instance, ai_instance_db, namespace_name, resource_config))
 
         return [self.assemble_ai_instance_return_result(ai_instance_db)]
 
@@ -1200,7 +1173,7 @@ class AiInstanceService:
 
             # 启异步任务检查pod状态, 提交任务时使用这个包装函数
             queuedThreadPool.submit(
-                partial(self.start_cci_async_check_task_in_thread,  core_k8s_client,
+                partial(self.start_cci_check_pod_status_node_name_and_update_db,  core_k8s_client,
                                                        ai_instance_info_db.id,
                                                        f"{ai_instance_info_db.instance_real_name}-0",
                                                        CCI_NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id))
@@ -1339,7 +1312,7 @@ class AiInstanceService:
             print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} start to stop ai instance[{id}]")
 
             # 异步保存镜像
-            queuedThreadPool.submit(partial(self.stop_save_to_image_async_task_in_thread, id))
+            queuedThreadPool.submit(partial(self.stop_save_cci_to_image_task, id))
 
             return {"id": id, "status": AiInstanceStatus.STOPPING.name}
         except Fail:
@@ -1401,7 +1374,7 @@ class AiInstanceService:
         finally:
             self.get_or_set_update_k8s_node_resource_redis()
 
-    async def stop_cci_to_save_image(self, id, image_tag ="latest"):
+    def stop_cci_to_save_image(self, id, image_tag ="latest"):
         """
         异步保存AI实例为镜像（立即返回，实际操作在后台执行）
         """
@@ -1419,7 +1392,7 @@ class AiInstanceService:
                 core_k8s_client, sts_pod_info = self._get_k8s_sts_pod_info(ai_instance_info_db)
                 nerdctl_api_pod = self._get_nerdctl_api_pod(core_k8s_client, sts_pod_info['node_name'])
                 # 异步保存关机镜像
-                await self.async_save_cci_to_image(
+                self.async_save_cci_to_image(
                     id, core_k8s_client, nerdctl_api_pod,
                     sts_pod_info['container_id'], harbor_address, harbor_username, harbor_password,
                     image_name, image_tag
@@ -1519,58 +1492,7 @@ class AiInstanceService:
             traceback.print_exc()
             raise e
 
-    def async_create_cci_task(self, *args, **kwargs):
-        """
-           一个同步包装函数，用于在线程内运行异步函数。
-           """
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            return loop.run_until_complete(self.create_check_pod_status_node_name_and_update_db(*args, **kwargs))
-        except Exception as e:
-            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} create cci - args: {args}, kwargs: {kwargs} fail:{e}")
-            import traceback
-            traceback.print_exc()
-        finally:
-            if loop:
-                loop.close()
-
-    def start_cci_async_check_task_in_thread(self, *args, **kwargs):
-        """
-           一个同步包装函数，用于在线程内运行异步函数。
-           """
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            return loop.run_until_complete(self.start_cci_async_check_task(*args, **kwargs))
-        except Exception as e:
-            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} start cci - args: {args}, kwargs: {kwargs} fail:{e}")
-            import traceback
-            traceback.print_exc()
-        finally:
-            if loop:
-                loop.close()
-
-    async def start_cci_async_check_task(self, core_k8s_client, instance_id, pod_name, namespace):
-        """启动后台检查任务"""
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            # 执行检查任务
-            await asyncio.wait_for(
-                self.start_cci_check_pod_status_node_name_and_update_db(
-                    core_k8s_client,
-                    instance_id,
-                    pod_name,
-                    namespace
-                ), timeout=CCI_TIME_OUT_DEFAULT
-            )
-        except Exception as e:
-            print(f"cci {instance_id} start_cci_async_check_task task failed: {str(e)}")
-            import traceback
-            traceback.print_exc()
-
-    async def start_cci_check_pod_status_node_name_and_update_db(self,
+    def start_cci_check_pod_status_node_name_and_update_db(self,
                                                        core_k8s_client,
                                                        instance_id: str,
                                                        pod_name: str,
@@ -1624,13 +1546,13 @@ class AiInstanceService:
 
 
                     # 等待3秒后再次检查
-                    await asyncio.sleep(3)
+                    time.sleep(5)
 
                 except Exception as e:
                     import traceback
                     traceback.print_exc()
 
-                    await asyncio.sleep(3)
+                    time.sleep(5)
 
             # 5. 检查是否超时
             if (datetime.now() - start_time).total_seconds() >= timeout:
@@ -1642,6 +1564,7 @@ class AiInstanceService:
                 self.set_k8s_sts_replica_by_instance_id(instance_id, 0)
 
                 self.get_or_set_update_k8s_node_resource_redis()
+                return
 
         except Exception as e:
             print(f"检查Pod状态时发生未预期错误: {e}")
@@ -1651,7 +1574,7 @@ class AiInstanceService:
             return
 
 
-    async def create_check_pod_status_node_name_and_update_db(self, ai_instance, ai_instance_db, namespace_name, resource_config, timeout: int = CCI_TIME_OUT_DEFAULT):
+    def create_check_pod_status_node_name_and_update_db(self, ai_instance, ai_instance_db, namespace_name, resource_config, timeout: int = CCI_TIME_OUT_DEFAULT):
         """
         异步检查 Pod 状态并更新数据库
 
@@ -1705,13 +1628,13 @@ class AiInstanceService:
 
 
                     # 等待3秒后再次检查
-                    await asyncio.sleep(3)
+                    time.sleep(5)
 
                 except Exception as e:
                     import traceback
                     traceback.print_exc()
 
-                    await asyncio.sleep(3)
+                    time.sleep(5)
 
             # 5. 检查是否超时
             if (datetime.now() - start_time).total_seconds() >= timeout:

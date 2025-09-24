@@ -158,6 +158,7 @@ def process_namespace_resources(namespace: str, instances: list, core_client, ap
 
     # 4. 处理缺失资源: 数据库中存在但K8s中不存在的记录
     handle_missing_resources(
+        apps_client,
         sts_names=sts_map.keys(),
         db_instances=instances
     )
@@ -178,7 +179,13 @@ def handle_orphan_resources(sts_names, svc_names, db_instance_map, namespace, co
     orphans_svcs = filter_svc_names(svc_names, db_instance_names)
     print(f"{datatime_util.get_now_time()}======handle_orphan_resources======orphans:{orphans}")
     for name in orphans:
+        ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_real_name(name)
+        if ai_instance_info_db:
+            print(f"{datatime_util.get_now_time()} cleanup orphan resource ai instance in k8s, and exist in db: {namespace}/{name}. no delete")
+            continue
+
         print(f"{datatime_util.get_now_time()} cleanup orphan resource ai instance in k8s, but not exist in db: {namespace}/{name}")
+
         cleanup_cci_resources(apps_client, core_client, networking_client, name, namespace)
 
         # 清理关机镜像
@@ -243,7 +250,7 @@ def filter_svc_names(svc_names, db_instance_names):
 def cleanup_cci_resources(apps_client, core_client, networking_client, name, namespace):
     try:
         # 删除StatefulSet
-        print(f"delete k8s sts: namespace = {namespace}, name = {name}")
+        print(f"{datatime_util.get_now_time()} delete k8s sts: namespace = {namespace}, name = {name}")
         k8s_common_operate.delete_sts_by_name(
             apps_client,
             real_sts_name=name,
@@ -282,12 +289,18 @@ def cleanup_cci_resources(apps_client, core_client, networking_client, name, nam
     except Exception as e:
         print(f"{datatime_util.get_now_time()} delete ingress rule {namespace}/{name} failed: {str(e)}")
 
-
-def handle_missing_resources(sts_names, db_instances):
+def handle_missing_resources(apps_client, sts_names, db_instances):
     """处理数据库中存在但K8s中不存在的记录"""
     sts_name_set = set(sts_names)
     for instance in db_instances:
         if instance.instance_real_name not in sts_name_set:
+            try:
+                k8s_common_operate.read_sts_info(apps_client, instance.instance_real_name, CCI_NAMESPACE_PREFIX + instance.instance_tenant_id)
+                print(f"{datatime_util.get_now_time()} ai instance {instance.id} exist in db. no delete k8s resource")
+                continue
+            except Exception as e:
+                print(f"{datatime_util.get_now_time()} sts {instance.instance_real_name} not found in k8s:{e}")
+
             # 当前时间
             current_time = datetime.now()
             # cci实例的最新操作时间
@@ -322,10 +335,10 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
 
         # 处理副本数为0的情况 关机状态
         if sts and sts.spec.replicas == 0:
-            print(f"Sts[{real_name}]副本数为0，检查Pod[{real_name}-0]是否存在")
+            print(f"Sts[{real_name}]replicas 0， check Pod[{real_name}-0] if exist")
             # 如果副本数为0，但Pod不存在，说明是关机状态，更新状态为STOPPED
             if not pod:
-                print(f"Not Found Pod[{real_name}-0], Sts[{real_name}]副本数为0，更新状态为STOPPED")
+                print(f"Not Found Pod[{real_name}-0], Sts[{real_name}] replicas0，change status to STOPPED")
                 ai_instance_db = AiInstanceSQL.get_ai_instance_info_by_real_name(real_name)
                 if ai_instance_db:
                     if (ai_instance_db.instance_status == AiInstanceStatus.READY.name
@@ -355,7 +368,7 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
         # 开机或创建
         if sts and sts.spec.replicas == 1:
             # POD不存在，则实例处于开机中状态
-            if not pod and instance_db.instance_status.lower() == AiInstanceStatus.STARTING.name.lower():
+            if not pod and (instance_db.instance_status.lower() == AiInstanceStatus.STARTING.name.lower() or instance_db.instance_status.lower() == AiInstanceStatus.STOPPED.name.lower()):
                 continue
 
         # 确定实例状态
@@ -427,12 +440,12 @@ def extract_image_info(sts):
     primary_container = sts.spec.template.spec.containers[0]
     return primary_container.image
 
-def determine_instance_real_status(sts, pod):
-    """根据K8s资源确定实例状态"""
-    if not pod:
-        return "STOPPED"
-
-    if sts.status.replicas == 0:
-        return "STOPPED"
-
-    return pod.status.phase
+# def determine_instance_real_status(sts, pod):
+#     """根据K8s资源确定实例状态"""
+#     if not pod:
+#         return "STOPPED"
+#
+#     if sts.status.replicas == 0:
+#         return "STOPPED"
+#
+#     return pod.status.phase
