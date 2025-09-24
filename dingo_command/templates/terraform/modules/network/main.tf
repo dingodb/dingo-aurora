@@ -71,6 +71,9 @@ resource "openstack_networking_router_interface_v2" "cluster_interface" {
   provisioner "local-exec" {
     command = "sed -i 's/external_openstack_lbaas_subnet_id: .*/external_openstack_lbaas_subnet_id: ${var.admin_subnet_id}/' ${var.group_vars_path}/all/openstack.yml"
   }
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "openstack_networking_router_interface_v2" "cluster_interface_n" {
