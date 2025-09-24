@@ -725,6 +725,9 @@ class K8sClient:
                 for term in search_terms:
                     if '=' in term:
                         key, value = term.split('=', 1)
+
+
+                        
                         if key == "name":
                             for item in items_dict:
                                 if value.lower() in item.get('metadata', {}).get('name', '').lower():

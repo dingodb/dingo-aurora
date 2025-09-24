@@ -1,6 +1,8 @@
 import os
 import tempfile
 import traceback
+import paramiko
+import socket
 from typing import List
 from fastapi import Query
 from fastapi.responses import FileResponse
@@ -232,11 +234,23 @@ async def add_node(cluster_id:str, servers: List[ExistingNodeObject], token: str
                     raise HTTPException(status_code=400, detail=f"Server {server.id} not found")
                 if not server_detail.get("addresses"):
                     raise HTTPException(status_code=400, detail=f"Server {server.id} has no networks")
-                # 检查网络是否匹配
-                # 获取第一个网络的地址信息
-                first_network = list(server_detail["addresses"].keys())
-                if not any(net == result.network_config.admin_network_name for net in first_network):
-                    raise HTTPException(status_code=400, detail=f"Server {server.id} network does not match the cluster network")
+                network_addresses = server_detail["addresses"][result.network_config.admin_network_name]
+                if not network_addresses:
+                    raise HTTPException(status_code=400, detail=f"Server {server.id} has no IP in the matching network")
+                node_ip = network_addresses[0]["addr"]  # 假设 IP 在 "addr" 字段
+                
+                # 测试 SSH 连通性
+                ssh_client = paramiko.SSHClient()
+                ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+                if server.private_key:
+                    # 使用私钥
+                    private_key = paramiko.RSAKey.from_private_key_file(server.private_key)
+                    ssh_client.connect(node_ip, username=server.user, pkey=private_key, timeout=10)
+                else:
+                    # 使用密码
+                    ssh_client.connect(node_ip, username=server.user, password=server.password, timeout=10)
+                ssh_client.close()
                 server_details.append(server_detail)
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"Failed to get server {server.id} details: {str(e)}")

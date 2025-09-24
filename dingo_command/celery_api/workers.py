@@ -679,7 +679,7 @@ def update_ansible_status(task_info, event, task_name, host, task_status):
             update_task_state(task_info)
 
 
-def scale_kubernetes(cluster_id, scale_nodes, task_id, netns: str = None, app_credential_id: str=None, app_credential_secret: str=None,app_credential_name: str=None):
+def scale_kubernetes(cluster_id, scale_nodes, task_id, netns: str = None, app_credential_id: str=None, app_credential_secret: str=None,app_credential_name: str=None, download_enabled: bool=False):
     """使用Ansible扩容K8s集群"""
     try:
         runtime_task = Taskinfo(task_id=task_id, cluster_id=cluster_id, state="progress",
@@ -701,6 +701,10 @@ def scale_kubernetes(cluster_id, scale_nodes, task_id, netns: str = None, app_cr
         else:
             private_key_content = None
         #print
+        if download_enabled:
+            target_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), "group_vars", "k8s_cluster")
+            cluster_file = os.path.join(target_dir, "k8s-cluster.yml")
+            subprocess.run(["sed", "-i", "s/skip_download:.*/skip_download: true/", cluster_file], check=True)
         thread, runner = run_playbook(playbook_file, host_file, ansible_dir,
                                       ssh_key=private_key_content, limit=scale_nodes,  netns=netns)
         # 处理并打印事件日志
@@ -756,18 +760,7 @@ def scale_kubernetes(cluster_id, scale_nodes, task_id, netns: str = None, app_cr
                                                    msg=TaskService.TaskScaleNodeMessage.scale_join_cluster.name)
                             TaskSQL.insert(worker_task)
                             task_info = worker_task
-                    # if task_name == scale_install_calico and host is not None and task_status != "failed":
-                    #     if not worker_bool:
-                    #         worker_bool = True
-                    #         worker_task.end_time = datetime.fromtimestamp(datetime.now().timestamp())
-                    #         worker_task.state = "success"
-                    #         worker_task.detail = TaskService.TaskDetail.scale_join_cluster.value
-                    #         update_task_state(worker_task)
-                    #         component_task = Taskinfo(task_id=task_id, cluster_id=cluster.id, state="progress",
-                    #                                   start_time=datetime.fromtimestamp(datetime.now().timestamp()),
-                    #                                   msg=TaskService.TaskScaleNodeMessage.scale_install_calico.name)
-                    #         TaskSQL.insert(component_task)
-                    #         task_info = component_task
+
             time.sleep(0.01)
             continue
         log_file = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), "ansible_scale.log")
@@ -2431,7 +2424,7 @@ def add_existing_nodes(self, cluster_id, server_details):
             os.environ['CURRENT_CLUSTER_DIR']=cluster_dir
             scale_nodes = ",".join([name.split(":")[0] for name in node_names])
             print("准备扩容的节点: %s", scale_nodes)
-            ansible_result = scale_kubernetes(cluster_id, scale_nodes, task_id)
+            ansible_result = scale_kubernetes(cluster_id, scale_nodes, task_id, download_enabled=True)
             
             if not ansible_result[0]:
                 raise Exception(f"Ansible 扩容失败: {ansible_result[1]}")
