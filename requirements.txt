@@ -252,3 +252,4 @@ websockets==13.1
 redis==5.2.1
 dbutils==3.1.0
 reportlab==4.4.1
+func_timeout==4.3.5
