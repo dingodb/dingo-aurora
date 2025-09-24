@@ -28,7 +28,7 @@ from dingo_command.db.engines.mysql import get_engine, get_session
 
 from dingo_command.services.custom_exception import Fail
 from dingo_command.services.system import SystemService
-from dingo_command.common.nova_client import NovaClient
+from dingo_command.common.nova_client import nova_client
 from dingo_command.services import CONF
 
 LOG = log.getLogger(__name__)
@@ -169,11 +169,10 @@ class NodeService:
         node_db_list, instance_db_list = [], []
         extra_dict = json.loads(cluster_info.extra)
         node_index = int(extra_dict.get("node_count", 0)) + 1
-        nova_client = NovaClient()
         for idx, node in enumerate(cluster.node_config):
             if node.role == "worker" and node.type == "vm":
-                cpu, gpu, mem, disk = self.get_flavor_info(nova_client, node.flavor_id)
-                operation_system = self.get_image_info(nova_client, node.image)
+                cpu, gpu, mem, disk = nova_client.get_flavor_info(node.flavor_id)
+                operation_system = nova_client.get_image_info(node.image)
                 for i in range(node.count):
                     forward_rules_new = []
                     if forward_rules:
@@ -256,8 +255,8 @@ class NodeService:
                     node_db_list.append(node_db)
                     node_index = node_index + 1
             if node.role == "worker" and node.type == "baremetal":
-                cpu, gpu, mem, disk = self.get_flavor_info(nova_client, node.flavor_id)
-                operation_system = self.get_image_info(nova_client, node.image)
+                cpu, gpu, mem, disk = nova_client.get_flavor_info(node.flavor_id)
+                operation_system = nova_client.get_image_info(node.image)
                 for i in range(node.count):
                     forward_rules_new = []
                     if forward_rules:
@@ -751,33 +750,7 @@ class NodeService:
         instance_list_json = json.dumps(instance_list_dict)
         return instance_list, instance_list_json
 
-    def get_flavor_info(self, nova_client, flavor_id):
-        flavor = nova_client.nova_get_flavor(flavor_id)
-        cpu = 0
-        gpu = 0
-        mem = 0
-        disk = 0
-        if flavor is not None:
-            cpu = flavor['vcpus']
-            mem = flavor['ram']
-            disk = flavor['disk']
-            if "extra_specs" in flavor and "pci_passthrough:alias" in flavor["extra_specs"]:
-                pci_alias = flavor['extra_specs']['pci_passthrough:alias']
-                if ':' in pci_alias:
-                    gpu = pci_alias.split(':')[1]
-        return int(cpu), int(gpu), int(mem), int(disk)
 
-    def get_image_info(self, nova_client, image_id):
-        operation_system = ""
-        image = nova_client.glance_get_image(image_id)
-        if image is not None:
-            if image.get("os_version"):
-                operation_system = image.get("os_version")
-            elif image.get("os_distro"):
-                operation_system = image.get("os_distro")
-            else:
-                operation_system = image.get("name")
-        return operation_system
 
     def get_dict_node_instance_info(self, node_err_list):
         node_info_list = []

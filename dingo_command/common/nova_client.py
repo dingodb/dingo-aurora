@@ -197,3 +197,90 @@ class NovaClient:
         controller_binaries = {"nova-scheduler", "nova-conductor", "nova-api"}
         controller_hosts = set(s['host'] for s in services if s['binary'] in controller_binaries)
         return list(controller_hosts)
+
+    def get_flavor_info(self, flavor_id):
+        """获取 flavor 的详细信息"""
+        try:
+            flavor = self.nova_get_flavor(flavor_id)
+
+            if not flavor:
+                return 0, 0, 0, 0
+
+            cpu = flavor.get('vcpus', 0)
+            mem = flavor.get('ram', 0)
+            disk = flavor.get('disk', 0)
+            gpu = self._extract_gpu_count_from_flavor(flavor)
+
+            return int(cpu), int(gpu), int(mem), int(disk)
+
+        except Exception as e:
+            print(f"获取 flavor {flavor_id} 信息失败: {e}")
+            return 0, 0, 0, 0
+
+    def _extract_gpu_count_from_flavor(self, flavor):
+        """从 flavor 中提取 GPU 数量"""
+        gpu_count = 0
+
+        if not flavor or "extra_specs" not in flavor:
+            return gpu_count
+
+        extra_specs = flavor["extra_specs"]
+
+        # 方法1: 通过 pci_passthrough:alias 获取VM中的GPU（优先级最高）
+        if "pci_passthrough:alias" in extra_specs:
+            pci_alias = extra_specs["pci_passthrough:alias"]
+            try:
+                if ':' in pci_alias:
+                    gpu_str = pci_alias.split(':')[1]
+                    gpu_count = int(gpu_str)
+                    return gpu_count
+            except (ValueError, IndexError):
+                pass
+
+        # 方法2: 通过 resources:GPU 获取裸金属的GPU数量
+        # 格式: h200:8 -> 8
+        if "resources:GPU" in extra_specs:
+            gpu_value = extra_specs["resources:GPU"]
+            try:
+                if ':' in str(gpu_value):
+                    gpu_count = int(str(gpu_value).split(':')[1])
+                    return gpu_count
+                else:
+                    # 直接是数字的情况
+                    gpu_count = 8
+                    return gpu_count
+            except (ValueError, IndexError, TypeError):
+                pass
+
+    def get_image_info(self, image_id):
+        """获取镜像信息"""
+        try:
+            image = self.glance_get_image(image_id)
+
+            if not image:
+                return ""
+
+            # 按优先级获取操作系统信息
+            if image.get("os_version"):
+                return image.get("os_version")
+            elif image.get("os_distro"):
+                return image.get("os_distro")
+            else:
+                return image.get("name", "")
+
+        except Exception as e:
+            print(f"获取镜像 {image_id} 信息失败: {e}")
+            return ""
+
+# 全局 NovaClient 实例
+_global_nova_client = None
+
+def get_global_nova_client():
+    """获取全局 NovaClient 实例（单例模式）"""
+    global _global_nova_client
+    if _global_nova_client is None:
+        _global_nova_client = NovaClient()
+    return _global_nova_client
+
+# 创建全局单例实例
+nova_client = get_global_nova_client()
