@@ -889,43 +889,58 @@ class K8sCommonOperate:
                     configmap_data = {
                         "authorized_keys": "\n".join(key_content_list)
                     }
-        try:
-            # 如果有就修改
-            configmap = core_v1.read_namespaced_config_map(configmap_name, namespace_name)
-            configmap.data["authorized_keys"] = configmap_data["authorized_keys"]
-            core_v1.patch_namespaced_config_map(
-                name=configmap_name,
-                namespace=namespace_name,
-                body=configmap
-            )
-        except ApiException as e:
-            if e.status == 404:
-                # ConfigMap 不存在，创建新的
-                print(f"ConfigMap {configmap_name} not found in namespace {namespace_name}. Creating new one.")
-                # 创建新的 ConfigMap 对象
-                new_configmap = client.V1ConfigMap(
-                    api_version="v1",
-                    kind="ConfigMap",
-                    metadata=client.V1ObjectMeta(
+
+        max_retries = 3
+        retry_delay = 1
+        for attempt in range(max_retries):
+            try:
+                # 如果有就修改
+                configmap = core_v1.read_namespaced_config_map(configmap_name, namespace_name)
+                if configmap.data.get("authorized_keys", "") != configmap_data["authorized_keys"]:
+                    configmap.data["authorized_keys"] = configmap_data["authorized_keys"]
+                    core_v1.patch_namespaced_config_map(
                         name=configmap_name,
-                        namespace=namespace_name
-                    ),
-                    data=configmap_data
-                )
-                try:
-                    # 创建 ConfigMap
-                    core_v1.create_namespaced_config_map(
                         namespace=namespace_name,
-                        body=new_configmap
+                        body=configmap
                     )
-                    print("Successfully created new ConfigMap %s with the SSH public key.", configmap_name)
-                except ApiException as e:
+            except ApiException as e:
+                if e.status == 404:
+                    # ConfigMap 不存在，创建新的
+                    print(f"ConfigMap {configmap_name} not found in namespace {namespace_name}. Creating new one.")
+                    # 创建新的 ConfigMap 对象
+                    new_configmap = client.V1ConfigMap(
+                        api_version="v1",
+                        kind="ConfigMap",
+                        metadata=client.V1ObjectMeta(
+                            name=configmap_name,
+                            namespace=namespace_name
+                        ),
+                        data=configmap_data
+                    )
+                    try:
+                        # 创建 ConfigMap
+                        core_v1.create_namespaced_config_map(
+                            namespace=namespace_name,
+                            body=new_configmap
+                        )
+                        print(f"Successfully created new ConfigMap {configmap_name} with the SSH public key.")
+                    except ApiException as e:
+                        if e.status == 409:
+                            time.sleep(retry_delay)
+                            continue
+                        else:
+                            raise e
+                elif e.status == 409:
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay)
+                        continue
+                    else:
+                        raise e
+                else:
+                    # 其他 API 错误
+                    import traceback
+                    traceback.print_exc()
                     raise e
-            else:
-                # 其他 API 错误
-                import traceback
-                traceback.print_exc()
-                raise e
 
     def create_docker_registry_secret(self, core_v1: client.CoreV1Api, namespace, secret_name, docker_server, docker_username,
                                       docker_password, docker_email=None):
