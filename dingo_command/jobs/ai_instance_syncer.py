@@ -61,7 +61,7 @@ def fetch_ai_instance_info():
                         print(f"k8s cluster id empty")
                         continue
 
-                    print(f"处理K8s集群: ID={k8s_kubeconfig_db.k8s_id}, Type={k8s_kubeconfig_db.k8s_type}")
+                    print(f"{datatime_util.get_now_time()} 处理K8s集群: ID={k8s_kubeconfig_db.k8s_id}, Type={k8s_kubeconfig_db.k8s_type}")
                     try:
                         # 获取client
                         core_k8s_client = get_k8s_core_client(k8s_kubeconfig_db.k8s_id)
@@ -84,7 +84,7 @@ def fetch_ai_instance_info():
                 end_time = datatime_util.get_now_time()
                 print(f"同步容器实例结束时间: {datatime_util.get_now_time()}, 耗时：{(end_time - start_time).total_seconds()}秒")
         else:
-            print("get dingo_command_ai_instance_lock redis lock failed")
+            print(f"{datatime_util.get_now_time()} get dingo_command_ai_instance_lock redis lock failed")
 
 
 def sync_single_k8s_cluster(k8s_id: str, core_client, apps_client, networking_client):
@@ -114,15 +114,15 @@ def sync_single_k8s_cluster(k8s_id: str, core_client, apps_client, networking_cl
                     networking_client=networking_client
                 )
             except Exception as e:
-                print(f"处理namespace[{namespace}]失败: {str(e)}")
+                print(f"{datatime_util.get_now_time()} handle namespace {namespace} failed: {str(e)}")
 
     except Exception as e:
-        print(f"同步K8s集群[{k8s_id}]资源失败: {str(e)}")
+        print(f"{datatime_util.get_now_time()} sync K8s {k8s_id} resource failed: {str(e)}")
 
 
 def process_namespace_resources(namespace: str, instances: list, core_client, apps_client, networking_client):
     """处理单个namespace下的资源"""
-    print(f"开始处理namespace: {namespace}")
+    print(f"{datatime_util.get_now_time()} start handle namespace: {namespace}")
 
     # 1. 获取K8s中的资源
     sts_list = k8s_common_operate.list_sts_by_label(
@@ -143,7 +143,7 @@ def process_namespace_resources(namespace: str, instances: list, core_client, ap
     pod_map = {pod.metadata.name: pod for pod in pod_list}
     svc_map = {svc.metadata.name: svc for svc in svc_list}
     db_instance_map = {inst.instance_real_name: inst for inst in instances}
-    print(f"---------sts_map:{sts_map.keys()}, pod_map:{pod_map.keys()}, db_instance_map:{db_instance_map.keys()}")
+    print(f"{datatime_util.get_now_time()}---------sts_map:{sts_map.keys()}, pod_map:{pod_map.keys()}, db_instance_map:{db_instance_map.keys()}")
 
     # 3. 处理孤儿资源: K8s中存在但数据库不存在的资源
     handle_orphan_resources(
@@ -176,32 +176,34 @@ def handle_orphan_resources(sts_names, svc_names, db_instance_map, namespace, co
     orphans = set(sts_names) - set(db_instance_names)
     # cci的ns中多余的svc
     orphans_svcs = filter_svc_names(svc_names, db_instance_names)
-    print(f"======handle_orphan_resources======orphans:{orphans}")
+    print(f"{datatime_util.get_now_time()}======handle_orphan_resources======orphans:{orphans}")
     for name in orphans:
-        print(f"清理孤儿资源: {namespace}/{name}")
+        print(f"{datatime_util.get_now_time()} cleanup orphan resource ai instance in k8s, but not exist in db: {namespace}/{name}")
         cleanup_cci_resources(apps_client, core_client, networking_client, name, namespace)
+
         # 清理关机镜像
         ai_instance_db = AiInstanceSQL.get_ai_instance_info_by_real_name(name)
-
         try:
            # 删除镜像库中保存的关机镜像
            k8s_configs_db = AiInstanceSQL.get_k8s_configs_info_by_k8s_id(ai_instance_db.instance_k8s_id)
            harbor_address = k8s_configs_db.harbor_address
            image_name = SAVE_TO_IMAGE_CCI_PREFIX + ai_instance_db.id
            project_name = ai_instance_service.extract_project_and_image_name(harbor_address)
-           print(f"ai instance [{ai_instance_db.id}] project_name:{project_name}, image_name:{image_name}")
            harbor_service.delete_custom_projects_images(project_name, image_name)
+           print(f"{datatime_util.get_now_time()} delete ai instance {ai_instance_db.id} stop-image project_image:{project_name}/{image_name} succeed")
         except Exception as e:
-             print(f"删除容器实例[{ai_instance_db.id}]的关机镜像失败: {e}")
+             print(f"{datatime_util.get_now_time()} delete ai instance {ai_instance_db.id} stop-image {project_name}/{image_name} failed: {e}")
 
         try:
             # 删除 jupyter configMap
             k8s_common_operate.delete_configmap(core_client, namespace, ai_instance_db.instance_real_name)
+            print(f"{datatime_util.get_now_time()} delete ai instance {ai_instance_db.id} jupyter configMap {namespace}/{ai_instance_db.instance_real_name} succeed")
         except Exception as e:
-            print(f"删除jupyter configMap资源[{namespace}/{ai_instance_db.instance_real_name}]失败: {str(e)}")
+            print(f"{datatime_util.get_now_time()} delete jupyter configMap {namespace}/{ai_instance_db.instance_real_name} 失败: {str(e)}")
 
         # 删除metallb的默认端口
         AiInstanceSQL.delete_ai_instance_ports_info_by_instance_id(ai_instance_db.id)
+        print(f"{datatime_util.get_now_time()} delete ai instance {ai_instance_db.id} ports succeed")
 
     # 遍历删除多余的svc （出现过sts删除了，但是svc未删除的情况）
     for svc_name in orphans_svcs:
@@ -213,7 +215,7 @@ def handle_orphan_resources(sts_names, svc_names, db_instance_map, namespace, co
                 namespace=namespace
             )
         except Exception as e:
-            print(f"删除 default svc资源[{namespace}/{svc_name}]失败: {str(e)}")
+            print(f"{datatime_util.get_now_time()} delete default svc {namespace}/{svc_name} failed: {e}")
 
 
 def filter_svc_names(svc_names, db_instance_names):
@@ -241,14 +243,14 @@ def filter_svc_names(svc_names, db_instance_names):
 def cleanup_cci_resources(apps_client, core_client, networking_client, name, namespace):
     try:
         # 删除StatefulSet
-        print(f"删除底层k8s的sts资源: namespace = {namespace}, name = {name}")
+        print(f"delete k8s sts: namespace = {namespace}, name = {name}")
         k8s_common_operate.delete_sts_by_name(
             apps_client,
             real_sts_name=name,
             namespace=namespace
         )
     except Exception as e:
-        print(f"删除sts资源[{namespace}/{name}]失败: {str(e)}")
+        print(f"delete sts {namespace}/{name} failed: {str(e)}")
 
     try:
         # 删除default Service
@@ -258,7 +260,7 @@ def cleanup_cci_resources(apps_client, core_client, networking_client, name, nam
             namespace=namespace
         )
     except Exception as e:
-        print(f"删除 default svc资源[{namespace}/{name}]失败: {str(e)}")
+        print(f"delete default svc {namespace}/{name} failed: {str(e)}")
 
     try:
         # 删除 jupyter Service
@@ -268,7 +270,7 @@ def cleanup_cci_resources(apps_client, core_client, networking_client, name, nam
             namespace=namespace
         )
     except Exception as e:
-        print(f"删除 jupyter svc资源[{namespace}/{name}]失败: {str(e)}")
+        print(f"{datatime_util.get_now_time()} delete jupyter svc {namespace}/{name} failed: {str(e)}")
 
     try:
         # 删除 ingress rule
@@ -278,7 +280,7 @@ def cleanup_cci_resources(apps_client, core_client, networking_client, name, nam
             namespace=namespace
         )
     except Exception as e:
-        print(f"删除ingress资源[{namespace}/{name}]失败: {str(e)}")
+        print(f"{datatime_util.get_now_time()} delete ingress rule {namespace}/{name} failed: {str(e)}")
 
 
 def handle_missing_resources(sts_names, db_instances):
@@ -296,18 +298,17 @@ def handle_missing_resources(sts_names, db_instances):
             operator_time_difference = current_time - cci_latest_operator_time
             # 差值在一小时之内的不允许清理
             if operator_time_difference <= timedelta(hours=1):
-                print(f"current instance in 1 hour cannot be delete, id:{instance.id} ")
+                print(f"{datatime_util.get_now_time()} current instance in 1 hour cannot be delete, id:{instance.id} ")
                 continue
 
-            print(f"delete not exists instance, instance_real_name: {instance.instance_real_name}")
             try:
-                print(f"delete db instance resource: id = {instance.id}, name = {instance.instance_name}, real_name = {instance.instance_real_name}")
                 # 清理实例
                 AiInstanceSQL.delete_ai_instance_info_by_id(instance.id)
                 # 清理端口数据
                 AiInstanceSQL.delete_ai_instance_ports_info_by_instance_id(instance.id)
+                print(f"{datatime_util.get_now_time()} delete db not exist ai instance and ports: id = {instance.id}, name = {instance.instance_name}, real_name = {instance.instance_real_name} succeed ")
             except Exception as e:
-                print(f"delete cci instance id [{instance.id}]: {str(e)}")
+                print(f"{datatime_util.get_now_time()} delete db not exist instance id {instance.id}: {e}")
 
 
 def sync_instance_info(sts_map, pod_map, db_instance_map):

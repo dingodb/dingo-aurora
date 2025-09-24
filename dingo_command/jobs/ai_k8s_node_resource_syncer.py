@@ -231,7 +231,6 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
             'gpu_pod_count': 0,
             'cpu_slot_used': 0
         }
-        gpu_model = None
 
         # 汇总所有POD的资源使用量
         for pod in pods:
@@ -250,7 +249,6 @@ def sync_pod_resource_usage(k8s_id, node_name, core_client):
                     for key, value in container.resources.limits.items():
                         if 'nvidia.com/' in key.lower():
                             total_usage['gpu'] += int(value)
-                            gpu_model = key
                             total_usage['gpu_pod_count'] += 1
                             # CPU
                             if 'cpu' in container.resources.limits:
