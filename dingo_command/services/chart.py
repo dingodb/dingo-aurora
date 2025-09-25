@@ -635,7 +635,8 @@ class ChartService:
                         task = asyncio.create_task(
                             asyncio.wait_for(
                                 client.get_artifacts(project_name=project_name,
-                                                     repository_name=repository.name.split(f"{project_name}/")[1],
+                                                     repository_name=repository.name.split(f"{project_name}/",
+                                                                                           1)[1],
                                                      with_label=True), timeout=util.repo_time_out)
                         )
                         artifact_tasks.append(task)
