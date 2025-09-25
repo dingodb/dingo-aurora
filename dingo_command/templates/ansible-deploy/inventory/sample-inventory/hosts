@@ -175,7 +175,10 @@ def query_database_nodes(args):
                         'name': 'database-managed'
                     }
                 }
-                
+                #如果private_key不为空，则添加到metadata中
+                if node.private_key and node.private_key != "":
+                    attrs['ansible_ssh_private_key_file'] = os.path.join(cluster_dir, f"{node.name}_private_key.pem")
+
                 # 生成组信息
                 groups = [
                     f'cluster_{node.cluster_name}',

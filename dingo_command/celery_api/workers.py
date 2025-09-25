@@ -2296,7 +2296,7 @@ def delete_instance(self, openstack_info, instance):
         raise ValueError(e)
 
 @celery_app.task(bind=True,time_limit=TASK_TIMEOUT, soft_time_limit=SOFT_TASK_TIMEOUT)
-def add_existing_nodes(self, cluster_id, server_details):
+def add_existing_nodes(self, cluster_id, server_details, user, private_key: str = "", password: str = ""):
     """将已有的虚拟机节点添加到K8s集群中"""
     try:
         task_id = str(self.request.id)
@@ -2345,6 +2345,7 @@ def add_existing_nodes(self, cluster_id, server_details):
                     user_pass = passwd_script.group(1)
                 if user_pass:
                     username, password = user_pass.split(":", 1)
+                
                 # 创建Node记录
                 node_db = NodeInfo()
                 node_db.id = str(uuid.uuid4())
@@ -2395,6 +2396,12 @@ def add_existing_nodes(self, cluster_id, server_details):
                     "instance": instance_db,
                     "server_detail": server_detail
                 })
+                if private_key and private_key != "":
+                    #将私钥写入临时文件
+                    private_key_path = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster_id), f"{node_db.name}_private_key.pem")
+                    with open(private_key_path, "w") as f:
+                        f.write(private_key)
+                    os.chmod(private_key_path, 0o600)
         
         # 6. 准备Ansible inventory
         cluster_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", cluster_id)
