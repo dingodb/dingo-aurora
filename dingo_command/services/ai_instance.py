@@ -282,29 +282,17 @@ class AiInstanceService:
     def stop_save_cci_to_image_task(self, id):
         """启动后台检查任务"""
         try:
-            start_time = datetime.now()
-            while True:
-                try:
-                    # 使用 func_timeout 来执行方法，设置单次执行超时时间为1800秒
-                    func_timeout(CCI_TIME_OUT_DEFAULT, self.stop_cci_to_save_image, args=(id,))
-                except FunctionTimedOut:
-                    dingo_print(f"ai instance {id} execution stop to save image, timed out after {CCI_TIME_OUT_DEFAULT} seconds!")
-                    # 可以选择跳出循环或进行其他处理
-                    raise Exception(f"ai instance {id} execution stop to save image, timed out after {CCI_TIME_OUT_DEFAULT} seconds!")
-                except Exception as e:
-                    # 处理其他可能的异常
-                    dingo_print(f"ai instance {id} execution stop to save image,  occurred an error: {e}")
-                    raise Exception(f"ai instance {id} execution stop to save image,  occurred an error: {e}")
-
-                # 方法执行完后，立即检查总耗时（包括方法执行时间和之前所有循环的耗时）
-                current_total_seconds = (datetime.now() - start_time).total_seconds()
-                if current_total_seconds >= CCI_TIME_OUT_DEFAULT:
-                    error_msg = f"stop save cci {id} to image exec timeout {CCI_TIME_OUT_DEFAULT}"
-                    raise Exception(error_msg)  # 建议使用具体的异常类型，而非 raise error_msg
-
-                # 如果还没超时，则等待5秒
-                time.sleep(5)
-
+            try:
+                # 使用 func_timeout 来执行方法，设置单次执行超时时间为1800秒
+                func_timeout(CCI_TIME_OUT_DEFAULT, self.stop_cci_to_save_image, args=(id,))
+            except FunctionTimedOut:
+                dingo_print(f"ai instance {id} execution stop to save image, timed out after {CCI_TIME_OUT_DEFAULT} seconds!")
+                # 可以选择跳出循环或进行其他处理
+                raise Exception(f"ai instance {id} execution stop to save image, timed out after {CCI_TIME_OUT_DEFAULT} seconds!")
+            except Exception as e:
+                # 处理其他可能的异常
+                dingo_print(f"ai instance {id} execution stop to save image,  occurred an error: {e}")
+                raise Exception(f"ai instance {id} execution stop to save image,  occurred an error: {e}")
         except Exception as e:
             dingo_print(
                 f"background task stop_save_cci_to_image_task failed or timeout for instance {id}: {str(e)}")
@@ -1254,7 +1242,7 @@ class AiInstanceService:
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if not ai_instance_info_db:
                 raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
-            dingo_print(f" start to stop ai instance[{id}]")
+            dingo_print(f"stop ai instance[{id}]")
 
             # 异步保存镜像
             queuedThreadPool.submit(partial(self.stop_save_cci_to_image_task, id))
@@ -1324,7 +1312,7 @@ class AiInstanceService:
         异步保存AI实例为镜像（立即返回，实际操作在后台执行）
         """
         try:
-            dingo_print(f"start time  stop cci {id}")
+            dingo_print(f"stop_cci_to_save_image stop cci {id}")
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if ai_instance_info_db:
                 # 标记为 STOPPED
