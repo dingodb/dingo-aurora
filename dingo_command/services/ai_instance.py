@@ -1697,6 +1697,7 @@ class AiInstanceService:
             self._create_cci_k8s_resources(ai_instance, ai_instance_db, namespace_name, resource_config)
             
             start_time = datetime.now()
+            loop_count = 0
             while (datetime.now() - start_time).total_seconds() < timeout:
                 try:
                     # 查询 Pod 状态
@@ -1729,6 +1730,8 @@ class AiInstanceService:
                         # 明确退出函数
                         return
 
+                    loop_count += 1
+                    dingo_print(f"check Pod {pod_name} status loop {loop_count}, current status: {pod_real_status}, node name:{current_node_name}")
                     # 等待5秒后再次检查
                     time.sleep(5)
 
