@@ -322,8 +322,12 @@ def handle_missing_resources(apps_client, sts_names, db_instances):
             operator_time_difference = current_time - cci_latest_operator_time
             # 差值在一小时之内的不允许清理
             if operator_time_difference <= timedelta(hours=1):
-                dingo_print(f"{datatime_util.get_now_time()} current instance in 1 hour cannot be delete, id:{instance.id} ")
-                continue
+                # if is instance.instance_status in [AiInstanceStatus.DELETING.name], do delete ai instance in db
+                if instance.instance_status in [AiInstanceStatus.DELETING.name]:
+                    dingo_print(f"{datatime_util.get_now_time()} ai instance {instance.id} in deleting status, delete it in db")
+                else:
+                    dingo_print(f"{datatime_util.get_now_time()} current instance in 1 hour cannot be delete, id:{instance.id}, instance_status:{instance.instance_status} ")
+                    continue
 
             try:
                 # 清理实例
