@@ -4,12 +4,15 @@ import json
 from apscheduler.schedulers.blocking import BlockingScheduler
 from pymemcache.client.base import Client
 from apscheduler.schedulers.background import BackgroundScheduler
+
+from dingo_command.common.common import dingo_print
 from dingo_command.services.bigscreens import BigScreensService, region_name
 from dingo_command.services.bigscreenshovel import BigScreenShovelService
 from dingo_command.jobs import CONF
 from datetime import datetime, timedelta
 import time
 
+from dingo_command.services.redis_connection import RedisLock, redis_connection
 from dingo_command.services.syn_bigscreens import BigScreenSyncService
 from dingo_command.services.websocket_service import websocket_service
 
@@ -27,11 +30,24 @@ def start():
     scheduler.start()
 
 def auto_add_shovel():
-    print(f"Starting add shovel at {time.strftime('%Y-%m-%d %H:%M:%S')}")
-    BigScreenShovelService.add_shovel()
+    dingo_print(f"Starting add shovel at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    # 通过redis拿锁，保证服务启动的时候只一个服务才能够拿到锁去管理shovel
+    try:
+        # 只允许dingo_command连接到redis是master的节点拿到锁去
+        with RedisLock(redis_connection.redis_connection, "dingo_command_big_screen_shovel_lock", expire_time=300) as lock:
+            if lock:
+                dingo_print(f"add shovel info after get redis lock")
+                BigScreenShovelService.add_shovel()
+                dingo_print(f"add shovel info successfully")
+            else:
+                dingo_print(f"get redis lock failed")
+    except Exception as e:
+        dingo_print(e)
+        dingo_print(f"can not add shovel at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+
 
 def auto_connect_queue():
-    print(f"Starting connect big screen mq queue at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    dingo_print(f"Starting connect big screen mq queue at {time.strftime('%Y-%m-%d %H:%M:%S')}")
     BigScreenSyncService.connect_mq_queue()
 
 def fetch_bigscreen_metrics():
@@ -39,7 +55,7 @@ def fetch_bigscreen_metrics():
     memcached_client = Client((CONF.bigscreen.memcached_address))
     metrics_dict = {}
     metrics_dict_with_prefix = {}
-    print(f'client: {memcached_client}')
+    dingo_print(f'client: {memcached_client}')
     for metric in metrics:
         metric_name = metric.name
         metric_value = BigScreensService.get_bigscreen_metrics(metric_name, None, sync=True)
@@ -57,4 +73,4 @@ def fetch_bigscreen_metrics():
         # 发送websocket更新消息
         websocket_service.send_websocket_message('big_screen', json.dumps({"refresh_flag": True}))
     except Exception as e:
-        print(f"缓存写入失败: {e}")
+        dingo_print(f"缓存写入失败: {e}")
