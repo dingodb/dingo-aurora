@@ -385,6 +385,7 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
         if sts and sts.spec.replicas == 1:
             # POD不存在，则实例处于开机中状态
             if not pod and (instance_db.instance_status.lower() == AiInstanceStatus.STARTING.name.lower() or instance_db.instance_status.lower() == AiInstanceStatus.STOPPED.name.lower()):
+                dingo_print(f"Sts[{real_name}]replicas 1, but Pod[{real_name}-0] not exist, instance status in starting or stopped, no update status")
                 continue
 
         # 确定实例状态
