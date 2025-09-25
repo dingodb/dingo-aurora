@@ -346,7 +346,7 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
 
         # 处理副本数为0的情况 关机状态
         if sts and sts.spec.replicas == 0:
-            dingo_print(f"Sts[{real_name}]replicas 0， check Pod[{real_name}-0] if exist")
+            dingo_print(f"Sts[{real_name}]replicas == 0, check Pod[{real_name}-0] if exist")
             # 如果副本数为0，但Pod不存在，说明是关机状态，更新状态为STOPPED
             if not pod:
                 dingo_print(f"Not Found Pod[{real_name}-0], Sts[{real_name}] replicas 0, change status to STOPPED")
@@ -376,10 +376,10 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
                         AiInstanceSQL.update_ai_instance_info(ai_instance_db)
             else:
                 # 关机过程中，Pod还存在
-                dingo_print(f"Sts[{real_name}]副本数为0，但Pod[{real_name}-0]存在，关机过程中，不更新状态")
+                dingo_print(f"Sts[{real_name}]replicas 0, but Pod[{real_name}-0] exist, in stopping process, no update status")
             continue
 
-        dingo_print(f"Sts[{real_name}]副本数不为0，进行别的状态处理")
+        dingo_print(f"Sts[{real_name}] replicas not 0, check other status")
 
         # 开机或创建
         if sts and sts.spec.replicas == 1:
@@ -395,14 +395,47 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
         instance_status = AiInstanceService.map_k8s_to_db_status(k8s_status, instance_db.instance_status)
         dingo_print(f"ai instance [{real_name}] k8s_status: {k8s_status}, instance_status: {instance_status}, error_msg: {error_msg}")
 
+        # if instance_db.instance_status != instance_status, we need to check if instance_db.update_time is within 2 minutes, else we do not update it
+        if instance_db.instance_status != instance_status:
+            # 重新获取最新的数据库记录以确保数据一致性
+            ai_instance_db = AiInstanceSQL.get_ai_instance_info_by_real_name(real_name)
+            if not ai_instance_db:
+                dingo_print(f"not found ai instance by real_name:{real_name}")
+                continue
+                
+            dingo_print(f"ai instance {ai_instance_db.id} check instance_status:{ai_instance_db.instance_status}")
+            
+            # 检查状态是否真的需要更新（使用最新的数据库记录）
+            if ai_instance_db.instance_status != instance_status:
+                dingo_print(f"ai instance {ai_instance_db.id} change instance_status:{ai_instance_db.instance_status} to {instance_status}")
+                
+                # 检查更新时间是否存在，避免 None 异常
+                if ai_instance_db.update_time is None:
+                    dingo_print(f"ai instance {ai_instance_db.id} update_time is None, allow update")
+                else:
+                    # 最新操作时间与当前时间的差值
+                    time_difference = datetime.now() - ai_instance_db.update_time
+                    # 差值在2min之内的不允许更新
+                    if time_difference <= timedelta(minutes=2):
+                        dingo_print(f"ai instance {ai_instance_db.id} change instance_status:{ai_instance_db.instance_status} to {instance_status}, time_diff:{time_difference}, update_time: {ai_instance_db.update_time}, <= 2min, no update")
+                        continue
+                    else:
+                        dingo_print(f"ai instance {ai_instance_db.id} change instance_status:{ai_instance_db.instance_status} to {instance_status}, time_diff:{time_difference}, update_time: {ai_instance_db.update_time}, > 2min, update")
+            else:
+                dingo_print(f"ai instance {ai_instance_db.id} instance_status:{ai_instance_db.instance_status} no change, will update other info")
+            
+            # 使用最新的数据库记录
+            instance_db = ai_instance_db
+            dingo_print(f"ai instance [{real_name}] final decide instance_status: {instance_status}, use latest db info to update")
+
         # 更新数据库记录
         try:
-            # 准备更新数据
+            # 准备更新数据，处理可能的空值
             update_data = {
                 'instance_real_status': k8s_status,
                 'instance_status': instance_status,
                 # 'instance_image': k8s_image,
-                'instance_node_name': pod.spec.node_name
+                'instance_node_name': pod.spec.node_name if pod and pod.spec and pod.spec.node_name else None
             }
 
             if pod_details:
