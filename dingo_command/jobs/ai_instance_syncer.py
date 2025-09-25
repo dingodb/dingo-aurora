@@ -7,7 +7,7 @@ from dingo_command.common.k8s_common_operate import K8sCommonOperate
 from dingo_command.common.common import dingo_print
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
 from dingo_command.services.redis_connection import RedisLock, redis_connection
-from dingo_command.utils.constant import CCI_NAMESPACE_PREFIX,  DEV_TOOL_JUPYTER, SAVE_TO_IMAGE_CCI_PREFIX
+from dingo_command.utils.constant import CCI_NAMESPACE_PREFIX,  DEV_TOOL_JUPYTER, SAVE_TO_IMAGE_CCI_PREFIX, CCI_SYNC_K8S_NODE_REDIS_KEY
 from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client
 from dingo_command.services.ai_instance import AiInstanceService, harbor_service
 from dingo_command.utils import datetime as datatime_util
@@ -41,9 +41,21 @@ def auto_actions_tick():
 # 将任务注册到 scheduler（与 fetch_ai_instance_info 同步周期一样或独立间隔）
 def start():
     ai_instance_scheduler.add_job(fetch_ai_instance_info, 'interval', seconds=300, next_run_time=datetime.now(), misfire_grace_time=150,coalesce=True, max_instances=1)
+    ai_instance_scheduler.add_job(fetch_ai_instance_info_4operate, 'interval', seconds=5, next_run_time=datetime.now(), misfire_grace_time=150,coalesce=True, max_instances=1)
     # ai_instance_scheduler.add_job(auto_actions_tick, 'interval', seconds=60*30, next_run_time=datetime.now())
     ai_instance_scheduler.start()
 
+def fetch_ai_instance_info_4operate():
+    try:
+        # 从redis查看最近10s内是否存在key
+        operator_flag = redis_connection.get_redis_by_key(CCI_SYNC_K8S_NODE_REDIS_KEY)
+        # 没有key 啥都不做
+        if not operator_flag:
+            return
+        # 同步
+        fetch_ai_instance_info()
+    except Exception as e:
+        dingo_print(e)
 
 def fetch_ai_instance_info():
     with RedisLock(redis_connection.redis_master_connection, "dingo_command_ai_instance_lock", expire_time=120) as lock:

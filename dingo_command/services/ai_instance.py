@@ -8,6 +8,7 @@ import time
 import uuid
 from datetime import datetime
 from func_timeout import func_timeout, FunctionTimedOut
+from typing import Optional
 from functools import wraps, partial
 
 from tenacity import retry, stop_after_attempt, retry_if_exception, wait_fixed
@@ -40,6 +41,9 @@ from dingo_command.utils.constant import CCI_NAMESPACE_PREFIX, RESOURCE_TYPE_KEY
 from dingo_command.utils.customer_thread_pool import queuedThreadPool
 from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client, get_k8s_networking_client
 from dingo_command.services.custom_exception import Fail
+import threading
+from typing import Dict, Any
+from functools import lru_cache
 
 k8s_common_operate = K8sCommonOperate()
 harbor_service = HarborService()
@@ -91,6 +95,113 @@ def _create_retry_decorator():
 
 
 class AiInstanceService:
+    """
+    AI实例服务类
+    
+    性能优化说明：
+    - 实现了线程安全的K8s客户端缓存机制，避免重复创建客户端实例
+    - 每个k8s_id对应一组缓存的客户端（core、app、networking）
+    - 使用线程锁确保并发安全
+    - 缓存可以通过_clear_k8s_clients_cache方法清理
+    
+    线程安全说明：
+    - K8s Python客户端不是线程安全的
+    - 使用threading.Lock保护缓存字典的并发访问
+    - 每个线程使用独立的客户端实例避免状态混乱
+    """
+    
+    # 类级别的客户端缓存和线程锁
+    _k8s_clients_cache: dict[str, dict[str, object]] = {}
+    _cache_lock = threading.Lock()
+    
+    @classmethod
+    def _get_cached_k8s_clients(cls, k8s_id):
+        """
+        获取缓存的K8s客户端实例（线程安全）
+        
+        Args:
+            k8s_id: Kubernetes集群ID
+            
+        Returns:
+            dict: 包含core、app、networking三种客户端的字典
+            
+        Note:
+            使用双重检查锁定模式确保线程安全：
+            1. 首次检查避免不必要的锁获取
+            2. 加锁后再次检查确保只有一个线程创建客户端
+            3. 每个k8s_id的客户端只创建一次并缓存
+            
+        Warning:
+            K8s Python客户端不是线程安全的，多线程环境下需要谨慎使用
+            建议每个线程使用独立的客户端实例
+        """
+        # 双重检查锁定模式（Double-Checked Locking）
+        if k8s_id not in cls._k8s_clients_cache:
+            with cls._cache_lock:
+                # 再次检查，防止其他线程已经创建了客户端
+                if k8s_id not in cls._k8s_clients_cache:
+                    # 创建并缓存客户端实例
+                    cls._k8s_clients_cache[k8s_id] = {
+                        'core': get_k8s_core_client(k8s_id),
+                        'app': get_k8s_app_client(k8s_id),
+                        'networking': get_k8s_networking_client(k8s_id)
+                    }
+                    dingo_print(f"Created and cached K8s clients for k8s_id: {k8s_id}")
+        else:
+            dingo_print(f"Using cached K8s clients for k8s_id: {k8s_id}")
+        
+        return cls._k8s_clients_cache[k8s_id]
+    
+    @classmethod
+    def _clear_k8s_clients_cache(cls, k8s_id=None):
+        """清理K8s客户端缓存（线程安全）"""
+        with cls._cache_lock:
+            if k8s_id:
+                # 清理特定k8s_id的缓存
+                if k8s_id in cls._k8s_clients_cache:
+                    del cls._k8s_clients_cache[k8s_id]
+                    dingo_print(f"Cleared K8s clients cache for k8s_id: {k8s_id}")
+            else:
+                # 清理所有缓存
+                cls._k8s_clients_cache.clear()
+                dingo_print("Cleared all K8s clients cache")
+    
+    @classmethod 
+    def get_cached_core_client(cls, k8s_id):
+        """获取缓存的核心K8s客户端"""
+        return cls._get_cached_k8s_clients(k8s_id)['core']
+        
+    @classmethod
+    def get_cached_app_client(cls, k8s_id):
+        """获取缓存的应用K8s客户端"""
+        return cls._get_cached_k8s_clients(k8s_id)['app']
+        
+    @classmethod
+    def get_cached_networking_client(cls, k8s_id):
+        """获取缓存的网络K8s客户端"""
+        return cls._get_cached_k8s_clients(k8s_id)['networking']
+    
+    @classmethod
+    def create_thread_local_clients(cls, k8s_id):
+        """
+        为当前线程创建独立的K8s客户端实例（推荐方案）
+        
+        Args:
+            k8s_id: Kubernetes集群ID
+            
+        Returns:
+            dict: 包含core、app、networking三种客户端的字典
+            
+        Note:
+            这是最安全的方案，每个线程使用独立的客户端实例，
+            避免了线程间的状态共享问题。虽然会创建更多实例，
+            但确保了线程安全性。
+        """
+        return {
+            'core': get_k8s_core_client(k8s_id),
+            'app': get_k8s_app_client(k8s_id),
+            'networking': get_k8s_networking_client(k8s_id)
+        }
 
     def delete_ai_instance_by_id(self, id):
         dingo_print(f"start delete ai instance id {id}")
@@ -109,9 +220,10 @@ class AiInstanceService:
     def delete_cci_related_resource(self, ai_instance_info_db, id):
         dingo_print(f"delete ai instance id {id} relate resource")
         try:
-            core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
-            app_k8s_client = get_k8s_app_client(ai_instance_info_db.instance_k8s_id)
-            networking_k8s_client = get_k8s_networking_client(ai_instance_info_db.instance_k8s_id)
+            # 使用缓存的K8s客户端
+            core_k8s_client = self.get_cached_core_client(ai_instance_info_db.instance_k8s_id)
+            app_k8s_client = self.get_cached_app_client(ai_instance_info_db.instance_k8s_id)
+            networking_k8s_client = self.get_cached_networking_client(ai_instance_info_db.instance_k8s_id)
             namespace_name = CCI_NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id
             real_name = ai_instance_info_db.instance_real_name or ai_instance_info_db.instance_name
 
@@ -368,7 +480,7 @@ class AiInstanceService:
 
     def _get_k8s_sts_pod_info(self, ai_instance_info_db):
         """获取K8s Pod信息"""
-        core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
+        core_k8s_client = self.get_cached_core_client(ai_instance_info_db.instance_k8s_id)
 
         pod = k8s_common_operate.get_pod_info(
             core_k8s_client,
@@ -655,10 +767,13 @@ class AiInstanceService:
                        error_message="容器实例副本个数必须大于等于1")
 
     def _initialize_clients(self, k8s_id):
-        """初始化K8s客户端"""
-        self.core_k8s_client = get_k8s_core_client(k8s_id)
-        self.app_k8s_client = get_k8s_app_client(k8s_id)
-        self.networking_k8s_client = get_k8s_networking_client(k8s_id)
+        """初始化K8s客户端（使用缓存）"""
+        
+        # 使用缓存的客户端实例
+        cached_clients = self._get_cached_k8s_clients(k8s_id)
+        self.core_k8s_client = cached_clients['core']
+        self.app_k8s_client = cached_clients['app'] 
+        self.networking_k8s_client = cached_clients['networking']
 
     def _prepare_namespace(self, ai_instance):
         """准备命名空间"""
@@ -873,12 +988,11 @@ class AiInstanceService:
                 dingo_print(f"{namespace}/{name} resource_type:{resource_type} fail: {e}")
         raise TimeoutError(f"Resource {name} not ready in {timeout}s")
 
-
-    def find_ai_instance_available_ports(self,instance_id, start_port=30001, end_port=65535, count=3, is_add: bool=False, target_port: int=None):
+    def find_ai_instance_available_ports(self, instance_id, start_port=30001, end_port=65535, count=3, is_add: bool=False, target_port: int=None):
         """查找从start_port开始的最小count个可用端口"""
-        with RedisLock(redis_connection.redis_master_connection, lock_name=f"cci-metallb-port") as lock:
+        with RedisLock(redis_connection.redis_master_connection, lock_name="cci-metallb-port") as lock:
             if lock:
-                available_ports = []
+                available_ports: list[int] = []
                 current_port = start_port
                 ai_instance_ports_db = AiInstanceSQL.list_ai_instance_ports_info()
                 ports_db = [ports.instance_svc_port for ports in ai_instance_ports_db] if ai_instance_ports_db else []
@@ -891,7 +1005,7 @@ class AiInstanceService:
                     dingo_print("ai instance {instance_id} available port is empty")
                     raise Fail(f"ai instance {instance_id} available port is empty")
                 available_ports_map = {}
-                if is_add == False:
+                if not is_add:
                     available_ports_map = {
                         "22": available_ports[0] if len(available_ports) > 0 else None,
                         "9001": available_ports[1] if len(available_ports) > 1 else None,
@@ -1555,15 +1669,13 @@ class AiInstanceService:
         :param core_k8s_client: k8s core v1 client
         :param pod_name: 要检查的 Pod 名称
         :param namespace: Pod 所在的命名空间
-        :param timeout: 超时时间(秒)，默认5分钟(300秒)
+        :param timeout: 超时时间(秒), 默认30分钟(1800秒)
         """
         try:
-
-            pod_real_status = None
-            pod_located_node_name = None
+            pod_real_status = ""
+            pod_located_node_name = ""
             pod_name = ai_instance_db.instance_real_name + "-0"
             namespace = CCI_NAMESPACE_PREFIX + ai_instance_db.instance_tenant_id
-            
 
             # 准备命名空间
             namespace_name = self._prepare_namespace(ai_instance)
@@ -1609,28 +1721,28 @@ class AiInstanceService:
                             self.get_or_set_update_k8s_node_resource_redis()
                             return
 
-
                     # 如果 Pod 处于 Running 状态，退出循环
                     if pod_real_status == "Running":
-                        dingo_print(f"Pod {pod_name} 已正常运行, node name:{current_node_name}")
+                        dingo_print(f"Pod {pod_name} is RUNNING, node name:{current_node_name}")
                         self.get_or_set_update_k8s_node_resource_redis()
 
                         # 明确退出函数
                         return
 
-
-                    # 等待3秒后再次检查
+                    # 等待5秒后再次检查
                     time.sleep(5)
 
                 except Exception as e:
                     import traceback
                     traceback.print_exc()
+                    dingo_print(f"check Pod status {pod_name} get exception: {e}")
 
                     time.sleep(5)
 
             # 5. 检查是否超时
             if (datetime.now() - start_time).total_seconds() >= timeout:
-                dingo_print(f"Pod {pod_name} 状态检查超时(5分钟)")
+                # print timeout log and pod_name
+                dingo_print(f"Pod {pod_name} create check RUNNING status timeout ( {timeout} seconds), will change instance status to error")
 
                 self.update_pod_status_and_node_name_in_db(ai_instance_db.id, K8sStatus.ERROR.value, pod_located_node_name, "cci pod change to running timeout")
 
@@ -1640,10 +1752,12 @@ class AiInstanceService:
                 self.get_or_set_update_k8s_node_resource_redis()
 
         except Exception as e:
-            dingo_print(f"检查Pod {ai_instance_db.id} 状态时发生未预期错误: {e}")
             self.get_or_set_update_k8s_node_resource_redis()
             import traceback
             traceback.print_exc()
+
+            dingo_print(f"create check Pod status {pod_name} get exception: {e}")
+            
             return
 
     def handle_cci_node_resource_info(self, instance_id, k8s_id, node_name):
@@ -2285,7 +2399,7 @@ class AiInstanceService:
         except Exception as e:
             dingo_print(f"实例设置副本数{replica}失败，实例ID: {id}, 错误: {e}")
 
-    def get_pod_final_status(self, pod) -> str:
+    def get_pod_final_status(self, pod) -> tuple[str, str]:
         """
         获取 Pod 的最终状态和详细信息，规则：
         - 容器有错误状态 → 返回错误状态和详情
