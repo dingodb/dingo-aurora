@@ -1943,7 +1943,7 @@ class AiInstanceService:
         try:
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if not ai_instance_info_db:
-                raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
+                raise Fail(f"ai instance[{id}] is not found", error_message=f" cci instance [{id} not found]")
 
             core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
             namespace_name = CCI_NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id
@@ -1989,7 +1989,8 @@ class AiInstanceService:
         try:
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if not ai_instance_info_db:
-                raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
+                dingo_print(f"list port by id {id} fail, not found")
+                raise Fail(f"ai instance[{id}] is not found", error_message=f" cci instance [{id} not found]")
 
             core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
             namespace_name = CCI_NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id
@@ -2015,17 +2016,20 @@ class AiInstanceService:
                 "data": ports
             }
         except Fail:
+            dingo_print(f"list port by id {id} fail")
             raise
         except Exception as e:
             import traceback
             traceback.print_exc()
+            dingo_print(f"list port by id {id} fail: {e}")
             raise e
 
     def get_jupyter_urls_by_id(self, id: str, service_port: int = 8888, target_port: int = 8888):
         try:
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if not ai_instance_info_db:
-                raise Fail(f"ai instance[{id}] is not found", error_message=f" 容器实例[{id}找不到]")
+                dingo_print(f"get jupyter urls by id {id} fail, not found")
+                raise Fail(f"ai instance[{id}] is not found", error_message=f" cci instance [{id} not found]")
 
             core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
             namespace_name = CCI_NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id
@@ -2034,7 +2038,7 @@ class AiInstanceService:
             # 确保 Service 暴露了 jupyter 端口，如没有则自动新增，并让 k8s 自动分配 nodePort
             svc = core_k8s_client.read_namespaced_service(name=service_name, namespace=namespace_name)
             if not svc or not svc.spec:
-                raise Fail("service invalid", error_message="Service 无效")
+                raise Fail("service invalid", error_message="Service Invalid")
 
             node_port_assigned = None
             if svc.spec.ports:
@@ -2096,22 +2100,26 @@ class AiInstanceService:
 
             return {"data": {"nodePort": node_port_assigned, "urls": urls}}
         except Fail:
+            dingo_print(f"get jupyter urls by id {id} fail")
             raise
         except Exception as e:
             import traceback
             traceback.print_exc()
+            dingo_print(f"get jupyter urls by id {id} fail: {e}")
             raise e
 
     def get_ssh_info_by_id(self, id: str):
         try:
             # id空
             if not id:
+                dingo_print("get ssh info by id fail, id is empty")
                 raise Fail("ai instance id can not be empty")
             # 查库
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             # 空
             if not ai_instance_info_db:
-                raise Fail(f"ai instance[{id}] is not found", error_message=f"容器实例[{id}找不到]")
+                dingo_print(f"get ssh info by id {id} fail, not found")
+                raise Fail(f"ai instance[{id}] is not found", error_message=f" cci instance [{id} not found]")
             # 连接k8s
             core_k8s_client = get_k8s_core_client(ai_instance_info_db.instance_k8s_id)
             namespace_name = CCI_NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id
@@ -2133,13 +2141,15 @@ class AiInstanceService:
             vip, _, _ = self._get_service_ip(ai_instance_info_db)
             # 组装返回参数
             if not vip or not ai_instance_info_db.ssh_root_password or not node_port_assigned:
-                raise Fail("ssh service invalid", error_message="SSH Service 无效")
+                raise Fail("ssh service invalid", error_message="SSH Service invalid")
             return {"data": {"password": ai_instance_info_db.ssh_root_password, "target_port": 22, "url": f"ssh root@{vip} -p {node_port_assigned}"}}
         except Fail:
+            dingo_print(f"get ssh info by id {id} fail")
             raise
         except Exception as e:
             import traceback
             traceback.print_exc()
+            dingo_print(f"get ssh info by id {id} fail: {e}")
             raise e
 
     #
