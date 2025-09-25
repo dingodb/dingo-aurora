@@ -80,9 +80,9 @@ class NovaClient:
         raise Exception(f"未找到服务: {service_type}")
 
     # 添加Nova服务调用
-    def nova_list_servers(self):
+    def nova_list_servers(self, params=None):
         endpoint = self.get_service_endpoint('compute')
-        response = self.session.get(f"{endpoint}/servers")
+        response = self.session.get(f"{endpoint}/servers", params=params)
         if response.status_code != 200:
             raise Exception(f"nova请求失败: {response.text}")
         return response.json()['servers']

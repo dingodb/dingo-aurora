@@ -21,7 +21,7 @@ from dingo_command.db.engines.mysql import get_session
 from dingo_command.common import neutron
 
 from dingo_command.services.custom_exception import Fail
-from dingo_command.common.nova_client import nova_client
+from dingo_command.common.nova_client import NovaClient
 
 from dingo_command.services import CONF
 
@@ -48,7 +48,7 @@ class InstanceService:
 
     # 查询资产列表
     @classmethod
-    def list_instances(cls, query_params, page, page_size, sort_keys, sort_dirs):
+    def list_instances(cls, query_params, page, page_size, sort_keys, sort_dirs,in_cluster:int=1, token: str = None):
         # 业务逻辑
         try:
             # 按照条件从数据库中查询数据
@@ -62,7 +62,22 @@ class InstanceService:
                 res['totalPages'] = ceil(count / int(page_size))
             res['total'] = count
             res['data'] = data
+
+            if in_cluster==1:
+                return res
+            # 查询OpenStack中的所有云主机
+            nova_client = NovaClient(token)
+            servers = nova_client.nova_list_servers()  # 假设这个方法返回服务器列表
+            db_server_ids = {instance.server_id for instance in data if instance.server_id}
+            resseervers = []
+            # 将OpenStack中的服务器与数据库中的实例进行比对
+            for server in servers:
+                if server['id'] not in db_server_ids:
+                    # 如果数据库中不存在该服务器，则可以进行相应处理
+                    resseervers.append(server)
+            res['data'] = resseervers
             return res
+
         except Exception as e:
             import traceback
             traceback.print_exc()
