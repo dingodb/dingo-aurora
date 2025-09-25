@@ -1062,6 +1062,7 @@ class AiInstanceService:
                 #                                ai_instance.instance_config.gpu_count),
                 scheduler_name = "volcano",
                 containers=[container],
+                enable_service_links=False,
                 termination_grace_period_seconds = 5,
                 security_context=pod_security_context,
                 volumes=pod_volumes,
