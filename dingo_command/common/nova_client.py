@@ -82,7 +82,7 @@ class NovaClient:
     # 添加Nova服务调用
     def nova_list_servers(self, params=None):
         endpoint = self.get_service_endpoint('compute')
-        response = self.session.get(f"{endpoint}/servers", params=params)
+        response = self.session.get(f"{endpoint}/servers/detail", params=params)
         if response.status_code != 200:
             raise Exception(f"nova请求失败: {response.text}")
         return response.json()['servers']
