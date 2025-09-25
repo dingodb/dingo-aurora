@@ -1741,6 +1741,12 @@ class AiInstanceService:
                     dingo_print(f"check Pod status {pod_name} get exception: {e}")
 
                     time.sleep(5)
+                
+                # query ai_instance_db again
+                ai_instance_db = AiInstanceSQL.get_ai_instance_info_by_id(ai_instance_db.id)
+                if not ai_instance_db:
+                    dingo_print(f"Pod {pod_name} instance id {ai_instance_db.id} not found in db, will exit check loop")
+                    return
 
             # 5. 检查是否超时
             if (datetime.now() - start_time).total_seconds() >= timeout:
