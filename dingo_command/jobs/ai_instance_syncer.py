@@ -97,32 +97,28 @@ def sync_single_k8s_cluster(k8s_id: str, core_client, apps_client, networking_cl
             return
 
         # 2. 按namespace分组处理
-        namespace_instance_map: dict[str, list] = {}
-        for instance in db_instances:
-            namespace = CCI_NAMESPACE_PREFIX + instance.instance_tenant_id
-            if namespace not in namespace_instance_map:
-                namespace_instance_map[namespace] = []
-            namespace_instance_map[namespace].append(instance)
+        tenant_id_list = [instance.instance_tenant_id for instance in db_instances if instance.instance_tenant_id]
 
         # 3. 逐个namespace处理
-        for namespace, instances in namespace_instance_map.items():
+        for tenant_id in tenant_id_list:
             try:
                 process_namespace_resources(
-                    namespace=namespace,
-                    instances=instances,
+                    tenant_id=tenant_id,
                     core_client=core_client,
                     apps_client=apps_client,
                     networking_client=networking_client
                 )
             except Exception as e:
-                dingo_print(f"{datatime_util.get_now_time()} handle namespace {namespace} failed: {str(e)}")
+                dingo_print(f"{datatime_util.get_now_time()} handle namespace {CCI_NAMESPACE_PREFIX+tenant_id} failed: {str(e)}")
 
     except Exception as e:
         dingo_print(f"{datatime_util.get_now_time()} sync K8s {k8s_id} resource failed: {str(e)}")
 
 
-def process_namespace_resources(namespace: str, instances: list, core_client, apps_client, networking_client):
+def process_namespace_resources(tenant_id: str, core_client, apps_client, networking_client):
     """处理单个namespace下的资源"""
+    dingo_print(f"start sync namespace {CCI_NAMESPACE_PREFIX + tenant_id} resource")
+    namespace = CCI_NAMESPACE_PREFIX + tenant_id
     dingo_print(f"{datatime_util.get_now_time()} start handle namespace: {namespace}")
 
     # 1. 获取K8s中的资源
@@ -143,6 +139,8 @@ def process_namespace_resources(namespace: str, instances: list, core_client, ap
     sts_map = {sts.metadata.name: sts for sts in sts_list}
     pod_map = {pod.metadata.name: pod for pod in pod_list}
     svc_map = {svc.metadata.name: svc for svc in svc_list}
+
+    instances = AiInstanceSQL.get_ai_instance_info_by_tenant_id(tenant_id)
     db_instance_map = {inst.instance_real_name: inst for inst in instances}
     dingo_print(f"{datatime_util.get_now_time()}---------sts_map:{sts_map.keys()}, pod_map:{pod_map.keys()}, db_instance_map:{db_instance_map.keys()}")
 

@@ -75,6 +75,12 @@ class AiInstanceSQL:
             return session.query(AiInstanceInfo).filter(AiInstanceInfo.id == id).first()
 
     @classmethod
+    def get_ai_instance_info_by_tenant_id(cls, tenant_id):
+        session = get_session()
+        with (session.begin()):
+            return session.query(AiInstanceInfo).filter(AiInstanceInfo.instance_tenant_id == tenant_id).first()
+
+    @classmethod
     def get_ai_instance_info_by_real_name(cls, real_name):
         session = get_session()
         with (session.begin()):
