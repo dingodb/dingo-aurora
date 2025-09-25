@@ -20,11 +20,13 @@ async def get_token(x_auth_token: str = Header(None, alias="X-Auth-Token")):
 
 
 @router.get("/instance/list", summary="instance列表", description="instance列表")
-async def list_instances(cluster_id: str = Query(None, description="集群id"),
+async def list_instances(token: str = Depends(get_token),
+                         cluster_id: str = Query(None, description="集群id"),
                          cluster_name: str = Query(None, description="集群名称"),
                          type: str = Query(None, description="instance类型"),
                          name: str = Query(None, description="instance名称"),
                          status: str = Query(None, description="status状态"),
+                         in_cluster: int = Query(1, description="是否只查询集群内的节点，1是，0否"),
                          page: int = Query(1, description="页码"),
                          page_size: int = Query(10, description="页数量大小"),
                          sort_keys: str = Query(None, description="排序字段"),
@@ -43,7 +45,7 @@ async def list_instances(cluster_id: str = Query(None, description="集群id"),
             query_params['status'] = status
         if cluster_id:
             query_params['cluster_id'] = cluster_id
-        result = instance_service.list_instances(query_params, page, page_size, sort_keys, sort_dirs)
+        result = instance_service.list_instances(query_params, page, page_size, sort_keys, sort_dirs,in_cluster,token)
         return result
     except Exception as e:
         import traceback
