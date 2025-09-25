@@ -218,6 +218,7 @@ def state_remove(node_list):
             if "No matching objects found" in str(e):
                 continue
             else:
+                print(f"output is: {str(e)}")
                 raise e
     print(f"rm nodes from terraform state successfully")
 
