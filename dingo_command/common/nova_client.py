@@ -251,7 +251,7 @@ class NovaClient:
                     return gpu_count
             except (ValueError, IndexError, TypeError):
                 pass
-
+        return gpu_count
     def get_image_info(self, image_id):
         """获取镜像信息"""
         try:
