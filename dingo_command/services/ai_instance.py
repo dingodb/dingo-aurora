@@ -98,13 +98,13 @@ class AiInstanceService:
     """
     AI实例服务类
     
-    性能优化说明：
+    性能优化说明: 
     - 实现了线程安全的K8s客户端缓存机制，避免重复创建客户端实例
     - 每个k8s_id对应一组缓存的客户端（core、app、networking）
     - 使用线程锁确保并发安全
     - 缓存可以通过_clear_k8s_clients_cache方法清理
     
-    线程安全说明：
+    线程安全说明: 
     - K8s Python客户端不是线程安全的
     - 使用threading.Lock保护缓存字典的并发访问
     - 每个线程使用独立的客户端实例避免状态混乱
@@ -126,7 +126,7 @@ class AiInstanceService:
             dict: 包含core、app、networking三种客户端的字典
             
         Note:
-            使用双重检查锁定模式确保线程安全：
+            使用双重检查锁定模式确保线程安全: 
             1. 首次检查避免不必要的锁获取
             2. 加锁后再次检查确保只有一个线程创建客户端
             3. 每个k8s_id的客户端只创建一次并缓存
@@ -903,10 +903,10 @@ class AiInstanceService:
         # 获取服务IP
         service_ip, dns_suffix, is_account = self._get_service_ip(ai_instance_db)
 
-        # 规则： host: ingress-${zone_id}.${region_id}.alayanew.com # 这里的region_id和zone_id对应的就是下一步的值，每一个cci实例的ingress都是这个值
-        # 生产环境域名后缀： alayanew.com； 测试环境：zetyun.cn
+        # 规则:  host: ingress-${zone_id}.${region_id}.alayanew.com # 这里的region_id和zone_id对应的就是下一步的值，每一个cci实例的ingress都是这个值
+        # 生产环境域名后缀:  alayanew.com； 测试环境: zetyun.cn
         host_domain = f"{INGRESS_SIGN}{HYPHEN_SIGN}{ai_instance_db.instance_k8s_id}{POINT_SIGN}{ai_instance_db.instance_region_id}{POINT_SIGN}{dns_suffix}"
-        # 这个path对应的就是注入到pod的环境变量中的path. 规则： /notebook/jupyter/{region_id}/{zone_id}/{instance_id{user_namespace}/{cci_pod_name}  # HTTPS 路径
+        # 这个path对应的就是注入到pod的环境变量中的path. 规则:  /notebook/jupyter/{region_id}/{zone_id}/{instance_id{user_namespace}/{cci_pod_name}  # HTTPS 路径
         nb_prefix = f"/notebook/jupyter/{ai_instance_db.instance_region_id}/{ai_instance_db.instance_k8s_id}/{ai_instance_db.id}/{namespace_name}/{ai_instance_db.instance_real_name}{CCI_STS_POD_SUFFIX}"
 
         # 1、创建sshkey的configmap（如果有就跳过，没有就创建）
@@ -929,7 +929,7 @@ class AiInstanceService:
         self._wait_for_resource(self.core_k8s_client, self.app_k8s_client, self.networking_k8s_client,
                                 namespace_name, ai_instance_db.instance_real_name  + "-" + DEV_TOOL_JUPYTER, client.V1Service)
 
-        # 端口：22、9001、9002 port需实时获取,防止冲突
+        # 端口: 22、9001、9002 port需实时获取,防止冲突
         available_ports, available_ports_map = self.find_ai_instance_available_ports(instance_id=ai_instance_db.id, is_add=False, )
         if len(available_ports) < 3:
             dingo_print(f"Not enough available ports or ai instance {ai_instance_db.id} not get redis lock")
@@ -1090,7 +1090,7 @@ class AiInstanceService:
                 name=JUPYTER_INIT_MOUNT_NAME,
                 host_path= V1HostPathVolumeSource(
                     path="/" + JUPYTER_INIT_MOUNT_NAME,  # 宿主机上的路径
-                    type="DirectoryOrCreate"  # 类型：如果目录不存在则创建
+                    type="DirectoryOrCreate"  # 类型: 如果目录不存在则创建
                 )
             )
         ]
@@ -1431,6 +1431,7 @@ class AiInstanceService:
             ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_id(id)
             if ai_instance_info_db:
                 # 标记为 STOPPED
+                dingo_print(f"ai instance {id} stop to save image start, update status to STOPPING, start update db")
                 ai_instance_info_db.instance_status = AiInstanceStatus.STOPPING.name
                 ai_instance_info_db.instance_real_status = None
                 AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
@@ -1463,6 +1464,7 @@ class AiInstanceService:
                     raise error_msg
                 dingo_print(f"ai instance {id} end set replicas to 0")
                 # 标记为 STOPPED
+                dingo_print(f"ai instance {id} stop to save image success, update status to STOPPED, start update db")
                 ai_instance_info_db.instance_status = AiInstanceStatus.STOPPED.name
                 ai_instance_info_db.instance_real_status = None
                 ai_instance_info_db.stop_time = datetime.now()
@@ -1574,20 +1576,19 @@ class AiInstanceService:
                             self.set_k8s_sts_replica_by_instance_id(instance_id, 0)
                             return
 
-
                     # 如果 Pod 处于 Running 状态，退出循环
                     if pod_real_status == "Running":
                         dingo_print(f"Pod {pod_name} 已正常运行, node name:{current_node_name}")
                         # 明确退出函数
                         return
 
-
-                    # 等待3秒后再次检查
+                    # check again after 5 seconds
                     time.sleep(5)
 
                 except Exception as e:
                     import traceback
                     traceback.print_exc()
+                    dingo_print(f"check pod {pod_name} status error: {e}, retry after 5 seconds, traceback: {traceback.format_exc()}")
 
                     time.sleep(5)
 
@@ -1616,8 +1617,9 @@ class AiInstanceService:
         # 命名空间名称与实例名
         namespace_name = CCI_NAMESPACE_PREFIX + ai_instance_info_db.instance_tenant_id
         real_name = ai_instance_info_db.instance_real_name
-        pod_name = real_name + "-0"
-        instance_id = ai_instance_info_db.id
+        # pod_name = real_name + "-0"
+        # instance_id = ai_instance_info_db.id
+
         # 获取最新的configmap的信息
         configmap_name = CONFIGMAP_PREFIX + ai_instance_info_db.instance_user_id
         k8s_common_operate.create_ns_configmap(
@@ -1647,19 +1649,25 @@ class AiInstanceService:
             # 判断是否有保存的镜像存在，不存在用初始镜像
             if not self._check_image_exists(core_k8s_client, image_name_temp, project_name):
                 image_name = ai_instance_info_db.instance_image
-        dingo_print(f"Start ai instance id: [{id}] image_name: {image_name}")
+
         updated_sts = self.build_updated_sts(
             existing_sts, resource_config, image_name, ai_instance_info_db, start_request
         )
+
         # 开机操作
+        dingo_print(f"start ai instance id: [{id}] to k8s, replicas: {updated_sts.spec.replicas}, image: {image_name}")
         k8s_common_operate.replace_statefulset(app_k8s_client, real_name, namespace_name, updated_sts)
+
         # 设置下发参数
         if start_request and start_request.product_code:
             ai_instance_info_db.product_code = start_request.product_code
         if start_request and start_request.instance_config:
             ai_instance_info_db.instance_config = json.dumps(start_request.instance_config.dict())
         ai_instance_info_db.instance_image = image_name
+
+        dingo_print(f"start ai instance id: [{id}] update instance config to db")
         AiInstanceSQL.update_ai_instance_info(ai_instance_info_db)
+
         return core_k8s_client
 
     def create_check_pod_k8s_resource_and_update_db(self, ai_instance, ai_instance_db, resource_config, timeout: int = CCI_TIME_OUT_DEFAULT):
@@ -1679,7 +1687,7 @@ class AiInstanceService:
 
             # 准备命名空间
             namespace_name = self._prepare_namespace(ai_instance)
-            # 镜像全路径。格式：  域名/项目/镜像名+tag
+            # 镜像全路径。格式:   域名/项目/镜像名+tag
             image_pull = ai_instance.image
             harbor_address = image_pull.split("/")[0]
             dingo_print(f"create_ai_instance harbor_address:{harbor_address}")
@@ -1843,7 +1851,7 @@ class AiInstanceService:
             ai_instance_db.instance_status = self.map_k8s_to_db_status(k8s_status, ai_instance_db.instance_status)
             ai_instance_db.instance_node_name = node_name
             ai_instance_db.error_msg = error_msg
-            dingo_print(f"异步更新容器实例[{ai_instance_db.instance_real_name}] instance_status：{ai_instance_db.instance_status}, node name:{ai_instance_db.instance_node_name}")
+            dingo_print(f"异步更新容器实例[{ai_instance_db.instance_real_name}] instance_status: {ai_instance_db.instance_status}, node name:{ai_instance_db.instance_node_name}")
             AiInstanceSQL.update_ai_instance_info(ai_instance_db)
         except Exception as e:
             dingo_print(f"更新容器实例[{id}]数据库失败: {e}")
@@ -1960,7 +1968,7 @@ class AiInstanceService:
                 raise Fail("service invalid", error_message="Service 无效")
 
             old_ports = svc.spec.ports or []
-            # 新增：如果端口为空或只有一个，不允许删除
+            # 新增: 如果端口为空或只有一个，不允许删除
             if not old_ports or len(old_ports) <= 1:
                 raise Fail("can not delete port: service must have at least one port", error_message="Service 至少需要保留一个端口，无法删除")
 
@@ -2216,7 +2224,7 @@ class AiInstanceService:
             storage_total = self.safe_convert(node_resource_db.storage_total)
             storage_used = self.safe_convert(node_resource_db.storage_used)
 
-            # 局部函数：处理剩余量
+            # 局部函数: 处理剩余量
             def calc_remaining(total, used):
                 if total is None:
                     return None
@@ -2420,7 +2428,7 @@ class AiInstanceService:
 
     def get_pod_final_status(self, pod) -> tuple[str, str]:
         """
-        获取 Pod 的最终状态和详细信息，规则：
+        获取 Pod 的最终状态和详细信息，规则: 
         - 容器有错误状态 → 返回错误状态和详情
         - 容器有 Running 状态 → 返回 Running 和详情
         - 其他情况 → 返回 Pod 原生相位（如 Pending）和详情
@@ -2506,7 +2514,7 @@ class AiInstanceService:
     def choose_k8s_node(self, k8s_id: str, cpu: int, memory: int, disk: int = 50, gpu_model=None, gpu: int = 1):
         # 判断空
         if not k8s_id or not cpu or not memory:
-            dingo_print(f"指定的k8s{k8s_id},cpu：{cpu},memory：{memory},disk：{disk}")
+            dingo_print(f"指定的k8s{k8s_id},cpu: {cpu},memory: {memory},disk: {disk}")
             return None
         # 查询当前所有可用节点
         node_list = []

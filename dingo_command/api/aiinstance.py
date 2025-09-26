@@ -34,7 +34,7 @@ async def create_ai_instance(ai_instance:AiInstanceApiModel):
 async def sava_ai_instance_to_image(id: str, request: AiInstanceSavaImageApiModel):
     # 容器实例保存为镜像
     try:
-        dingo_print(f"save ai instance image, id：{id}")
+        dingo_print(f"save ai instance image, id: {id}")
         # 容器实例保存为镜像
         return ai_instance_service.sava_ai_instance_to_image(id, request.image_registry, request.image_name, request.image_tag)
     except Fail as e:
@@ -47,7 +47,7 @@ async def sava_ai_instance_to_image(id: str, request: AiInstanceSavaImageApiMode
 @router.get("/ai-instance/{id}/save-image/process_status", summary="容器实例保存为镜像的进度状态", description="容器实例保存为镜像的进度状态")
 async def get_sava_ai_instance_to_image_process_status(id: str):
     try:
-        dingo_print(f"query ai instance save image process, id：{id}")
+        dingo_print(f"query ai instance save image process, id: {id}")
         # 容器实例保存为镜像
         return ai_instance_service.sava_ai_instance_to_image_process_status(id)
     except Fail as e:
@@ -94,7 +94,7 @@ async def list_ai_instance_infos(
 @router.get("/ai-instance/{id}/detail", summary="查询容器实例详情", description="查询容器实例详情")
 async def get_instance_info_by_id(id:str):
     # 查询容器实例详情
-    dingo_print(f"query ai instance detail, id：{id}")
+    dingo_print(f"query ai instance detail, id: {id}")
     try:
         return ai_instance_service.get_ai_instance_info_by_id(id)
     except Fail as e:
@@ -107,7 +107,7 @@ async def get_instance_info_by_id(id:str):
 @router.delete("/ai-instance/{id}", summary="删除容器实例", description="根据实例id删除容器实例数据")
 async def delete_instance_by_id(id:str):
     # 删除容器实例
-    dingo_print(f"delete ai instance, id：{id}")
+    dingo_print(f"delete ai instance, id: {id}")
     try:
         # 删除成功
         return ai_instance_service.delete_ai_instance_by_id(id)
@@ -187,7 +187,7 @@ async def ai_instance_ssh_web(
 @router.post("/ai-instance/{id}/start", summary="开机容器实例", description="根据实例id开机容器实例")
 async def start_instance_by_id(id: str, request: Optional[StartInstanceModel] = None):
     try:
-        dingo_print(f"start ai instance, id：{id}")
+        dingo_print(f"start ai instance, id: {id}")
         return ai_instance_service.start_ai_instance_by_id(id, request)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
@@ -199,7 +199,7 @@ async def start_instance_by_id(id: str, request: Optional[StartInstanceModel] = 
 @router.post("/ai-instance/{id}/stop", summary="关机容器实例", description="根据实例id关机容器实例")
 async def stop_instance_by_id(id: str):
     try:
-        dingo_print(f"stop ai instance, id：{id}")
+        dingo_print(f"stop ai instance, id: {id}")
         return ai_instance_service.stop_ai_instance_by_id(id)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
@@ -212,7 +212,7 @@ async def stop_instance_by_id(id: str):
 @router.post("/ai-instance/{id}/stop-force", summary="关机容器实例不保存镜像", description="根据实例id关机容器实例")
 async def force_stop_instance_by_id(id: str):
     try:
-        dingo_print(f"force stop ai instance, id：{id}")
+        dingo_print(f"force stop ai instance, id: {id}")
         return ai_instance_service.force_stop_ai_instance_by_id(id)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
@@ -224,7 +224,7 @@ async def force_stop_instance_by_id(id: str):
 @router.post("/ai-instance/{id}/auto-close", summary="设置定时关机容器实例", description="根据实例id设置定时关机容器实例")
 async def set_auto_close_instance_by_id(id: str, request: AutoCloseRequest):
     try:
-        dingo_print(f"set auto stop ai instance, id：{id}")
+        dingo_print(f"set auto stop ai instance, id: {id}")
         return ai_instance_service.set_auto_close_instance_by_id(id, request.auto_close_time, request.auto_close)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
@@ -236,7 +236,7 @@ async def set_auto_close_instance_by_id(id: str, request: AutoCloseRequest):
 @router.post("/ai-instance/{id}/auto-delete", summary="设置定时删除容器实例", description="根据实例id设置定时删除容器实例")
 async def set_auto_delete_instance_by_id(id: str, request: AutoDeleteRequest):
     try:
-        dingo_print(f"set auto delete ai instance, id：{id}")
+        dingo_print(f"set auto delete ai instance, id: {id}")
         return ai_instance_service.set_auto_delete_instance_by_id(id, request.auto_delete_time, request.auto_delete)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
@@ -248,7 +248,7 @@ async def set_auto_delete_instance_by_id(id: str, request: AutoDeleteRequest):
 @router.post("/ai-instance/{id}/node-ports/add", summary="容器实例新增端口", description="根据实例id新增端口")
 async def add_node_port_by_id(id: str, request: AddPortModel):
     try:
-        dingo_print(f"add ai instance port, id：{id}")
+        dingo_print(f"add ai instance port, id: {id}")
         return ai_instance_service.add_node_port_by_id(id, request)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
@@ -260,7 +260,7 @@ async def add_node_port_by_id(id: str, request: AddPortModel):
 @router.delete("/ai-instance/{id}/node-ports/{port}/delete", summary="容器实例删除端口", description="根据实例id删除端口")
 async def delete_port_by_id(id: str, port: int):
     try:
-        dingo_print(f"delete ai instance port, id：{id}")
+        dingo_print(f"delete ai instance port, id: {id}")
         return ai_instance_service.delete_port_by_id(id, port)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
@@ -285,7 +285,7 @@ async def list_port_by_id(id: str,
 @router.get("/ai-instance/{id}/jupyter", summary="获取Jupyter访问地址", description="根据实例id返回可访问的Jupyter URL 列表与 nodePort")
 async def get_jupyter_by_id(id: str):
     try:
-        dingo_print(f"get ai instance jupyter url, id：{id}")
+        dingo_print(f"get ai instance jupyter url, id: {id}")
         return ai_instance_service.get_jupyter_urls_by_id(id)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
@@ -297,7 +297,7 @@ async def get_jupyter_by_id(id: str):
 @router.get("/ai-instance/{id}/ssh-info", summary="获取ssh访问信息", description="根据实例id返回ssh访问信息")
 async def get_ssh_info_by_id(id: str):
     try:
-        dingo_print(f"get ai instance ssh info, id：{id}")
+        dingo_print(f"get ai instance ssh info, id: {id}")
         return ai_instance_service.get_ssh_info_by_id(id)
     except Fail as e:
         raise HTTPException(status_code=400, detail=e.error_message)
