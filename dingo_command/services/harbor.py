@@ -1191,4 +1191,53 @@ class HarborService:
         if not tenant_id:
             return None
         # 返回数据
-        return HarborRelationSQL.get_harbor_relation_by_tenant_id(tenant_id)
+        return HarborRelationSQL.get_harbor_relation_by_tenant_id(tenant_id=tenant_id)
+
+    # 校验harbor用户名是否存在
+    def check_harbor_user(self, harbor_name: str):
+        """
+        校验harbor用户名是否存在
+        """
+        return HarborRelationSQL.get_harbor_relation_by_tenant_id(username=harbor_name)
+
+    # 修改用户密码
+    def update_user_password(self, username: str, old_password: str, new_password: str):
+        """
+        修改用户密码
+        """
+        get_user_id_response = self.harbor.get_user_id(username=username)
+
+        if get_user_id_response["status"]:
+            if len(get_user_id_response["data"]) == 0:
+                return {
+                    "status": False,
+                    "code": 400,
+                    "message": "用户不存在",
+                    "data": None,
+                }
+            else:
+                user_id = get_user_id_response["data"][0]["user_id"]
+                update_user_password_response = self.harbor.update_user_password(user_id=user_id, old_password=old_password, new_password=new_password)
+                if update_user_password_response["status"]:
+                    # 根据用户名获取harbor_relation记录
+                    harbor_relation = HarborRelationSQL.get_harbor_relation_by_tenant_id(username=username)
+                    if harbor_relation:
+                        # 根据ID更新harbor_relation表的密码
+                        HarborRelationSQL.update_harbor_relation(id=harbor_relation.id, harbor_password=new_password)
+                        return {
+                            "status": True,
+                            "code": 200,
+                            "message": "修改用户密码成功",
+                            "data": None,
+                        }
+                    else:
+                        return {
+                            "status": False,
+                            "code": 400,
+                            "message": "未找到对应的harbor关联记录",
+                            "data": None,
+                        }
+                else:
+                    return update_user_password_response
+        else:
+            return get_user_id_response

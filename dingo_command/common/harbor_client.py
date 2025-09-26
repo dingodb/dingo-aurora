@@ -1590,3 +1590,37 @@ class HarborAPI:
                     )
         except Exception as e:
             return self.return_response(False, 500, f"获取项目标签异常: {str(e)}")
+    
+    # 获取用户ID
+    def get_user_id(self, username: str) -> Dict[str, Any]:
+        try:
+            url = f"{self.base_url}/api/v2.0/users"
+            response = self.request("GET", url, params={"username": username})
+            if response.status_code == 200:
+                return self.return_response(
+                    True,
+                    response.status_code,
+                    "获取用户ID成功",
+                    response.json(),
+                )
+            else:
+                return self.return_response(
+                    False,
+                    response.status_code,
+                    "获取用户ID失败",
+                    response.json(),
+                )
+        except Exception as e:
+            return self.return_response(False, 500, f"获取用户ID异常: {str(e)}")
+    
+    # 修改用户密码
+    def update_user_password(self, user_id: int, old_password: str, new_password: str) -> Dict[str, Any]:
+        try:
+            url = f"{self.base_url}/api/v2.0/users/{user_id}/password"
+            response = requests.put(url, auth=('admin','Zetyun2024'),json={"old_password": old_password, "new_password": new_password},verify=False)
+            if response.status_code == 200:
+                return self.return_response(True, response.status_code, "修改用户密码成功", '')
+            else:
+                return self.return_response(False, response.status_code, "修改用户密码失败", response.json())
+        except Exception as e:
+            return self.return_response(False, 500, f"修改用户密码异常: {str(e)}")

@@ -305,22 +305,72 @@ async def delete_custom_harbor_relation(tenant_id: str,):
 
 # 获取自定义镜像仓库镜像
 @router.get(
-    "/harbor/custom/service/relation/{tenant_id}",
+    "/harbor/custom/service/relation",
     summary="获取租户的私有仓库关联信息",
     description="根据租户id获取租户的私有仓库关联信息",
 )
-async def get_custom_harbor_relation(tenant_id: str,):
+async def get_custom_harbor_relation(
+    tenant_id: str = Query("", description="租户id"),
+    harbor_name: str = Query("", description="仓库用户名"),
+):
     try:
-        harbor_relation = harbor_service.get_custom_harbor_relation(tenant_id=tenant_id)
-        return {
-            "status": True,
-            "code": 200,
-            "message": "查询租户与harbor的关联关系成功",
-            "data": harbor_relation,
-        }
+        if tenant_id:
+            harbor_relation = harbor_service.get_custom_harbor_relation(tenant_id=tenant_id)
+            if harbor_relation:
+                return {
+                    "status": True,
+                    "code": 200,
+                    "message": "查询租户与harbor的关联关系成功",
+                    "data": harbor_relation,
+                }
+            else:
+                return {
+                    "status": False,
+                    "code": 200,
+                    "message": "租户ID不存在",
+                    "data": None,
+                }
+        elif harbor_name:
+            harbor_relation = harbor_service.check_harbor_user(harbor_name=harbor_name)
+            if harbor_relation:
+                return {
+                    "status": True,
+                    "code": 200,
+                    "message": "Harbor用户名已存在",
+                    "data": None,
+                }
+            else:
+                return {
+                    "status": False,
+                    "code": 200,
+                    "message": "Harbor用户名不存在",
+                    "data": None,
+                }
+        else:
+            return {
+                "status": False,
+                "code": 400,
+                "message": "参数错误",
+            }
+        
     except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(
             status_code=400, detail=f"get custom harbor error: {str(e)}"
         )
+
+# 修改用户密码
+@router.post("/harbor/user/password/update", summary="修改用户密码", description="修改用户密码")
+async def update_user_password(
+    username: str = Body(..., description="用户名"),
+    old_password: str = Body(..., description="旧密码"),
+    new_password: str = Body(..., description="新密码"),
+):
+    try:
+        result = harbor_service.update_user_password(username=username, old_password=old_password, new_password=new_password)
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"update user password error: {str(e)}")
