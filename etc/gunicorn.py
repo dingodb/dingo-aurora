@@ -13,6 +13,17 @@
 # limitations under the License.
 
 import multiprocessing
+import logging
+import os
+
+# 设置环境变量以控制 Kubernetes 客户端日志级别
+os.environ['KUBERNETES_CLIENT_LOG_LEVEL'] = 'WARNING'
+
+# 关闭 Kubernetes 客户端的详细日志输出
+logging.getLogger('kubernetes.client').setLevel(logging.WARNING)
+logging.getLogger('kubernetes.client.rest').setLevel(logging.WARNING)
+logging.getLogger('urllib3.connectionpool').setLevel(logging.WARNING)
+logging.getLogger('urllib3.util.retry').setLevel(logging.WARNING)
 
 bind = "0.0.0.0:8887"
 workers = min(multiprocessing.cpu_count() * 2, 8)  # 平衡性能与资源

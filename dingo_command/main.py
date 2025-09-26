@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -6,6 +7,12 @@ from dingo_command.api import api_router
 from dingo_command.jobs import (bigscreen_metrics_syncer, asset_resource_relation_syncer,
                                 rabbitmq_config_init, instance_status_syncer, cluster_status_syncer, ai_instance_syncer,
                                 ai_k8s_node_resource_syncer, chart_app_status_syncer)
+
+# 全局关闭 Kubernetes 客户端的详细日志输出
+logging.getLogger('kubernetes.client').setLevel(logging.WARNING)
+logging.getLogger('kubernetes.client.rest').setLevel(logging.WARNING)
+logging.getLogger('urllib3.connectionpool').setLevel(logging.WARNING)
+logging.getLogger('urllib3.util.retry').setLevel(logging.WARNING)
 
 PROJECT_NAME = "dingo-command"
 
