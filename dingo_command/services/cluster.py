@@ -145,6 +145,7 @@ class ClusterService:
                     node_db.create_time = datetime.now()
                     node_db_list.append(node_db)
                     master_index=master_index+1
+                    worker_node.append(node)
             if node.role == "worker" and node.type == "vm":
                 cpu, gpu, mem, disk = nova_client.get_flavor_info(node.flavor_id)
                 operation_system = nova_client.get_image_info(node.image)
@@ -513,8 +514,8 @@ class ClusterService:
         if not cluster.node_config:
             raise Fail(error_code=405, error_message="Cluster node_config parameter cannot be empty")
         else:
-            if len(cluster.node_config) == 1 and cluster.type == "kubernetes":
-                raise Fail(error_code=405, error_message="The number of nodes in the cluster cannot be less than 1.")
+            # if len(cluster.node_config) == 1 and cluster.type == "kubernetes":
+            #     raise Fail(error_code=405, error_message="The number of nodes in the cluster cannot be less than 1.")
             for node_info in cluster.node_config:
                 if node_info.role == "master":
                     continue
@@ -1003,8 +1004,6 @@ class ClusterService:
         res = ParamSQL.list()
         return res[1]
 
-
-
     def get_key_file(self, cluster_id:str, instance_id:str):
         # 根据id查询集群
         if  instance_id is not None and not cluster_id:
@@ -1042,6 +1041,7 @@ class ClusterService:
             else:
                 raise Fail("找不到集群对应的私钥文件")
         return private_key
+
     def create_cluster_with_netns(self, cluster: ClusterObject, token):
         """
         在集群网络命名空间中创建集群

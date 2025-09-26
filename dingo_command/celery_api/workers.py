@@ -199,7 +199,12 @@ def set_instance_status(cluster, node_list, node_type=None):
                     else:
                         db_instance.status = server.get("status")
 
+
 def state_remove(node_list):
+    res = subprocess.run(["terraform", "init"], capture_output=True, text=True)
+    if res.returncode != 0:
+        print(f"terraform init err, reason : {res.stderr}")
+        raise ValueError(f"terraform init err, reason : {res.stderr}")
     for node in node_list:
         try:
             subprocess.run(
@@ -214,13 +219,20 @@ def state_remove(node_list):
                 text=True,
                 check=True
             )
-        except Exception as e:
-            if "No matching objects found" in str(e):
+        except subprocess.CalledProcessError as e:
+            # 现在可以访问e.stdout和e.stderr来获取详细输出
+            print(f"命令执行失败，返回码: {e.returncode}")
+            print(f"标准输出: {e.stdout}")
+            print(f"标准错误: {e.stderr}")
+
+            # 根据错误内容决定是跳过还是抛出异常
+            if "No matching objects found" in e.stderr:
+                print(f"资源不存在，跳过节点 {node}")
                 continue
             else:
-                print(f"output is: {str(e)}")
+                print(f"移除节点 {node} 的状态时遇到意外错误")
                 raise e
-    print(f"rm nodes from terraform state successfully")
+    print("所有节点状态移除操作完成")
 
 def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale=False, node_list=None,
                           node_type=None, instance_list=None):
@@ -1472,8 +1484,8 @@ def get_networks(cluster_tfvars, task_info, host_file, cluster_dir):
     hosts_data = json.loads(hosts)
     # 从_meta.hostvars中获取master节点的IP
     node_name = cluster_tfvars.cluster_name + "-master-1"
-    if cluster_tfvars.number_of_k8s_masters == 0:
-        node_name = cluster_tfvars.cluster_name + "-node-1"
+    # if cluster_tfvars.number_of_k8s_masters == 0:
+    #     node_name = cluster_tfvars.cluster_name + "-node-1"
     
     bus_network_id = ""
     bus_network_name = ""
@@ -2022,7 +2034,7 @@ def delete_node(self, cluster_id, cluster_name, node_list, instance_list, extrav
         with session.begin():
             db_cluster = session.get(Cluster, (cluster_id, cluster_name))
             db_cluster.status = 'remove_error'
-            db_cluster.status_msg = f"Ansible remove node error: {str(e)}"
+            db_cluster.status_msg = f"Ansible remove node error: {replace_ansi_with_single_newline(str(e))}"
         raise
 
 @celery_app.task(bind=True)
