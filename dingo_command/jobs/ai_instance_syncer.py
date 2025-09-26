@@ -362,17 +362,17 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
                     dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} found by real_name:{real_name}, check instance_status:{ai_instance_db.instance_status}")
                     # if instance_status is ERROR, do nothing
                     if(ai_instance_db.instance_status == AiInstanceStatus.ERROR.name):
-                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} in error status, no update status")
+                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} in ERROR status, no update status")
                         continue
 
                     # if instance_status is DELETING, do nothing
                     elif(ai_instance_db.instance_status == AiInstanceStatus.DELETING.name):
-                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} in deleting status, no update status")
+                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} in DELETING status, no update status")
                         continue
                     
                     # if instance_status is STOPPING, update to STOPPED
                     elif(ai_instance_db.instance_status == AiInstanceStatus.STOPPING.name):
-                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} in stopping status, change to stopped, start update db")
+                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} in STOPPING status, change to STOPPED, start_update_db")
                         ai_instance_db.instance_status = AiInstanceStatus.STOPPED.name
                         ai_instance_db.instance_real_status = None
                         AiInstanceSQL.update_ai_instance_info(ai_instance_db)
@@ -380,12 +380,12 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
 
                     # if instance_status is STOPPED, do nothing
                     elif(ai_instance_db.instance_status == AiInstanceStatus.STOPPED.name):
-                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} in stopped status, no update status")
+                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} in STOPPED status, no update status")
                         continue
 
                     # if instance_status is STARTING, do nothing
                     elif(ai_instance_db.instance_status == AiInstanceStatus.STARTING.name):
-                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} in starting status, no update status")
+                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} in STARTING status, no update status")
                         continue
 
                     # if instance_status is READY or RUNNING, and pod not exist, change to STOPPED if last update_time > 3min, else do nothing
@@ -405,7 +405,7 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
                             ai_instance_service.set_k8s_sts_replica_by_instance_id(instance_db.id, 0)
                     else:
                         # other status, may not happen, because we have checked all status before, just change to STOPPED
-                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} in other status:{ai_instance_db.instance_status}, change to stopped, start update db")
+                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} in other status:{ai_instance_db.instance_status}, change to STOPPED, start_update_db")
                         ai_instance_db.instance_status = AiInstanceStatus.STOPPED.name
                         ai_instance_db.instance_real_status = None
                         AiInstanceSQL.update_ai_instance_info(ai_instance_db)
@@ -450,11 +450,31 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
                         dingo_print(f"not found ai instance by real_name:{real_name}")
                         continue
                     
-                    dingo_print(f"ai instance {ai_instance_db.id} check instance_status:{ai_instance_db.instance_status}")
+                    dingo_print(f"ai instance {ai_instance_db.id} check ai_instance_db.instance_status:{ai_instance_db.instance_status}, calc instance_status:{instance_status}")
                     
                     # 检查状态是否真的需要更新（使用最新的数据库记录）
                     if ai_instance_db.instance_status != instance_status:
-                        dingo_print(f"ai instance {ai_instance_db.id} will change instance_status:{ai_instance_db.instance_status} to {instance_status}")
+                        dingo_print(f"ai instance {ai_instance_db.id} will calc change instance_status:{ai_instance_db.instance_status} to {instance_status}")
+                        
+                        # if ai_instance_db.instance_status is STOPPING, do not update status, wait next sync
+                        if ai_instance_db.instance_status == AiInstanceStatus.STOPPING.name:
+                            dingo_print(f"ai instance {ai_instance_db.id} in stopping status, no update status, wait next sync")
+                            continue
+
+                        # if ai_instance_db.instance_status is DELETING, do not update status, wait next sync
+                        if ai_instance_db.instance_status == AiInstanceStatus.DELETING.name:
+                            dingo_print(f"ai instance {ai_instance_db.id} in deleting status, no update status, wait next sync")
+                            continue
+                        
+                        # if ai_instance_db.instance_status is ERROR, do not update status, wait next sync
+                        if ai_instance_db.instance_status == AiInstanceStatus.ERROR.name:
+                            dingo_print(f"ai instance {ai_instance_db.id} in error status, no update status, wait next sync")
+                            continue
+
+                        # if ai_instance_db.instance_status is STOPPED, do not update status to other status except STARTING
+                        if ai_instance_db.instance_status == AiInstanceStatus.STOPPED.name and instance_status != AiInstanceStatus.STARTING.name:
+                            dingo_print(f"ai instance {ai_instance_db.id} in stopped status, no update status to {instance_status}, wait next sync")
+                            continue
                         
                         # 检查更新时间是否存在，避免 None 异常
                         if ai_instance_db.update_time is None:
@@ -488,7 +508,8 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
                     if pod_details:
                         update_data['instance_envs'] = pod_details.get('instance_envs')
                         update_data['error_msg'] = pod_details.get('error_msg')
-                    dingo_print(f"ai instance [{real_name}] k8s_status: {k8s_status}, instance_status: {instance_status}, error_msg: {error_msg}, start update db")
+
+                    dingo_print(f"ai instance [{real_name}] k8s_status: {k8s_status}, old_instance_status: {instance_db.instance_status}, new_instance_status: {instance_status}, error_msg: {error_msg}, start_update_db")
                     # 更新数据库
                     AiInstanceSQL.update_specific_fields_instance(instance_db, **update_data)
 
