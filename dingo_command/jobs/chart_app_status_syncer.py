@@ -104,6 +104,8 @@ def check_app_status():
             count, clusters = ClusterSQL.list_cluster(query_params, 1, -1, sort_keys=None, sort_dirs=None)
             if count < 1:
                 continue
+            if clusters[0].status != "running":
+                continue
             # 1、先获取cluster_id，然后获取kube_config文件
             netns = "qdhcp-" + str(clusters[0].admin_network_id)
             # set_netns(netns)
