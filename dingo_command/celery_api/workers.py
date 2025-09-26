@@ -532,7 +532,7 @@ def deploy_kubernetes(cluster: ClusterObject, cluster_tf: ClusterTFVarsObject, l
             "app_credential_secret": app_credential_secret,
             "external_openstack_lbaas_enabled": True,
             "external_openstack_lbaas_floating_network_id": cluster_tf.external_net,
-            "external_openstack_lbaas_floating_subnet_id": cluster_tf.public_floatingip_pool,
+            "external_openstack_lbaas_floating_subnet_id": cluster_tf.external_subnetids[0],
             #"external_openstack_lbaas_subnet_ids": cluster.network_config.admin_subnet_id,
         }
         target_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "group_vars", "all")
