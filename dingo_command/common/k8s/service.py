@@ -40,29 +40,30 @@ class ServiceClient:
             # 处理 filters 参数，查找关联的工作负载并获取其标签
             workload_types = ["deployments", "statefulsets", "daemonsets"]
             workload_labels = {}
-            
-            if filters:
-                for filter_str in filters:
-                    if "=" in filter_str:
-                        key, value = filter_str.split("=", 1)
-                        if key in workload_types:
-                            # 查询指定的工作负载
-                            try:
-                                workload = self._k8s_client.get_resource(
-                                    resource_type=key,
-                                    name=value,
-                                    namespace=namespace
-                                )
-                                
-                                if workload:
-                                    # 获取工作负载的标签
-                                    pod_template_labels = workload.get('spec', {}).get('template', {}).get('metadata', {}).get('labels', {})
-                                    if pod_template_labels:
-                                        # 合并标签
-                                        workload_labels.update(pod_template_labels)
-                                        logger.info(f"找到工作负载 {key}/{value} 的标签: {pod_template_labels}")
-                            except Exception as e:
-                                logger.warning(f"获取工作负载 {key}/{value} 时出错: {e}")
+            if filters is None:
+                return items
+
+            for filter_str in filters:
+                if "=" in filter_str:
+                    key, value = filter_str.split("=", 1)
+                    if key in workload_types:
+                        # 查询指定的工作负载
+                        try:
+                            workload = self._k8s_client.get_resource(
+                                resource_type=key,
+                                name=value,
+                                namespace=namespace
+                            )
+                            
+                            if workload:
+                                # 获取工作负载的标签
+                                pod_template_labels = workload.get('spec', {}).get('template', {}).get('metadata', {}).get('labels', {})
+                                if pod_template_labels:
+                                    # 合并标签
+                                    workload_labels.update(pod_template_labels)
+                                    logger.info(f"找到工作负载 {key}/{value} 的标签: {pod_template_labels}")
+                        except Exception as e:
+                            logger.warning(f"获取工作负载 {key}/{value} 时出错: {e}")
             
             # 如果通过 filters 找到了工作负载标签，将其与传入的 labels 合并
             if workload_labels:
@@ -76,8 +77,8 @@ class ServiceClient:
             
             # 如果没有标签，返回所有项目
             if not labels:
-                return items
-            
+                return []
+
             for service in items:
                 # 获取 Service 的 selector
                 selector = service.get('spec', {}).get('selector', {})

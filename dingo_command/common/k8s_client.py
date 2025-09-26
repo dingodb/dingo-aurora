@@ -987,6 +987,10 @@ class K8sClient:
             delete_options = {}
             if propagation_policy:
                 delete_options['propagation_policy'] = propagation_policy
+            else:
+                # 默认使用 Background 策略
+                delete_options['propagation_policy'] = 'Background'
+    
             if dry_run:
                 delete_options['dry_run'] = ['All']
 

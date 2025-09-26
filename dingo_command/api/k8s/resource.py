@@ -71,7 +71,7 @@ def get_cluster_info(cluster_id: str):
         print("Cluster not found:", cluster_id)
         raise HTTPException(status_code=404, detail=f"集群 {cluster_id} 不存在")
     
-    if cluster.status != "running":
+    if cluster.status == "error" or cluster.status == "deleted" or cluster.status == "deleting" or cluster.status == "creating":
         print("Cluster is not running:", cluster_id)
         raise HTTPException(status_code=400, detail=f"集群 {cluster_id} 状态不是运行中，当前状态: {cluster.status}")
     
