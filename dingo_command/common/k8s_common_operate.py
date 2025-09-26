@@ -486,7 +486,7 @@ class K8sCommonOperate:
         try:
             return core_v1.read_namespaced_pod(name, namespace)
         except Exception as e:
-            dingo_print(f"查询 Pod {namespace}/{name} 失败: {e}")
+            dingo_print(f"query pod {namespace}/{name} failed: {e}")
             raise e
 
 
@@ -503,7 +503,7 @@ class K8sCommonOperate:
         try:
             return app_v1.read_namespaced_stateful_set(name, namespace)
         except Exception as e:
-            dingo_print(f"查询 Pod {namespace}/{name} 失败: {e}")
+            dingo_print(f"query sts {namespace}/{name} failed: {e}")
             raise e
 
 
@@ -526,22 +526,22 @@ class K8sCommonOperate:
                 namespace=namespace_name,
                 body=delete_options
             )
-            dingo_print(f"StatefulSet '{namespace_name}/{real_name}' 删除命令已发出.")
+            dingo_print(f"StatefulSet '{namespace_name}/{real_name}' deletion initiated.")
 
             # 2. 等待 StatefulSet 资源完全删除
             if not self.wait_for_sts_deletion(apps_v1, real_name, namespace_name, timeout=120):
-                dingo_print(f"警告: 等待 StatefulSet '{real_name}' 删除超时，但仍尝试继续操作。")
+                dingo_print(f"warning: wait for StatefulSet '{real_name}' deletion timeout, but still try to continue.")
 
             # 3. 创建新的 StatefulSet
             created_sts = apps_v1.create_namespaced_stateful_set(
                 namespace=namespace_name,
                 body=modified_sts_data
             )
-            dingo_print(f"StatefulSet '{namespace_name}/{real_name}' 已重新创建.")
+            dingo_print(f"StatefulSet '{namespace_name}/{real_name}' already replaced successfully.")
             return created_sts
 
         except Exception as e:
-            dingo_print(f"替换 StatefulSet {namespace_name}/{real_name} 时发生错误: {e}")
+            dingo_print(f"replace statefulset {namespace_name}/{real_name} failed")
             import traceback
             traceback.print_exc()
             raise e
@@ -568,15 +568,15 @@ class K8sCommonOperate:
                 time.sleep(interval)
             except ApiException as e:
                 if e.status == 404:  # Not Found
-                    dingo_print(f"StatefulSet '{namespace}/{sts_name}' 已确认删除。")
+                    dingo_print(f"StatefulSet '{namespace}/{sts_name}' already deleted successfully.")
                     return True
                 else:
                     # 其他API错误，可能需要根据情况处理
                     raise
             except Exception as e:
-                dingo_print(f"检查 StatefulSet 删除状态时发生未知错误: {e}")
+                dingo_print(f"check sts {namespace}/{sts_name} deletion status failed: {e}")
                 time.sleep(interval)
-        dingo_print(f"等待 StatefulSet '{namespace}/{sts_name}' 删除超时 (超时时间: {timeout} 秒)。")
+        dingo_print(f"wait_for_sts_deletion timeout for {namespace}/{sts_name}")
         return False
 
     def list_pods_by_label_and_node(self, core_v1: client.CoreV1Api,
@@ -825,7 +825,7 @@ class K8sCommonOperate:
             }
             return core_v1.list_node(**kwargs).items
         except ApiException as e:
-            dingo_print(f"查询Node失败: {e.reason} (状态码: {e.status})")
+            dingo_print(f"query node failed: {e.reason} (status: {e.status})")
             raise e.reason
 
     def read_node(self, core_v1: client.CoreV1Api, node_name: str):
@@ -1026,10 +1026,10 @@ class K8sCommonOperate:
                         namespace=namespace,
                         body=body
                     )
-                    dingo_print(f"ServiceAccount {secret_name} 创建成功")
+                    dingo_print(f"ServiceAccount {secret_name} created successfully in namespace '{namespace}'.")
                     return api_response
                 except ApiException as e:
-                    dingo_print(f"创建 ServiceAccount 时发生异常: {e}")
+                    dingo_print(f"create ServiceAccount {secret_name} in namespace '{namespace}' failed: {e}")
                     if e.status == 409:
                         dingo_print(f"Default ServiceAccount in namespace '{namespace}' ready yet")
                     raise

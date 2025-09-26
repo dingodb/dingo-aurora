@@ -230,25 +230,25 @@ class AiInstanceService:
             try:
                 k8s_common_operate.delete_service_by_name(core_k8s_client, real_name, namespace_name)
             except Exception as e:
-                dingo_print(f"delete Service失败, name={real_name}, ns={namespace_name}, err={e}")
+                dingo_print(f"delete Service failed, name={real_name}, ns={namespace_name}, err={e}")
 
             try:
                 k8s_common_operate.delete_service_by_name(core_k8s_client, real_name + "-" + DEV_TOOL_JUPYTER,
                                                           namespace_name)
             except Exception as e:
-                dingo_print(f"delete  jupyter Service失败, name={real_name}, ns={namespace_name}, err={e}")
+                dingo_print(f"delete  jupyter Service failed, name={real_name}, ns={namespace_name}, err={e}")
 
             try:
                 # delete  ingress rule
                 k8s_common_operate.delete_namespaced_ingress(networking_k8s_client, real_name, namespace_name)
             except Exception as e:
-                dingo_print(f"delete ingress资源[{namespace_name}/{real_name}-jupyter]失败: {str(e)}")
+                dingo_print(f"delete ingress resource[{namespace_name}/{real_name}-jupyter] failed: {str(e)}")
 
             try:
                 # delete  jupyter configMap
                 k8s_common_operate.delete_configmap(core_k8s_client, namespace_name, real_name)
             except Exception as e:
-                dingo_print(f"delete jupyter configMap资源[{namespace_name}/{real_name}]失败: {str(e)}")
+                dingo_print(f"delete jupyter configMap resource[{namespace_name}/{real_name}] failed: {str(e)}")
 
             try:
                 # delete 镜像库中保存的关机镜像
@@ -261,7 +261,7 @@ class AiInstanceService:
                 dingo_print(
                     f"ai instance [{id}] project_name:{project_name}, image_name:{image_name}, delete_project_repository_response:{delete_project_repository_response}")
             except Exception as e:
-                dingo_print(f"delete 容器实例[{id}]的关机镜像失败: {e}")
+                dingo_print(f"delete cci instance[{id}] shutdown image failed: {e}")
 
             # delete metallb的默认端口
             AiInstanceSQL.delete_ai_instance_ports_info_by_instance_id(id)
@@ -269,10 +269,10 @@ class AiInstanceService:
             try:
                 k8s_common_operate.delete_sts_by_name(app_k8s_client, real_name, namespace_name)
             except Exception as e:
-                dingo_print(f"删除StatefulSet失败, name={real_name}, ns={namespace_name}, err={e}")
+                dingo_print(f"delete StatefulSet failed, name={real_name}, ns={namespace_name}, err={e}")
                 raise e
         except Exception as e:
-            dingo_print(f"获取 K8s 客户端失败或删除资源异常: {e}")
+            dingo_print(f"get k8s client failed or delete resource error: {e}")
             import traceback
             traceback.print_exc()
             raise e
@@ -382,7 +382,7 @@ class AiInstanceService:
                     }
 
                 else:
-                    dingo_print(f"未获取到锁{id}")
+                    dingo_print(f"unable to get lock for save ai instance to image, id={id}")
                     raise Fail(f"Ai instance [{id}] is saving, not allow to operation")
 
         except Exception as e:
@@ -1248,10 +1248,10 @@ class AiInstanceService:
                     if image['repository_name'] == image_name:
                         for tag in image['tags_list']:
                             if tag['tag_name'] == "latest":
-                                dingo_print(f"镜像 {image_name}:latest 存在")
+                                dingo_print(f"image {image}:latest exists")
                                 return True
             else:
-                dingo_print(f"获取镜像列表失败: {result['message']}")
+                dingo_print(f"get image list fail: {result['message']}")
                 return False
 
             return False
@@ -1392,7 +1392,7 @@ class AiInstanceService:
                     _preload_content=False
                 )
             except Exception as e:
-                dingo_print(f"关机失败，实例ID: {id}, 错误: {e}")
+                dingo_print(f"shutdown ai instance[{id}] fail: {e}")
                 ai_instance_info_db.instance_status = AiInstanceStatus.ERROR.name
                 ai_instance_info_db.instance_real_status = K8sStatus.ERROR.value
                 ai_instance_info_db.error_msg = str(e)
@@ -1578,7 +1578,7 @@ class AiInstanceService:
 
                     # 如果 Pod 处于 Running 状态，退出循环
                     if pod_real_status == "Running":
-                        dingo_print(f"Pod {pod_name} 已正常运行, node name:{current_node_name}")
+                        dingo_print(f"Pod {pod_name} already running, node name:{current_node_name}")
                         # 明确退出函数
                         return
 
@@ -1594,11 +1594,11 @@ class AiInstanceService:
 
             # 5. 检查是否超时
             if (datetime.now() - start_time).total_seconds() >= timeout:
-                dingo_print(f"Pod {pod_name} 状态检查超时(5分钟)")
+                dingo_print(f"Pod {pod_name} status check timeout (5 minutes), may need to change instance status to error")
                 raise Exception(f"start cci pod timeout {CCI_NAMESPACE_PREFIX}, change instance status to error")
 
         except Exception as e:
-            dingo_print(f"检查Pod {pod_name} 状态时发生错误: {e}")
+            dingo_print(f"check pod {pod_name} status error: {e}")
             import traceback
             traceback.print_exc()
 
@@ -1851,10 +1851,10 @@ class AiInstanceService:
             ai_instance_db.instance_status = self.map_k8s_to_db_status(k8s_status, ai_instance_db.instance_status)
             ai_instance_db.instance_node_name = node_name
             ai_instance_db.error_msg = error_msg
-            dingo_print(f"异步更新容器实例[{ai_instance_db.instance_real_name}] instance_status: {ai_instance_db.instance_status}, node name:{ai_instance_db.instance_node_name}")
+            dingo_print(f"async update ai instance[{id}] status to db, k8s_status: {k8s_status}, mapped db status: {ai_instance_db.instance_status}, node name: {node_name}, error_msg: {error_msg}")
             AiInstanceSQL.update_ai_instance_info(ai_instance_db)
         except Exception as e:
-            dingo_print(f"更新容器实例[{id}]数据库失败: {e}")
+            dingo_print(f"update ai instance[{id}] status to db fail, k8s_status: {k8s_status}, node name: {node_name}, error_msg: {error_msg}, exception: {e}")
 
     @staticmethod
     def map_k8s_to_db_status(k8s_status: str, original_status: str):
@@ -2342,7 +2342,7 @@ class AiInstanceService:
             return True
 
         except Exception as e:
-            dingo_print(f"{operation}节点资源失败: {str(e)}")
+            dingo_print(f"{operation} node resource fail: {str(e)}")
             import traceback
             traceback.print_exc()
             return False
@@ -2424,7 +2424,7 @@ class AiInstanceService:
                 _preload_content=False
             )
         except Exception as e:
-            dingo_print(f"实例设置副本数{replica}失败，实例ID: {id}, 错误: {e}")
+            dingo_print(f"update instance replica to {replica} fail, instance id: {id}, error: {e}")
 
     def get_pod_final_status(self, pod) -> tuple[str, str]:
         """
@@ -2514,7 +2514,7 @@ class AiInstanceService:
     def choose_k8s_node(self, k8s_id: str, cpu: int, memory: int, disk: int = 50, gpu_model=None, gpu: int = 1):
         # 判断空
         if not k8s_id or not cpu or not memory:
-            dingo_print(f"指定的k8s{k8s_id},cpu: {cpu},memory: {memory},disk: {disk}")
+            dingo_print(f"choose k8s {k8s_id}, cpu {cpu}, memory {memory}, disk {disk}, gpu_model {gpu_model}, gpu {gpu} fail, param is empty")
             return None
         # 查询当前所有可用节点
         node_list = []
@@ -2523,7 +2523,7 @@ class AiInstanceService:
             node_list = self.get_k8s_node_resource_statistics(k8s_id)
             # node_list.append(node_resource_list_db)
         except Exception as e:
-            dingo_print(f"查询不到可用节点, 错误: {e}")
+            dingo_print(f"can not find available node, k8s id: {k8s_id}, error: {e}")
         # 空
         if not node_list:
             return None
