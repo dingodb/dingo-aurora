@@ -39,7 +39,7 @@ def auto_actions_tick():
 
 # 将任务注册到 scheduler（与 fetch_ai_instance_info 同步周期一样或独立间隔）
 def start():
-    ai_instance_scheduler.add_job(fetch_ai_instance_info, 'interval', seconds=300, next_run_time=datetime.now(), misfire_grace_time=150,coalesce=True, max_instances=1)
+    ai_instance_scheduler.add_job(fetch_ai_instance_info, 'interval', seconds=300, next_run_time=datetime.now(), misfire_grace_time=150, coalesce=True, max_instances=1)
     # ai_instance_scheduler.add_job(fetch_ai_instance_info_4operate, 'interval', seconds=5, next_run_time=datetime.now(), misfire_grace_time=150,coalesce=True, max_instances=1)
     # ai_instance_scheduler.add_job(auto_actions_tick, 'interval', seconds=60*30, next_run_time=datetime.now())
     ai_instance_scheduler.start()
@@ -57,32 +57,34 @@ def fetch_ai_instance_info_4operate():
         dingo_print(e)
 
 def fetch_ai_instance_info():
-    dingo_print(f"fetch_ai_instance_info start: {datatime_util.get_now_time()}")
+    fetch_start_time = datatime_util.get_now_time()
+    dingo_print(f"fetch_ai_instance_info start: {fetch_start_time}")
 
     with RedisLock(redis_connection.redis_master_connection, "dingo_command_ai_instance_lock", expire_time=120) as lock:
         if lock:
             start_time = datatime_util.get_now_time()
-            dingo_print(f"fetch_ai_instance_info start_with_lock: {datatime_util.get_now_time()}")
+            dingo_print(f"fetch_ai_instance_info start_with_lock: {datatime_util.get_now_time()}, fetch_start_time: {fetch_start_time}")
+
             try:
                 # 查询所有容器实例
                 k8s_kubeconfig_configs_db = AiInstanceSQL.list_k8s_configs()
                 if not k8s_kubeconfig_configs_db:
-                    dingo_print("ai k8s kubeconfig configs is temp")
+                    dingo_print("ai k8s kubeconfig configs is temp, fetch_start_time: {fetch_start_time}")
                     return
 
                 for k8s_kubeconfig_db in k8s_kubeconfig_configs_db:
                     if not k8s_kubeconfig_db.k8s_id:
-                        dingo_print("k8s cluster id empty")
+                        dingo_print("k8s cluster id empty, fetch_start_time: {fetch_start_time}")
                         continue
 
-                    dingo_print(f"doing k8s cluster {k8s_kubeconfig_db.k8s_id} ai instance info")
+                    dingo_print(f"doing k8s cluster {k8s_kubeconfig_db.k8s_id} ai instance info, fetch_start_time: {fetch_start_time}")
                     try:
                         # 获取client
                         core_k8s_client = get_k8s_core_client(k8s_kubeconfig_db.k8s_id)
                         app_k8s_client = get_k8s_app_client(k8s_kubeconfig_db.k8s_id)
                         networking_k8s_client = get_k8s_app_client(k8s_kubeconfig_db.k8s_id)
                     except Exception as e:
-                        dingo_print(f"get k8s[{k8s_kubeconfig_db.k8s_id}] client failed: {e}")
+                        dingo_print(f"get k8s[{k8s_kubeconfig_db.k8s_id}] client failed: {e}, fetch_start_time: {fetch_start_time}")
                         continue
 
                     # 同步处理单个K8s集群
@@ -92,15 +94,18 @@ def fetch_ai_instance_info():
                         apps_client=app_k8s_client,
                         networking_client=networking_k8s_client
                     )
+
+                    dingo_print(f"done k8s cluster {k8s_kubeconfig_db.k8s_id} ai instance info, fetch_start_time: {fetch_start_time}")
+                dingo_print(f"fetch_ai_instance_info all k8s cluster done, fetch_start_time: {fetch_start_time}")
             except Exception as e:
                 dingo_print(f"sync ai instance info error: {e}")
             finally:
                 end_time = datatime_util.get_now_time()
                 dingo_print(f"sync ai instance info end: {datatime_util.get_now_time()}, used time: {(end_time - start_time).total_seconds()}s")
         else:
-            dingo_print(f"{datatime_util.get_now_time()} get dingo_command_ai_instance_lock redis lock failed")
+            dingo_print(f"{datatime_util.get_now_time()} get dingo_command_ai_instance_lock redis lock failed, fetch_start_time: {fetch_start_time}, another progress is running")
     
-    dingo_print(f"fetch_ai_instance_info end: {datatime_util.get_now_time()}")
+    dingo_print(f"fetch_ai_instance_info end: {datatime_util.get_now_time()}, fetch_start_time: {fetch_start_time}, used time: {(datatime_util.get_now_time() - fetch_start_time).total_seconds()}s")
 
 
 def sync_single_k8s_cluster(k8s_id: str, core_client, apps_client, networking_client):
@@ -113,6 +118,7 @@ def sync_single_k8s_cluster(k8s_id: str, core_client, apps_client, networking_cl
 
         # 2. 按namespace分组处理
         tenant_id_list = [instance.instance_tenant_id for instance in db_instances if instance.instance_tenant_id]
+        dingo_print(f"fetch_ai_instance_info k8s {k8s_id} need handle namespace size: {len(tenant_id_list)}")
 
         # 3. 逐个namespace处理
         for tenant_id in tenant_id_list:
@@ -132,9 +138,9 @@ def sync_single_k8s_cluster(k8s_id: str, core_client, apps_client, networking_cl
 
 def process_namespace_resources(tenant_id: str, core_client, apps_client, networking_client):
     """处理单个namespace下的资源"""
-    dingo_print(f"start sync namespace {CCI_NAMESPACE_PREFIX + tenant_id} resource")
+    dingo_print(f"fetch_ai_instance_info start sync namespace {CCI_NAMESPACE_PREFIX + tenant_id} resource")
     namespace = CCI_NAMESPACE_PREFIX + tenant_id
-    dingo_print(f"{datatime_util.get_now_time()} start handle namespace: {namespace}")
+    dingo_print(f"fetch_ai_instance_info {datatime_util.get_now_time()} start handle namespace: {namespace}")
 
     # 1. 获取K8s中的资源
     sts_list = k8s_common_operate.list_sts_by_label(
@@ -160,9 +166,10 @@ def process_namespace_resources(tenant_id: str, core_client, apps_client, networ
     dingo_print(f"{datatime_util.get_now_time()} sts_map size: {len(sts_map)}, pod_map size: {len(pod_map)}, db_instance_map size: {len(db_instance_map)}")
 
     # 3. 处理孤儿资源: K8s中存在但数据库不存在的资源
+    dingo_print(f"fetch_ai_instance_info {datatime_util.get_now_time()} start handle orphan resources in namespace: {namespace}")
     handle_orphan_resources(
         sts_names=sts_map.keys(),
-        svc_names = svc_map.keys(),
+        svc_names=svc_map.keys(),
         db_instance_map=db_instance_map,
         namespace=namespace,
         core_client=core_client,
@@ -171,6 +178,7 @@ def process_namespace_resources(tenant_id: str, core_client, apps_client, networ
     )
 
     # 4. 处理缺失资源: 数据库中存在但K8s中不存在的记录
+    dingo_print(f"fetch_ai_instance_info {datatime_util.get_now_time()} start handle missing resources in namespace: {namespace}")
     handle_missing_resources(
         apps_client,
         sts_names=sts_map.keys(),
@@ -178,6 +186,7 @@ def process_namespace_resources(tenant_id: str, core_client, apps_client, networ
     )
 
     # 5. 更新状态同步的记录
+    dingo_print(f"fetch_ai_instance_info {datatime_util.get_now_time()} start sync instance info in namespace: {namespace}")
     sync_instance_info(
         sts_map=sts_map,
         pod_map=pod_map,
@@ -190,14 +199,14 @@ def handle_orphan_resources(sts_names, svc_names, db_instance_map, namespace, co
     orphans = set(sts_names) - set(db_instance_names)
     # cci的ns中多余的svc
     orphans_svcs = filter_svc_names(svc_names, db_instance_names)
-    dingo_print(f"{datatime_util.get_now_time()}======handle_orphan_resources======orphans:{orphans}")
+    dingo_print(f"fetch_ai_instance_info {datatime_util.get_now_time()}======handle_orphan_resources======orphans:{orphans}")
     for name in orphans:
         ai_instance_info_db = AiInstanceSQL.get_ai_instance_info_by_real_name(name)
         if ai_instance_info_db:
-            dingo_print(f"{datatime_util.get_now_time()} cleanup orphan resource ai instance in k8s, and exist in db: {namespace}/{name}. no delete")
+            dingo_print(f"fetch_ai_instance_info {datatime_util.get_now_time()} cleanup orphan resource ai instance in k8s, and exist in db: {namespace}/{name}. no delete")
             continue
 
-        dingo_print(f"{datatime_util.get_now_time()} cleanup orphan resource ai instance in k8s, but not exist in db: {namespace}/{name}")
+        dingo_print(f"fetch_ai_instance_info {datatime_util.get_now_time()} cleanup orphan resource ai instance in k8s, but not exist in db: {namespace}/{name}")
 
         cleanup_cci_resources(apps_client, core_client, networking_client, name, namespace)
 
@@ -210,20 +219,20 @@ def handle_orphan_resources(sts_names, svc_names, db_instance_map, namespace, co
            image_name = SAVE_TO_IMAGE_CCI_PREFIX + ai_instance_db.id
            project_name = ai_instance_service.extract_project_and_image_name(harbor_address)
            harbor_service.delete_custom_projects_images(project_name, image_name)
-           dingo_print(f"{datatime_util.get_now_time()} delete ai instance {ai_instance_db.id} stop-image project_image:{project_name}/{image_name} succeed")
+           dingo_print(f"fetch_ai_instance_info {datatime_util.get_now_time()} delete ai instance {ai_instance_db.id} stop-image project_image:{project_name}/{image_name} succeed")
         except Exception as e:
-             dingo_print(f"{datatime_util.get_now_time()} delete ai instance {ai_instance_db.id} stop-image {project_name}/{image_name} failed: {e}")
+             dingo_print(f"fetch_ai_instance_info {datatime_util.get_now_time()} delete ai instance {ai_instance_db.id} stop-image {project_name}/{image_name} failed: {e}")
 
         try:
             # 删除 jupyter configMap
             k8s_common_operate.delete_configmap(core_client, namespace, ai_instance_db.instance_real_name)
-            dingo_print(f"{datatime_util.get_now_time()} delete ai instance {ai_instance_db.id} jupyter configMap {namespace}/{ai_instance_db.instance_real_name} succeed")
+            dingo_print(f"fetch_ai_instance_info {datatime_util.get_now_time()} delete ai instance {ai_instance_db.id} jupyter configMap {namespace}/{ai_instance_db.instance_real_name} succeed")
         except Exception as e:
-            dingo_print(f"{datatime_util.get_now_time()} delete jupyter configMap {namespace}/{ai_instance_db.instance_real_name} 失败: {str(e)}")
+            dingo_print(f"fetch_ai_instance_info {datatime_util.get_now_time()} delete jupyter configMap {namespace}/{ai_instance_db.instance_real_name} 失败: {str(e)}")
 
         # 删除metallb的默认端口
         AiInstanceSQL.delete_ai_instance_ports_info_by_instance_id(ai_instance_db.id)
-        dingo_print(f"{datatime_util.get_now_time()} delete ai instance {ai_instance_db.id} ports succeed")
+        dingo_print(f"fetch_ai_instance_info {datatime_util.get_now_time()} delete ai instance {ai_instance_db.id} ports succeed")
 
     # 遍历删除多余的svc （出现过sts删除了，但是svc未删除的情况）
     for svc_name in orphans_svcs:
@@ -335,9 +344,9 @@ def handle_missing_resources(apps_client, sts_names, db_instances):
                 AiInstanceSQL.delete_ai_instance_info_by_id(instance.id)
                 # 清理端口数据
                 AiInstanceSQL.delete_ai_instance_ports_info_by_instance_id(instance.id)
-                dingo_print(f"{datatime_util.get_now_time()} delete db not exist ai instance and ports: id = {instance.id}, name = {instance.instance_name}, real_name = {instance.instance_real_name} succeed ")
+                dingo_print(f"fetch_ai_instance_info {datatime_util.get_now_time()} delete db not exist ai instance and ports: id = {instance.id}, name = {instance.instance_name}, real_name = {instance.instance_real_name} succeed ")
             except Exception as e:
-                dingo_print(f"{datatime_util.get_now_time()} delete db not exist instance id {instance.id}: {e}")
+                dingo_print(f"fetch_ai_instance_info {datatime_util.get_now_time()} delete db not exist instance id {instance.id}: {e}")
 
 def sync_instance_info(sts_map, pod_map, db_instance_map):
     """同步实例状态、image、env等信息"""
