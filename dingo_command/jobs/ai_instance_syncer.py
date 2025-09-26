@@ -95,7 +95,7 @@ def fetch_ai_instance_info():
                 dingo_print(f"同步容器实例失败: {e}")
             finally:
                 end_time = datatime_util.get_now_time()
-                dingo_print(f"同步容器实例结束时间: {datatime_util.get_now_time()}, 耗时：{(end_time - start_time).total_seconds()}秒")
+                dingo_print(f"同步容器实例结束时间: {datatime_util.get_now_time()}, 耗时: {(end_time - start_time).total_seconds()}秒")
         else:
             dingo_print(f"{datatime_util.get_now_time()} get dingo_command_ai_instance_lock redis lock failed")
 
@@ -154,7 +154,7 @@ def process_namespace_resources(tenant_id: str, core_client, apps_client, networ
 
     instances = AiInstanceSQL.get_ai_instance_info_by_tenant_id(tenant_id)
     db_instance_map = {inst.instance_real_name: inst for inst in instances}
-    dingo_print(f"{datatime_util.get_now_time()}---------sts_map:{sts_map.keys()}, pod_map:{pod_map.keys()}, db_instance_map:{db_instance_map.keys()}")
+    dingo_print(f"{datatime_util.get_now_time()} sts_map size: {len(sts_map)}, pod_map size: {len(pod_map)}, db_instance_map size: {len(db_instance_map)}")
 
     # 3. 处理孤儿资源: K8s中存在但数据库不存在的资源
     handle_orphan_resources(
@@ -235,7 +235,6 @@ def handle_orphan_resources(sts_names, svc_names, db_instance_map, namespace, co
         except Exception as e:
             dingo_print(f"{datatime_util.get_now_time()} delete default svc {namespace}/{svc_name} failed: {e}")
 
-
 def filter_svc_names(svc_names, db_instance_names):
     """
     过滤掉以 db_instance_names 开头的服务名称，并去重
@@ -250,7 +249,7 @@ def filter_svc_names(svc_names, db_instance_names):
     # 生成需要排除的数据库服务名前缀集合（统一小写处理）
     db_prefixes = {name.lower() for name in db_instance_names}
 
-    # 过滤条件：服务名不以任何 db_prefixes 中的前缀开头（不区分大小写）
+    # 过滤条件: 服务名不以任何 db_prefixes 中的前缀开头（不区分大小写）
     filtered_svcs = {
         svc for svc in svc_set
         if not any(svc.lower().startswith(prefix) for prefix in db_prefixes)
@@ -338,7 +337,6 @@ def handle_missing_resources(apps_client, sts_names, db_instances):
             except Exception as e:
                 dingo_print(f"{datatime_util.get_now_time()} delete db not exist instance id {instance.id}: {e}")
 
-
 def sync_instance_info(sts_map, pod_map, db_instance_map):
     """同步实例状态、image、env等信息"""
     for real_name, instance_db in db_instance_map.items():
@@ -346,115 +344,160 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
             continue
 
         sts = sts_map[real_name]
-        pod = pod_map.get(f"{real_name}-0")  # StatefulSet Pod命名规则
+        pod = pod_map.get(f"{real_name}-0")  # StatefulSet Pod Naming Rule
 
-        # 处理副本数为0的情况 关机状态
+        # if sts is not exists, this senario is not processed in this function, because we have processed in handle_missing_resources function
+        if not sts:
+            dingo_print(f"Not Found Sts[{real_name}], instance_status:{instance_db.instance_status}, not process in this function")
+            continue
+
+        # statefulset replicas 0
         if sts and sts.spec.replicas == 0:
             dingo_print(f"Sts[{real_name}]replicas == 0, check Pod[{real_name}-0] if exist")
-            # 如果副本数为0，但Pod不存在，说明是关机状态，更新状态为STOPPED
             if not pod:
-                dingo_print(f"Not Found Pod[{real_name}-0], Sts[{real_name}] replicas 0, change status to STOPPED")
+                dingo_print(f"Not Found Pod[{real_name}-0], Sts[{real_name}] replicas 0, check instance status, prev is {instance_db.instance_status}, will get latest db info to decide") 
 
                 ai_instance_db = AiInstanceSQL.get_ai_instance_info_by_real_name(real_name)
                 if ai_instance_db:
-                    if (ai_instance_db.instance_status == AiInstanceStatus.READY.name
-                            or ai_instance_db.instance_status == AiInstanceStatus.RUNNING.name
-                            or ai_instance_db.instance_status == AiInstanceStatus.ERROR.name):
-                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} check instance_status:{ai_instance_db.instance_status}")
+                    dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} found by real_name:{real_name}, check instance_status:{ai_instance_db.instance_status}")
+                    # if instance_status is ERROR, do nothing
+                    if(ai_instance_db.instance_status == AiInstanceStatus.ERROR.name):
+                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} in error status, no update status")
+                        continue
 
-                        # 最新操作时间与当前时间的差值
-                        time_difference = datetime.now() - ai_instance_db.update_time
-                        # 差值在2min之内的不允许清理
-                        if time_difference > timedelta(minutes=2):
-                            dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} change instance_status:{ai_instance_db.instance_status} to error, time_diff:{time_difference}, update_time: {ai_instance_db.update_time}")
-                            ai_instance_db.instance_status = AiInstanceStatus.ERROR.name
-                            ai_instance_db.instance_real_status = K8sStatus.ERROR.value
-                            ai_instance_db.error_msg = "k8s not exist this pod more 2min"
-                            AiInstanceSQL.update_ai_instance_info(ai_instance_db)
-                            ai_instance_service.set_k8s_sts_replica_by_instance_id(instance_db.id, 0)
-                    else:
-                        dingo_print(
-                            f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} change instance_status:{ai_instance_db.instance_status} to stopped")
+                    # if instance_status is DELETING, do nothing
+                    elif(ai_instance_db.instance_status == AiInstanceStatus.DELETING.name):
+                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} in deleting status, no update status")
+                        continue
+                    
+                    # if instance_status is STOPPING, update to STOPPED
+                    elif(ai_instance_db.instance_status == AiInstanceStatus.STOPPING.name):
+                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} in stopping status, change to stopped, start update db")
                         ai_instance_db.instance_status = AiInstanceStatus.STOPPED.name
                         ai_instance_db.instance_real_status = None
                         AiInstanceSQL.update_ai_instance_info(ai_instance_db)
+                        continue
+
+                    # if instance_status is STOPPED, do nothing
+                    elif(ai_instance_db.instance_status == AiInstanceStatus.STOPPED.name):
+                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} in stopped status, no update status")
+                        continue
+
+                    # if instance_status is STARTING, do nothing
+                    elif(ai_instance_db.instance_status == AiInstanceStatus.STARTING.name):
+                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} in starting status, no update status")
+                        continue
+
+                    # if instance_status is READY or RUNNING, and pod not exist, change to STOPPED if last update_time > 3min, else do nothing
+                    elif (ai_instance_db.instance_status == AiInstanceStatus.READY.name
+                            or ai_instance_db.instance_status == AiInstanceStatus.RUNNING.name):
+                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} check instance_status:{ai_instance_db.instance_status}")
+
+                        # get time difference between now and ai_instance_db.update_time
+                        time_difference = datetime.now() - ai_instance_db.update_time
+                        # if time_difference <= timedelta(minutes=3), do nothing
+                        if time_difference > timedelta(minutes=3):
+                            dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} change instance_status:{ai_instance_db.instance_status} to STOPPED, time_diff:{time_difference}, update_time: {ai_instance_db.update_time}")
+                            ai_instance_db.instance_status = AiInstanceStatus.STOPPED.name
+                            ai_instance_db.instance_real_status = K8sStatus.STOPPED.value
+                            ai_instance_db.error_msg = "k8s not exist this pod more 3min"
+                            AiInstanceSQL.update_ai_instance_info(ai_instance_db)
+                            ai_instance_service.set_k8s_sts_replica_by_instance_id(instance_db.id, 0)
+                    else:
+                        # other status, may not happen, because we have checked all status before, just change to STOPPED
+                        dingo_print(f"Not Found Pod[{real_name}-0], ai instance {ai_instance_db.id} in other status:{ai_instance_db.instance_status}, change to stopped, start update db")
+                        ai_instance_db.instance_status = AiInstanceStatus.STOPPED.name
+                        ai_instance_db.instance_real_status = None
+                        AiInstanceSQL.update_ai_instance_info(ai_instance_db)
+                        continue
+                else:
+                    dingo_print(f"Not Found Pod[{real_name}-0], but not found ai instance by real_name:{real_name}, no update status")
+                    continue
             else:
-                # 关机过程中，Pod还存在
-                dingo_print(f"Sts[{real_name}]replicas 0, but Pod[{real_name}-0] exist, in stopping process, no update status")
+                # sts replicas 0, but pod exist, in stopping process, no update status
+                dingo_print(f"Sts[{real_name}]replicas 0, but Pod[{real_name}-0] exist, maybe in stopping process, it's k8s process, no update status")
             continue
 
-        dingo_print(f"Sts[{real_name}] replicas not 0, check other status")
-
-        # 开机或创建
+        # statefulset replicas 1
         if sts and sts.spec.replicas == 1:
-            # POD不存在，则实例处于开机中状态
-            if not pod and (instance_db.instance_status.lower() == AiInstanceStatus.STARTING.name.lower() or instance_db.instance_status.lower() == AiInstanceStatus.STOPPED.name.lower()):
-                dingo_print(f"Sts[{real_name}]replicas 1, but Pod[{real_name}-0] not exist, instance status in starting or stopped, no update status")
+            dingo_print(f"Sts[{real_name}] replicas not 0, replicas is {sts.spec.replicas}, check Pod[{real_name}-0] if exist")
+
+            # pod not exist, instance status in starting or stopped, no update status
+            # if not pod and (instance_db.instance_status.lower() == AiInstanceStatus.STARTING.name.lower() or instance_db.instance_status.lower() == AiInstanceStatus.STOPPED.name.lower()):
+            #     dingo_print(f"Sts[{real_name}]replicas 1, but Pod[{real_name}-0] not exist, instance status in starting or stopped, no update status")
+            #     continue
+            # pod not exist, it's the issue of k8s, do not update status, wait next sync
+            if not pod:
+                dingo_print(f"Sts[{real_name}]replicas 1, but Pod[{real_name}-0] not exist, it's the issue of k8s, do not update status, wait next sync")
                 continue
 
-        # 确定实例状态
-        k8s_status, error_msg = ai_instance_service.get_pod_final_status(pod)
-        # k8s_image = extract_image_info(sts)
-        # 环境变量、错误信息等
-        pod_details = extract_pod_details(pod)
-        instance_status = AiInstanceService.map_k8s_to_db_status(k8s_status, instance_db.instance_status)
-        dingo_print(f"ai instance [{real_name}] k8s_status: {k8s_status}, instance_status: {instance_status}, error_msg: {error_msg}")
-
-        # if instance_db.instance_status != instance_status, we need to check if instance_db.update_time is within 2 minutes, else we do not update it
-        if instance_db.instance_status != instance_status:
-            # 重新获取最新的数据库记录以确保数据一致性
-            ai_instance_db = AiInstanceSQL.get_ai_instance_info_by_real_name(real_name)
-            if not ai_instance_db:
-                dingo_print(f"not found ai instance by real_name:{real_name}")
-                continue
-                
-            dingo_print(f"ai instance {ai_instance_db.id} check instance_status:{ai_instance_db.instance_status}")
-            
-            # 检查状态是否真的需要更新（使用最新的数据库记录）
-            if ai_instance_db.instance_status != instance_status:
-                dingo_print(f"ai instance {ai_instance_db.id} change instance_status:{ai_instance_db.instance_status} to {instance_status}")
-                
-                # 检查更新时间是否存在，避免 None 异常
-                if ai_instance_db.update_time is None:
-                    dingo_print(f"ai instance {ai_instance_db.id} update_time is None, allow update")
-                else:
-                    # 最新操作时间与当前时间的差值
-                    time_difference = datetime.now() - ai_instance_db.update_time
-                    # 差值在2min之内的不允许更新
-                    if time_difference <= timedelta(minutes=2):
-                        dingo_print(f"ai instance {ai_instance_db.id} change instance_status:{ai_instance_db.instance_status} to {instance_status}, time_diff:{time_difference}, update_time: {ai_instance_db.update_time}, <= 2min, no update")
-                        continue
-                    else:
-                        dingo_print(f"ai instance {ai_instance_db.id} change instance_status:{ai_instance_db.instance_status} to {instance_status}, time_diff:{time_difference}, update_time: {ai_instance_db.update_time}, > 2min, update")
+            # pod exist, check and update status
             else:
-                dingo_print(f"ai instance {ai_instance_db.id} instance_status:{ai_instance_db.instance_status} no change, will update other info")
-            
-            # 使用最新的数据库记录
-            instance_db = ai_instance_db
-            dingo_print(f"ai instance [{real_name}] final decide instance_status: {instance_status}, use latest db info to update")
+                dingo_print(f"Sts[{real_name}]replicas 1, Pod[{real_name}-0] exist, check and update status")
 
-        # 更新数据库记录
-        try:
-            # 准备更新数据，处理可能的空值
-            update_data = {
-                'instance_real_status': k8s_status,
-                'instance_status': instance_status,
-                # 'instance_image': k8s_image,
-                'instance_node_name': pod.spec.node_name if pod and pod.spec and pod.spec.node_name else None
-            }
+                # get k8s_status, error_msg
+                k8s_status, error_msg = ai_instance_service.get_pod_final_status(pod)
+                # k8s_image = extract_image_info(sts)
+                pod_details = extract_pod_details(pod)
+                instance_status = AiInstanceService.map_k8s_to_db_status(k8s_status, instance_db.instance_status)
+                dingo_print(f"ai instance [{real_name}] k8s_status: {k8s_status}, instance_status: {instance_status}, error_msg: {error_msg}")
 
-            if pod_details:
-                update_data['instance_envs'] = pod_details.get('instance_envs')
-                update_data['error_msg'] = pod_details.get('error_msg')
-            dingo_print(f"ai instance [{real_name}] k8s_status: {k8s_status}, instance_status: {instance_status}, error_msg: {error_msg}, start update db")
-            # 更新数据库
-            AiInstanceSQL.update_specific_fields_instance(instance_db, **update_data)
-            if instance_status.upper() == "ERROR":
-                dingo_print(f"update ai instance [{real_name}]: {update_data['instance_status']}")
-                # 修改副本数
-                ai_instance_service.set_k8s_sts_replica_by_instance_id(instance_db.id, 0)
-        except Exception as e:
-            dingo_print(f"update ai instance failed[{real_name}]: {str(e)}")
+                # if instance_db.instance_status != instance_status, we need to check if instance_db.update_time is within 2 minutes, else we do not update it
+                if instance_db.instance_status != instance_status:
+                    # 重新获取最新的数据库记录以确保数据一致性
+                    ai_instance_db = AiInstanceSQL.get_ai_instance_info_by_real_name(real_name)
+                    if not ai_instance_db:
+                        dingo_print(f"not found ai instance by real_name:{real_name}")
+                        continue
+                    
+                    dingo_print(f"ai instance {ai_instance_db.id} check instance_status:{ai_instance_db.instance_status}")
+                    
+                    # 检查状态是否真的需要更新（使用最新的数据库记录）
+                    if ai_instance_db.instance_status != instance_status:
+                        dingo_print(f"ai instance {ai_instance_db.id} will change instance_status:{ai_instance_db.instance_status} to {instance_status}")
+                        
+                        # 检查更新时间是否存在，避免 None 异常
+                        if ai_instance_db.update_time is None:
+                            dingo_print(f"ai instance {ai_instance_db.id} update_time is None, allow update")
+                        else:
+                            # 最新操作时间与当前时间的差值
+                            time_difference = datetime.now() - ai_instance_db.update_time
+                            # 差值在3min之内的不允许更新
+                            if time_difference <= timedelta(minutes=3):
+                                dingo_print(f"ai instance {ai_instance_db.id} change instance_status:{ai_instance_db.instance_status} to {instance_status}, time_diff:{time_difference}, update_time: {ai_instance_db.update_time}, <= 3min, no update")
+                                continue
+                            else:
+                                dingo_print(f"ai instance {ai_instance_db.id} change instance_status:{ai_instance_db.instance_status} to {instance_status}, time_diff:{time_difference}, update_time: {ai_instance_db.update_time}, > 3min, update")
+                    else:
+                        dingo_print(f"ai instance {ai_instance_db.id} instance_status:{ai_instance_db.instance_status} no change, will update other info")
+                    
+                    # 使用最新的数据库记录
+                    instance_db = ai_instance_db
+                    dingo_print(f"ai instance [{real_name}] final decide instance_status: {instance_status}, use latest db info to update")
+
+                # 更新数据库记录
+                try:
+                    # 准备更新数据，处理可能的空值
+                    update_data = {
+                        'instance_real_status': k8s_status,
+                        'instance_status': instance_status,
+                        # 'instance_image': k8s_image,
+                        'instance_node_name': pod.spec.node_name if pod and pod.spec and pod.spec.node_name else None
+                    }
+
+                    if pod_details:
+                        update_data['instance_envs'] = pod_details.get('instance_envs')
+                        update_data['error_msg'] = pod_details.get('error_msg')
+                    dingo_print(f"ai instance [{real_name}] k8s_status: {k8s_status}, instance_status: {instance_status}, error_msg: {error_msg}, start update db")
+                    # 更新数据库
+                    AiInstanceSQL.update_specific_fields_instance(instance_db, **update_data)
+
+                    if instance_status.upper() == "ERROR":
+                        # 修改副本数
+                        dingo_print(f"ai instance [{real_name}] in error status, change sts replicas to 0")
+                        ai_instance_service.set_k8s_sts_replica_by_instance_id(instance_db.id, 0)
+                except Exception as e:
+                    dingo_print(f"update ai instance failed[{real_name}]: {str(e)}")
 
 def extract_pod_details(pod):
     """从Pod中提取详细信息"""
