@@ -15,12 +15,13 @@
 import multiprocessing
 
 bind = "0.0.0.0:8887"
-workers = (1 + multiprocessing.cpu_count()) // 2
-worker_class = "uvicorn.workers.UvicornWorker"
-timeout = 300
-keepalive = 5
-reuse_port = True
+workers = min(multiprocessing.cpu_count() * 2, 8)  # 平衡性能与资源
+timeout = 600                                      # 充足的操作时间  
+keepalive = 30                                     # 优化连接复用
 proc_name = "dingo-command"
+max_requests = 2000       # K8s操作较重，适当提高以减少重启频率
+max_requests_jitter = 200 # 增加随机性，避免所有worker同时重启
+preload_app = True       # 预加载应用，共享K8s客户端初始化开销
 
 logconfig_dict = {
     "version": 1,
