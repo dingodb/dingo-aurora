@@ -353,6 +353,8 @@ def handle_missing_resources(apps_client, sts_names, db_instances):
 
 def sync_instance_info(sts_map, pod_map, db_instance_map,  core_client, apps_client, networking_client):
     """同步实例状态、image、env等信息"""
+    dingo_print(f"fetch_ai_instance_info {datatime_util.get_now_time()}======sync_instance_info======db_instance_map size:{len(db_instance_map)}")
+
     for real_name, instance_db in db_instance_map.items():
         if real_name not in sts_map:
             continue
@@ -548,6 +550,8 @@ def sync_instance_info(sts_map, pod_map, db_instance_map,  core_client, apps_cli
                         ai_instance_service.set_k8s_sts_replica_by_instance_id(instance_db.id, 0)
                 except Exception as e:
                     dingo_print(f"update ai instance failed[{real_name}]: {str(e)}")
+
+    dingo_print(f"fetch_ai_instance_info {datatime_util.get_now_time()}======sync_instance_info======all done")
 
 def extract_pod_details(pod):
     """从Pod中提取详细信息"""
