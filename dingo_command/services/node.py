@@ -4,6 +4,7 @@ import logging
 import os
 import shutil
 import uuid
+import ctypes
 from io import BytesIO
 
 import pandas as pd
@@ -42,6 +43,33 @@ thin_border = Border(
     top=Side(border_style="thin", color="000000"),  # 上边框
     bottom=Side(border_style="thin", color="000000")  # 下边框
 )
+def set_netns(netns_name):
+    """
+    将当前线程切换到指定的网络命名空间。
+    libc.setns() 系统调用需要文件描述符和命名空间标识。
+    """
+    libc = ctypes.CDLL("libc.so.6")
+    netns_path = f"/run/netns/{netns_name}"
+    if not os.path.exists(netns_path):
+        #raise FileNotFoundError(f"网络命名空间 {netns_name} 不存在于 {netns_path}")
+        print(f"网络命名空间 {netns_name} 不存在于 {netns_path}")
+        return
+    current_ns_fd = os.open("/proc/self/ns/net", os.O_RDONLY)
+    fd = os.open(netns_path, os.O_RDONLY)
+    try:
+        if libc.setns(fd, 0) == -1:
+            raise OSError("setns 系统调用失败")
+        print(f"已切换到网络命名空间: {netns_name}")
+        # 返回一个恢复函数
+        def restore_ns():
+            if libc.setns(current_ns_fd, 0) == -1:
+                raise OSError("恢复原始网络命名空间失败")
+            print("已恢复到原始网络命名空间")
+            os.close(current_ns_fd)
+        
+        return restore_ns
+    finally:
+        os.close(fd)
 
 system_service = SystemService()
 
@@ -54,7 +82,7 @@ class NodeService:
 
     # 查询资产列表
     @classmethod
-    def list_nodes(cls, query_params, page, page_size, sort_keys, sort_dirs):
+    def list_nodes(cls, query_params, page, page_size, sort_keys, sort_dirs, detail: bool = False):
         # 业务逻辑
         try:
             # 按照条件从数据库中查询数据
@@ -68,11 +96,56 @@ class NodeService:
                 res['totalPages'] = ceil(count / int(page_size))
             res['total'] = count
             res['data'] = data
+            if detail:
+                #调用common中的k8s_client查询node资源列表，并将node资源信息添加到data中的每个节点信息中
+                try:
+                    from dingo_command.common.k8s_client import K8sClient  # 假设k8s_client是K8sClient类
+                    k8s_client = K8sClient()  # 初始化客户端，可能需要传递集群配置
+                    if data == None or len(data) == 0:
+                        return res
+                    cluster_id = data[0].cluster_id  # 假设data中的节点有cluster_id
+                    #查询cluster_id对应的集群信息
+                    query_params = {}
+                    query_params["id"] = cluster_id
+                    count, clusters = ClusterSQL.list_cluster(query_params, 1, -1, sort_keys=None, sort_dirs=None)
+                    if clusters == None or len(clusters) == 0:
+                        return res
+                    restore_ns = None
+                    admin_network_id = clusters[0].admin_network_id
+                    restore_ns = set_netns("qdhcp-" + str(admin_network_id))
+
+                    k8s_nodes = k8s_client.list_resource("nodes")  # 查询K8s node列表
+                    # k8s_nodes 可能是 list_resource("nodes") 的原始返回值
+                    # 需要将其转换为以节点名为 key 的 dict，方便后续匹配
+                    k8s_node_map = {}
+                    if isinstance(k8s_nodes, dict) and "items" in k8s_nodes:
+                        for item in k8s_nodes["items"]:
+                            name = item.get("metadata", {}).get("name")
+                            if name:
+                                k8s_node_map[name] = item
+                    elif isinstance(k8s_nodes, list):
+                        for item in k8s_nodes:
+                            name = item.get("metadata", {}).get("name")
+                            if name:
+                                k8s_node_map[name] = item
+                    else:
+                        return res 
+
+                    for node in data:
+                        node_name = node.get('name')
+                        node['k8s_info'] = k8s_node_map.get(node_name, {})
+                except Exception as e:
+                    LOG.error(f"Failed to fetch K8s node info for cluster {cluster_id}: {e}")
+                    node['k8s_info'] = {}  # 出错时设置为空
+
             return res
         except Exception as e:
             import traceback
             traceback.print_exc()
             return None
+        finally:
+            if restore_ns:
+                restore_ns()
 
     def get_node(self, node_id):
         if not node_id:

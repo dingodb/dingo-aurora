@@ -667,6 +667,12 @@ class ClusterService:
                 tfvars.password = ""
             else:
                 tfvars.password = ""
+
+            if use_existing_network:
+                #调用neutronclient获取子网的cidr
+                subnet = neutron_api.get_subnet_by_id(cluster.network_config.admin_subnet_id)
+                tfvars.subnet_cidr = subnet["cidr"]
+
             #组装cluster信息为ClusterTFVarsObject格式
             if cluster.type == "baremetal":
                 tfvars.number_of_k8s_masters = 0
