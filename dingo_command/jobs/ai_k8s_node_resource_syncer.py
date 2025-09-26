@@ -20,7 +20,7 @@ k8s_common_operate = K8sCommonOperate()
 
 def start():
     node_resource_scheduler.add_job(fetch_ai_k8s_node_resource, 'interval', seconds=300, next_run_time=datetime.now(),  misfire_grace_time=150,coalesce=True, max_instances=1)
-    node_resource_scheduler.add_job(fetch_ai_k8s_node_resource_4operate, 'interval', seconds=10, next_run_time=datetime.now(), misfire_grace_time=150, coalesce=True, max_instances=1)
+    # node_resource_scheduler.add_job(fetch_ai_k8s_node_resource_4operate, 'interval', seconds=10, next_run_time=datetime.now(), misfire_grace_time=150, coalesce=True, max_instances=1)
     node_resource_scheduler.start()
 
 def fetch_ai_k8s_node_resource_4operate():
