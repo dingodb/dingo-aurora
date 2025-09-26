@@ -73,4 +73,4 @@ def fetch_bigscreen_metrics():
         # 发送websocket更新消息
         websocket_service.send_websocket_message('big_screen', json.dumps({"refresh_flag": True}))
     except Exception as e:
-        dingo_print(f"缓存写入失败: {e}")
+        dingo_print(f"write cache failed: {e}")

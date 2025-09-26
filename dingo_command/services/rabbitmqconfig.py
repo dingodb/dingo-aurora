@@ -99,14 +99,14 @@ class RabbitMqConfigService:
                 }
                 # 创建前删除掉原来的shovel
                 delete_response = requests.delete(shovel_url, auth=auth)
-                dingo_print(f"Shovel Deleted,状态码：{delete_response.status_code}, 响应内容：{delete_response.text} ")
+                dingo_print(f"Shovel Deleted, status: {delete_response.status_code}, response: {delete_response.text} ")
                 # 发送 HTTP 请求创建 Shovel
                 response = requests.put(shovel_url, auth=auth, json=shovel_config)
                 # 检查响应状态
                 if response.status_code == 201:
-                    dingo_print("Shovel 创建成功！")
+                    dingo_print("Shovel create successfully!")
                 else:
-                    dingo_print(f"Shovel 创建失败，状态码：{response.status_code}, 响应内容：{response.text}")
+                    dingo_print(f"Shovel create fail, status code: {response.status_code}, response: {response.text} ")
         except Exception as e:
             import traceback
             traceback.print_exc()

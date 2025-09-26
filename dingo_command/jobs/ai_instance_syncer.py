@@ -61,7 +61,7 @@ def fetch_ai_instance_info():
     with RedisLock(redis_connection.redis_master_connection, "dingo_command_ai_instance_lock", expire_time=120) as lock:
         if lock:
             start_time = datatime_util.get_now_time()
-            dingo_print(f"同步容器实例开始时间: {start_time}")
+            dingo_print(f"sync ai instance info start: {datatime_util.get_now_time()}")
             try:
                 # 查询所有容器实例
                 k8s_kubeconfig_configs_db = AiInstanceSQL.list_k8s_configs()
@@ -74,14 +74,14 @@ def fetch_ai_instance_info():
                         dingo_print("k8s cluster id empty")
                         continue
 
-                    dingo_print(f"{datatime_util.get_now_time()} 处理K8s集群: ID={k8s_kubeconfig_db.k8s_id}, Type={k8s_kubeconfig_db.k8s_type}")
+                    dingo_print(f"doing k8s cluster {k8s_kubeconfig_db.k8s_id} ai instance info")
                     try:
                         # 获取client
                         core_k8s_client = get_k8s_core_client(k8s_kubeconfig_db.k8s_id)
                         app_k8s_client = get_k8s_app_client(k8s_kubeconfig_db.k8s_id)
                         networking_k8s_client = get_k8s_app_client(k8s_kubeconfig_db.k8s_id)
                     except Exception as e:
-                        dingo_print(f"获取k8s[{k8s_kubeconfig_db.k8s_id}] client失败: {e}")
+                        dingo_print(f"get k8s[{k8s_kubeconfig_db.k8s_id}] client failed: {e}")
                         continue
 
                     # 同步处理单个K8s集群
@@ -92,10 +92,10 @@ def fetch_ai_instance_info():
                         networking_client=networking_k8s_client
                     )
             except Exception as e:
-                dingo_print(f"同步容器实例失败: {e}")
+                dingo_print(f"sync ai instance info error: {e}")
             finally:
                 end_time = datatime_util.get_now_time()
-                dingo_print(f"同步容器实例结束时间: {datatime_util.get_now_time()}, 耗时: {(end_time - start_time).total_seconds()}秒")
+                dingo_print(f"sync ai instance info end: {datatime_util.get_now_time()}, used time: {(end_time - start_time).total_seconds()}s")
         else:
             dingo_print(f"{datatime_util.get_now_time()} get dingo_command_ai_instance_lock redis lock failed")
 
