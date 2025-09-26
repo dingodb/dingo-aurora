@@ -1,6 +1,7 @@
 # dingo-command的nova的client
 import requests
 import json
+import time
 from fastapi import HTTPException
 from dingo_command.common import CONF
 
@@ -274,12 +275,30 @@ class NovaClient:
 
 # 全局 NovaClient 实例
 _global_nova_client = None
+_last_token_check = None
+TOKEN_CHECK_INTERVAL = 300  # 5分钟检查一次
 
 def get_global_nova_client():
-    """获取全局 NovaClient 实例（单例模式）"""
-    global _global_nova_client
-    if _global_nova_client is None:
-        _global_nova_client = NovaClient()
+    """获取全局 NovaClient 实例（支持 Token 刷新）"""
+    global _global_nova_client, _last_token_check
+
+    current_time = time.time()
+
+    # 如果没有实例，或者需要检查 Token
+    if (_global_nova_client is None or
+        _last_token_check is None or
+        current_time - _last_token_check > TOKEN_CHECK_INTERVAL):
+
+        try:
+            # 创建新实例（会自动重新认证）
+            _global_nova_client = NovaClient()
+            _last_token_check = current_time
+        except Exception as e:
+            # 如果创建失败，返回旧实例（如果有的话）
+            if _global_nova_client is None:
+                raise e
+            print(f"重新认证失败，使用旧实例: {e}")
+
     return _global_nova_client
 
 # 创建全局单例实例
