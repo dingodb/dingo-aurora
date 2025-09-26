@@ -17,7 +17,6 @@ ai_instance_scheduler = BackgroundScheduler()
 ai_instance_service = AiInstanceService()
 k8s_common_operate = K8sCommonOperate()
 
-
 def auto_actions_tick():
     now = datetime.now()
     try:
@@ -41,7 +40,7 @@ def auto_actions_tick():
 # 将任务注册到 scheduler（与 fetch_ai_instance_info 同步周期一样或独立间隔）
 def start():
     ai_instance_scheduler.add_job(fetch_ai_instance_info, 'interval', seconds=300, next_run_time=datetime.now(), misfire_grace_time=150,coalesce=True, max_instances=1)
-    ai_instance_scheduler.add_job(fetch_ai_instance_info_4operate, 'interval', seconds=5, next_run_time=datetime.now(), misfire_grace_time=150,coalesce=True, max_instances=1)
+    # ai_instance_scheduler.add_job(fetch_ai_instance_info_4operate, 'interval', seconds=5, next_run_time=datetime.now(), misfire_grace_time=150,coalesce=True, max_instances=1)
     # ai_instance_scheduler.add_job(auto_actions_tick, 'interval', seconds=60*30, next_run_time=datetime.now())
     ai_instance_scheduler.start()
 
@@ -58,10 +57,12 @@ def fetch_ai_instance_info_4operate():
         dingo_print(e)
 
 def fetch_ai_instance_info():
+    dingo_print(f"fetch_ai_instance_info start: {datatime_util.get_now_time()}")
+
     with RedisLock(redis_connection.redis_master_connection, "dingo_command_ai_instance_lock", expire_time=120) as lock:
         if lock:
             start_time = datatime_util.get_now_time()
-            dingo_print(f"sync ai instance info start: {datatime_util.get_now_time()}")
+            dingo_print(f"fetch_ai_instance_info start_with_lock: {datatime_util.get_now_time()}")
             try:
                 # 查询所有容器实例
                 k8s_kubeconfig_configs_db = AiInstanceSQL.list_k8s_configs()
@@ -98,6 +99,8 @@ def fetch_ai_instance_info():
                 dingo_print(f"sync ai instance info end: {datatime_util.get_now_time()}, used time: {(end_time - start_time).total_seconds()}s")
         else:
             dingo_print(f"{datatime_util.get_now_time()} get dingo_command_ai_instance_lock redis lock failed")
+    
+    dingo_print(f"fetch_ai_instance_info end: {datatime_util.get_now_time()}")
 
 
 def sync_single_k8s_cluster(k8s_id: str, core_client, apps_client, networking_client):
@@ -180,7 +183,6 @@ def process_namespace_resources(tenant_id: str, core_client, apps_client, networ
         pod_map=pod_map,
         db_instance_map=db_instance_map
     )
-
 
 def handle_orphan_resources(sts_names, svc_names, db_instance_map, namespace, core_client, apps_client, networking_client):
     db_instance_names = db_instance_map.keys()
