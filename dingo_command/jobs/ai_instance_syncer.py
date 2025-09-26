@@ -190,7 +190,10 @@ def process_namespace_resources(tenant_id: str, core_client, apps_client, networ
     sync_instance_info(
         sts_map=sts_map,
         pod_map=pod_map,
-        db_instance_map=db_instance_map
+        db_instance_map=db_instance_map,
+        core_client=core_client,
+        apps_client=apps_client,
+        networking_client=networking_client
     )
 
 def handle_orphan_resources(sts_names, svc_names, db_instance_map, namespace, core_client, apps_client, networking_client):
@@ -348,7 +351,7 @@ def handle_missing_resources(apps_client, sts_names, db_instances):
             except Exception as e:
                 dingo_print(f"fetch_ai_instance_info {datatime_util.get_now_time()} delete db not exist instance id {instance.id}: {e}")
 
-def sync_instance_info(sts_map, pod_map, db_instance_map):
+def sync_instance_info(sts_map, pod_map, db_instance_map,  core_client, apps_client, networking_client):
     """同步实例状态、image、env等信息"""
     for real_name, instance_db in db_instance_map.items():
         if real_name not in sts_map:
@@ -475,6 +478,21 @@ def sync_instance_info(sts_map, pod_map, db_instance_map):
                         # if ai_instance_db.instance_status is DELETING, do not update status, wait next sync
                         if ai_instance_db.instance_status == AiInstanceStatus.DELETING.name:
                             dingo_print(f"ai instance {ai_instance_db.id} in deleting status, no update status, wait next sync")
+
+                            # check if update_time > 5min, if true, delete cci resources and then delete db record
+                            if ai_instance_db.update_time and (datetime.now() - ai_instance_db.update_time) > timedelta(minutes=5):
+                                dingo_print(f"ai instance {ai_instance_db.id} in deleting status, and update_time > 5min, delete cci resources and then delete db record")
+                                try:
+                                    cleanup_cci_resources(apps_client, core_client, networking_client, real_name, CCI_NAMESPACE_PREFIX + ai_instance_db.instance_tenant_id)
+                                except Exception as e:
+                                    dingo_print(f"cleanup cci resources for ai instance {ai_instance_db.id} failed: {e}")
+
+                                try:
+                                    AiInstanceSQL.delete_ai_instance_info_by_id(ai_instance_db.id)
+                                    AiInstanceSQL.delete_ai_instance_ports_info_by_instance_id(ai_instance_db.id)
+                                    dingo_print(f"delete ai instance {ai_instance_db.id} in deleting status db record succeed")
+                                except Exception as e:
+                                    dingo_print(f"delete ai instance {ai_instance_db.id} in deleting status db record failed: {e}")
                             continue
                         
                         # if ai_instance_db.instance_status is ERROR, do not update status, wait next sync

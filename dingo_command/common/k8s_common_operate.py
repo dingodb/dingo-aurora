@@ -1,6 +1,7 @@
 import base64
 import textwrap
 import time
+import logging
 from typing import Dict
 import json
 
@@ -10,6 +11,11 @@ from dingo_command.common.common import dingo_print
 
 from dingo_command.utils.constant import RESOURCE_TYPE_KEY, PRODUCT_TYPE_CCI, DEV_TOOL_JUPYTER, INGRESS_SIGN, \
     CCI_SHARE_METALLB
+
+# 关闭 Kubernetes 客户端的详细日志输出
+logging.getLogger('kubernetes.client').setLevel(logging.WARNING)
+logging.getLogger('kubernetes.client.rest').setLevel(logging.WARNING)
+logging.getLogger('urllib3.connectionpool').setLevel(logging.WARNING)
 
 
 class K8sCommonOperate:

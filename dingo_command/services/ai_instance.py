@@ -393,10 +393,13 @@ class AiInstanceService:
 
     def stop_save_cci_to_image_task(self, id):
         """启动后台检查任务"""
+        dingo_print(f"start stop_save_cci_to_image_task: {id}")
         try:
             try:
                 # 使用 func_timeout 来执行方法，设置单次执行超时时间为1800秒
+                dingo_print(f"ai instance {id} execution stop to save image, begin...")
                 func_timeout(CCI_TIME_OUT_DEFAULT, self.stop_cci_to_save_image, args=(id,))
+                dingo_print(f"ai instance {id} execution stop to save image, succeed!")
             except FunctionTimedOut:
                 dingo_print(f"ai instance {id} execution stop to save image, timed out after {CCI_TIME_OUT_DEFAULT} seconds!")
                 # 可以选择跳出循环或进行其他处理
@@ -423,7 +426,6 @@ class AiInstanceService:
         finally:
             self.get_or_set_update_k8s_node_resource_redis()
             dingo_print(f"Task for instance {id} has finished (success, timeout, or error), thread should be released.")
-
 
     def sava_ai_instance_to_image_process_status(self, id):
         """
