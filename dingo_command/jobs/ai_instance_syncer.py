@@ -60,7 +60,7 @@ def fetch_ai_instance_info():
     fetch_start_time = datatime_util.get_now_time()
     dingo_print(f"fetch_ai_instance_info start: {fetch_start_time}")
 
-    with RedisLock(redis_connection.redis_master_connection, "dingo_command_ai_instance_lock", expire_time=120) as lock:
+    with RedisLock(redis_connection.redis_master_connection, "dingo_command_ai_instance_lock", expire_time=300) as lock:
         if lock:
             start_time = datatime_util.get_now_time()
             dingo_print(f"fetch_ai_instance_info start_with_lock: {datatime_util.get_now_time()}, fetch_start_time: {fetch_start_time}")
