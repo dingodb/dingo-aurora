@@ -55,6 +55,18 @@ async def add_harbor_user(
     comment: str = Body("", description="备注"),
 ):
     try:
+        if username == "admin" or username == "root":
+            return {
+                "status": False,
+                "code": 400,
+                "message": "用户名不能为admin或root",
+            }
+        elif tenant_id == "" or username == "" or password == "":
+            return {
+                "status": False,
+                "code": 400,
+                "message": "租户ID或用户名或密码为空",
+            }
         if not email:
             email = f"{username}@zetyun01.com"
         if not realname:
