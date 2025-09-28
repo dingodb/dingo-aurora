@@ -20,7 +20,7 @@ from dingo_command.db.models.node.sql import NodeSQL
 from dingo_command.db.models.instance.sql import InstanceSQL
 from math import ceil
 from oslo_log import log
-from dingo_command.api.model.cluster import ClusterTFVarsObject, NodeGroup, ClusterObject, ScaleNodeObject, PortForwards
+from dingo_command.api.model.cluster import ClusterTFVarsObject, NodeGroup, ClusterObject, ScaleNodeObject, PortForwards,KubeClusterObject
 from dingo_command.db.models.cluster.models import Cluster as ClusterDB
 from dingo_command.db.models.node.models import NodeInfo as NodeDB
 from dingo_command.db.models.instance.models import Instance as InstanceDB
@@ -29,6 +29,7 @@ from dingo_command.db.engines.mysql import get_engine, get_session
 
 from dingo_command.services.custom_exception import Fail
 from dingo_command.services.system import SystemService
+
 from dingo_command.common.nova_client import nova_client
 from dingo_command.services import CONF
 
@@ -101,19 +102,22 @@ class NodeService:
                 #调用common中的k8s_client查询node资源列表，并将node资源信息添加到data中的每个节点信息中
                 
                     from dingo_command.common.k8s_client import K8sClient  # 假设k8s_client是K8sClient类
-                    k8s_client = K8sClient()  # 初始化客户端，可能需要传递集群配置
+                    
                     if data == None or len(data) == 0:
                         return res
                     cluster_id = data[0].cluster_id  # 假设data中的节点有cluster_id
                     #查询cluster_id对应的集群信息
                     query_params = {}
                     query_params["id"] = cluster_id
-                    count, clusters = ClusterSQL.list_cluster(query_params, 1, -1, sort_keys=None, sort_dirs=None)
-                    if clusters == None or len(clusters) == 0:
+                    result = ClusterSQL.list_cluster(query_params, 1, 10, None, None)
+                    if not result or not result[1]:
                         return res
-                    admin_network_id = clusters[0].admin_network_id
+                    cluster = result[1][0]
+                    admin_network_id = cluster.admin_network_id
                     restore_ns = set_netns("qdhcp-" + str(admin_network_id))
-
+                    # get kube_config from kube_info
+                    kube_info = KubeClusterObject(**json.loads(cluster.kube_info))
+                    k8s_client = K8sClient(kubeconfig_content=str(kube_info.kube_config))  # 初始化客户端，可能需要传递集群配置
                     k8s_nodes = k8s_client.list_resource("nodes")  # 查询K8s node列表
                     # k8s_nodes 可能是 list_resource("nodes") 的原始返回值
                     # 需要将其转换为以节点名为 key 的 dict，方便后续匹配
@@ -132,8 +136,8 @@ class NodeService:
                         return res 
 
                     for node in data:
-                        node_name = node.get('name')
-                        node['k8s_info'] = k8s_node_map.get(node_name, {})
+                        node_name = node.name
+                        setattr(node, 'k8s_info', k8s_node_map.get(node_name, {}))
 
             return res
         except Exception as e:
@@ -342,7 +346,8 @@ class NodeService:
                         floating_ip=False,
                         etcd=False,
                         image_id=node.image,
-                        port_forwards=[PortForwards(**forward) for forward in forward_rules_new]
+                        port_forwards=[PortForwards(**forward) for forward in forward_rules_new],
+                        use_local_disk = True
                     )
                     scale_nodes.append(f"{cluster_info.name}-node-{int(node_index)}")
                     instance_db = InstanceDB()
