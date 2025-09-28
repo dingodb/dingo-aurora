@@ -12,6 +12,7 @@ from dingo_command.db.models.chart.sql import AppSQL, RepoSQL, ChartSQL
 from dingo_command.db.models.cluster.sql import ClusterSQL
 from dingo_command.services.chart import ChartService
 from dingo_command.api.model.chart import CreateRepoObject, CreateAppObject
+from dingo_command.api.chart import init
 from dingo_command.utils.helm import util
 from dingo_command.celery_api import CONF
 from dingo_command.utils.helm.redis_lock import RedisSentinelDistributedLock
@@ -31,13 +32,15 @@ master_name = "kolla"
 
 def start():
     # 添加检查集群状态的定时任务，每180秒执行一次
-    scheduler.add_job(run_once, 'interval', seconds=180, args=[check_app_status], next_run_time=datetime.now())
+    scheduler.add_job(run_once, 'interval', seconds=180, args=[check_app_status], next_run_time=datetime.now(),
+                      max_instances=1)
     scheduler.add_job(run_once, 'interval', seconds=180, args=[remove_global_chart],
-                      next_run_time=datetime.now())
+                      next_run_time=datetime.now(), max_instances=1)
     scheduler.add_job(run_once, 'interval', args=[check_cluster_status], seconds=1800,
-                      next_run_time=datetime.now())
+                      next_run_time=datetime.now(), max_instances=1)
     scheduler.start()
-    scheduler_async.add_job(start_async,'cron', hour=0, minute=0, args=[check_sync_status])
+    scheduler_async.add_job(start_async,'cron', hour=0, minute=0, args=[check_sync_status], max_instances=1)
+    scheduler_async.add_job(start_async, 'date', args=[init], run_date=datetime.now(), max_instances=1)
     scheduler_async.start()
 
 async def start_async(func):
