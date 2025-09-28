@@ -1406,14 +1406,14 @@ def create_k8s_cluster(self, cluster_tf_dict, cluster_dict, node_list, instance_
         query_params["id"] = cluster_dict["id"]
         count, db_clusters = ClusterSQL.list_cluster(query_params)
         c = db_clusters[0]
-        kube_info = json.loads(c.kube_info)
-        kube_info["kube_config"] = kube_config
-        kube_info["kube_lb_address"] = lb_ip
-        c.kube_info = json.dumps(kube_info)
         c.status = 'running'
-        if not scale:
-            update_cluster_node_count(len([node for node in node_list if node.get("role") != "master"]), c)
         c.status_msg = ""
+        if not scale:
+            kube_info = json.loads(c.kube_info)
+            kube_info["kube_config"] = kube_config
+            kube_info["kube_lb_address"] = lb_ip
+            c.kube_info = json.dumps(kube_info)
+            update_cluster_node_count(len([node for node in node_list if node.get("role") != "master"]), c)
         instance_names = get_cluster_node_names(task_info, host_file, cluster_dir)
         instances_gpu_count_info = AssetResourceRelationSQL.query_instances_gpu_count_info(instance_names)
         if instances_gpu_count_info is not None:
