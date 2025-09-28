@@ -84,6 +84,7 @@ class NodeService:
     @classmethod
     def list_nodes(cls, query_params, page, page_size, sort_keys, sort_dirs, detail: bool = False):
         # 业务逻辑
+        restore_ns = None
         try:
             # 按照条件从数据库中查询数据
             count, data = NodeSQL.list_nodes(query_params, page, page_size, sort_keys, sort_dirs)
@@ -98,7 +99,7 @@ class NodeService:
             res['data'] = data
             if detail:
                 #调用common中的k8s_client查询node资源列表，并将node资源信息添加到data中的每个节点信息中
-                try:
+                
                     from dingo_command.common.k8s_client import K8sClient  # 假设k8s_client是K8sClient类
                     k8s_client = K8sClient()  # 初始化客户端，可能需要传递集群配置
                     if data == None or len(data) == 0:
@@ -110,7 +111,6 @@ class NodeService:
                     count, clusters = ClusterSQL.list_cluster(query_params, 1, -1, sort_keys=None, sort_dirs=None)
                     if clusters == None or len(clusters) == 0:
                         return res
-                    restore_ns = None
                     admin_network_id = clusters[0].admin_network_id
                     restore_ns = set_netns("qdhcp-" + str(admin_network_id))
 
@@ -134,9 +134,6 @@ class NodeService:
                     for node in data:
                         node_name = node.get('name')
                         node['k8s_info'] = k8s_node_map.get(node_name, {})
-                except Exception as e:
-                    LOG.error(f"Failed to fetch K8s node info for cluster {cluster_id}: {e}")
-                    node['k8s_info'] = {}  # 出错时设置为空
 
             return res
         except Exception as e:

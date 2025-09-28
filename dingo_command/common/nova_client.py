@@ -254,6 +254,14 @@ class NovaClient:
                 pass
         return gpu_count
     
+    def nova_server_interfaces_list(self, server_id):
+        """获取虚拟机的网络接口列表"""
+        endpoint = self.get_service_endpoint('compute')
+        response = self.session.get(f"{endpoint}/servers/{server_id}/os-interface")
+        if response.status_code != 200:
+            raise Exception(f"获取虚拟机网络接口失败: {response.text}")
+        return response.json().get('interfaceAttachments', [])
+
     def get_image_info(self, image_id):
         """获取镜像信息"""
         try:
