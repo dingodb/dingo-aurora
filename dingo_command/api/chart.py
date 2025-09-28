@@ -1,7 +1,7 @@
 import re
 import time
 from typing import Union
-import asyncio
+
 from datetime import datetime
 import json
 from fastapi import Query
@@ -37,13 +37,10 @@ async def init():
             time.sleep(3)
     except Exception as e:
         if "acquire lock" not in str(e):
-            Log.error(f"执行过程中发生错误: {e}")
+            Log.error("An error occurred during execution: time out")
             import traceback
             traceback.print_exc()
             raise e
-
-# TODO: comment here by ketor, need to test if async works well
-# asyncio.run(init())
 
 @router.post("/repo", summary="helm的repo仓库（异步）", description="创建helm的repo仓库（异步）")
 async def create_repo(repo: CreateRepoObject, background_tasks: BackgroundTasks):

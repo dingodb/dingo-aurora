@@ -85,7 +85,7 @@ async def create_harbor_repo(repo_name=util.repo_global_name, url=harbor_url, us
         await ChartService().handle_oci_repo(repo_info_db)
         Log.info("finished add global repo with harbor")
     except asyncio.TimeoutError as e:
-        Log.error("Harbor API请求超时，请检查网络或Harbor服务状态")
+        Log.error("Harbor API request time out，please check.")
         raise e
     except Exception as e:
         import traceback
@@ -705,12 +705,12 @@ class ChartService:
                     break
                 except asyncio.TimeoutError as e:
                     e_object = e
-                    Log.error("Harbor API请求超时，请检查网络或Harbor服务状态")
+                    Log.error("Harbor API request time out，please check.")
                     try_times += 1
                     time.sleep(3)
                 except HTTPStatusError as e:
                     e_object = e
-                    Log.error("Harbor API请求失败: %s", str(e))
+                    Log.error("Harbor API request time out: %s", str(e))
                     try_times += 1
                     time.sleep(3)
                 except Exception as e:

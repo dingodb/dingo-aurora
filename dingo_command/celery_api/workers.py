@@ -221,18 +221,18 @@ def state_remove(node_list):
             )
         except subprocess.CalledProcessError as e:
             # 现在可以访问e.stdout和e.stderr来获取详细输出
-            print(f"命令执行失败，返回码: {e.returncode}")
-            print(f"标准输出: {e.stdout}")
-            print(f"标准错误: {e.stderr}")
+            print(f"run cmd failed，retrun code: {e.returncode}")
+            print(f"stdout: {e.stdout}")
+            print(f"stderr: {e.stderr}")
 
             # 根据错误内容决定是跳过还是抛出异常
             if "No matching objects found" in e.stderr:
-                print(f"资源不存在，跳过节点 {node}")
+                print(f"resource does not exist, skip node, {node}")
                 continue
             else:
-                print(f"移除节点 {node} 的状态时遇到意外错误")
+                print(f"remove nodes {node} unexpected error encountered while status")
                 raise e
-    print("所有节点状态移除操作完成")
+    print("All node state removal operations complete")
 
 def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale=False, node_list=None,
                           node_type=None, instance_list=None):
@@ -679,12 +679,12 @@ def render_templatefile(template_file, cluster_file, context):
 def update_ansible_status(task_info, event, task_name, host, task_status):
     if task_name == work_node_task_name and host is not None:
         # 处理 etcd 任务的特殊逻辑
-        print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
+        print(f"task {task_name} host {host} Status: {event['event']}")
         if task_status != "failed":
             # 处理 etcd 任务失败的逻辑
-            print(f"etcd 任务失败: {task_name} 在主机 {host} 上")
+            print(f"etcd mission failed: {task_name} host {host} ")
             # 处理任务成功的逻辑
-            print(f"任务失败: {task_name} 在主机 {host} 上")
+            print(f"mission failed: {task_name} host {host} ")
             # 更新数据库的状态为failed
             task_info.end_time = datetime.fromtimestamp(datetime.now().timestamp())
             task_info.state = "success"
@@ -1142,7 +1142,7 @@ def remove_bastion_fip_from_state(cluster_dir):
         
         # 检查目标资源是否存在
         if target_resource in state_resources:
-            print(f"找到资源 {target_resource}，正在从 state 中移除...")
+            print(f"find the resources {target_resource}，removing state")
             
             # 执行 terraform state rm 移除资源
             remove_result = subprocess.run(
@@ -1575,7 +1575,7 @@ def delete_cluster(self, cluster_id, token):
         terraform_dir = os.path.join(cluster_dir, "terraform")
         # 进入到terraform目录、
         if not os.path.exists(cluster_dir) or not os.path.exists(terraform_dir):
-            print(f"集群目录不存在: {cluster_dir}")
+            print(f"Cluster directory does not exist: {cluster_dir}")
             # 更新集群状态为已删除，因为目录不存在意味着可能已被删除或从未创建成功
             query_params = {}
             query_params["id"] = cluster_id
@@ -1670,7 +1670,7 @@ def delete_cluster(self, cluster_id, token):
             process.wait(timeout=600)
             if process.returncode is None:
                 process.kill()
-            print(f"进程已终止，退出码: {process.returncode}")
+            print(f"Process terminated, exit code: {process.returncode}")
         if process.returncode != 0:
             # 发生错误时更新任务状态为"失败"
             if resource_inuse:
