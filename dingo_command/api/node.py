@@ -23,7 +23,7 @@ async def list_nodes(cluster_id: str = Query(None, description="集群id"),
                      page: int = Query(1, description="页码"),
                      page_size: int = Query(10, description="页数量大小"),
                      sort_keys: str = Query(None, description="排序字段"),
-                     detail: bool = Query(False, description="是否详细信息"),
+                     detail_enabled: bool = Query(False, description="是否详细信息"),
                      sort_dirs: str = Query(None, description="排序方式"), ):
     try:
         # 声明查询条件的dict
@@ -42,7 +42,7 @@ async def list_nodes(cluster_id: str = Query(None, description="集群id"),
             query_params['type'] = type
         if name:
             query_params['name'] = name
-        result = node_service.list_nodes(query_params, page, page_size, sort_keys, sort_dirs, detail)
+        result = node_service.list_nodes(query_params, page, page_size, sort_keys, sort_dirs, detail_enabled)
         return result
     except Exception as e:
         return None
