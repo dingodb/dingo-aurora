@@ -37,16 +37,16 @@ preload_app = True       # 预加载应用，共享K8s客户端初始化开销
 logconfig_dict = {
     "version": 1,
     "disable_existing_loggers": False,
-    "root": {"level": "DEBUG", "handlers": ["console"]},
+    "root": {"level": "INFO", "handlers": ["console"]},
     "loggers": {
         "gunicorn.error": {
-            "level": "DEBUG",
+            "level": "INFO",
             "handlers": ["error_file"],
             "propagate": 0,
             "qualname": "gunicorn_error",
         },
         "gunicorn.access": {
-            "level": "DEBUG",
+            "level": "INFO",
             "handlers": ["access_file"],
             "propagate": 0,
             "qualname": "access",
@@ -65,7 +65,7 @@ logconfig_dict = {
         },
         "console": {
             "class": "logging.StreamHandler",
-            "level": "DEBUG",
+            "level": "INFO",
             "formatter": "generic",
         },
     },

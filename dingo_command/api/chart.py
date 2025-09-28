@@ -42,6 +42,10 @@ async def init():
             traceback.print_exc()
             raise e
 
+# TODO: comment here by ketor, need to test if async works well
+# asyncio.run(init())
+
+
 @router.post("/repo", summary="helm的repo仓库（异步）", description="创建helm的repo仓库（异步）")
 async def create_repo(repo: CreateRepoObject, background_tasks: BackgroundTasks):
     try:
