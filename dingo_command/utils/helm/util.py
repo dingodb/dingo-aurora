@@ -39,6 +39,7 @@ key_status_success = "running"
 key_status_delete = "deleting"
 key_status_failed = "failed"
 need_install_chart = ["ingress-nginx", "dbs-csi", "dfs-csi", "cloud-controller-manager"]
+harbor_url = "harbor.zetyun.cn"
 tag_data = {
     1: {"chinese_name": "基础设施", "name": "Infrastructure"},
     2: {"chinese_name": "监控", "name": "Monitor"},
