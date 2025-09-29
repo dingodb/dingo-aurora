@@ -351,6 +351,9 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
             db_cluster.admin_network_cidr = cluster.subnet_cidr
             db_cluster.bus_network_name = bus_network_name
 
+            if cluster.use_existing_network:
+                db_cluster.admin_subnet_id = cluster.admin_subnet_id
+
             if bussubnet_id != "":
                 neutron_api = neutron.API()
                 bus_subnet = neutron_api.get_subnet_by_id(bussubnet_id)
