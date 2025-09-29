@@ -442,8 +442,10 @@ class ClusterService:
             if cluster.admin_network_id and cluster.admin_network_id != "":
                 res_cluster.network_config.admin_network_name = cluster.admin_network_name
                 res_cluster.network_config.admin_network_id = cluster.admin_network_id
-            if cluster.admin_subnet_id and cluster.admin_subnet_id!= "":
+            if cluster.admin_network_cidr and cluster.admin_network_cidr!= "":
                 res_cluster.network_config.admin_cidr = cluster.admin_network_cidr
+            if cluster.admin_subnet_id and cluster.admin_subnet_id!= "":
+                res_cluster.network_config.admin_subnet_id = cluster.admin_subnet_id
             if cluster.bus_network_id and cluster.bus_network_id != "":
                 res_cluster.network_config.bus_network_name = cluster.bus_network_name
             if cluster.bus_subnet_id and cluster.bus_subnet_id != "":
