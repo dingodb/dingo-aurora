@@ -147,11 +147,11 @@ def get_ip_from_domain(domain):
         return ip_addr
     except socket.gaierror:
         # 处理域名解析错误（例如域名不存在或网络问题）
-        print(f"错误：无法解析域名 '{domain}'。请检查域名拼写或网络连接。")
+        print(f"error with domain '{domain}'")
         return None
     except Exception as e:
         # 捕获其他潜在异常
-        print(f"在解析域名时发生未知错误: {e}")
+        print(f"unkonw error: {e}")
         return None
 
 def is_internal_ip(ip_str):
@@ -167,7 +167,7 @@ def is_internal_ip(ip_str):
         return ip_obj.is_private
     except ValueError:
         # 处理无效的IP地址格式
-        print(f"错误：'{ip_str}' 不是一个有效的IP地址格式。")
+        print(f"error: '{ip_str}' is not a valid IP address format")
         return False
 
 
@@ -337,9 +337,9 @@ class ChartService:
                 raise ValueError(f"{project_name} project not found")
 
         except asyncio.TimeoutError:
-            raise TimeoutError(f"访问 Harbor API 超时（3秒）: {harbor_api_url}")
+            raise TimeoutError(f"Access to Harbor API timeout (3 seconds): {harbor_api_url}")
         except Exception as e:
-            raise RuntimeError(f"请求失败: {str(e)}")
+            raise RuntimeError(f"Request failed: {str(e)}")
 
     async def check_repo_args(self, repo: CreateRepoObject):
         if repo.type not in (util.repo_type_http, util.repo_type_oci):
@@ -1000,7 +1000,7 @@ class ChartService:
                 response.raise_for_status()
                 return url, response.text
             except Exception as e:
-                raise RuntimeError(f"请求失败 {url}: {str(e)}")
+                raise RuntimeError(f"Request failed {url}: {str(e)}")
 
         try:
             # 准备要并发的URL列表
@@ -1016,14 +1016,21 @@ class ChartService:
                     results[url] = content
 
             # 提取并处理结果
+            # 先判断chart_readme_url有没有值，如果没有再判断chart_values_url
+            if chart_readme_url:
+                parsed_url = urlparse(chart_readme_url)
+                domain = parsed_url.netloc
+            else:
+                parsed_url = urlparse(chart_values_url)
+                domain = parsed_url.netloc
             chart_readme = results[chart_readme_url]
             values_content = results[chart_values_url]
+            values_content = values_content.replace(util.harbor_url, domain)
             index_data = json.dumps(yaml.safe_load(values_content))
-
             return chart_readme, index_data
 
         except Exception as e:
-            raise RuntimeError(f"获取Chart详情失败: {str(e)}")
+            raise RuntimeError(f"Failed to get Chart details: {str(e)}")
 
     def get_chart_version(self, chart_id, chart_version):
         # 声明查询条件的dict
