@@ -68,7 +68,7 @@ class InstanceService:
             # 查询OpenStack中的所有云主机
             nova_client = NovaClient(token)
             servers = nova_client.nova_list_servers()  # 假设这个方法返回服务器列表
-            db_server_ids = {instance.server_id for instance in data if instance.server_id}
+            db_server_ids = {instance.server_id for instance in data if instance.server_id and instance.cluster_id}
             resseervers = []
             # 将OpenStack中的服务器与数据库中的实例进行比对
             for server in servers:
