@@ -273,6 +273,7 @@ async def add_node(cluster_id:str, servers: List[ExistingNodeObject], token: str
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
                 if result.returncode != 0:
                     raise Exception(f"SSH connection failed: {result.stderr}")
+                server_details.append(server_detail)
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"Failed to get server {server.id} details: {str(e)}")
         

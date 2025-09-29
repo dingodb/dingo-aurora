@@ -40,7 +40,7 @@ class ServiceClient:
             # 处理 filters 参数，查找关联的工作负载并获取其标签
             workload_types = ["deployments", "statefulsets", "daemonsets"]
             workload_labels = {}
-            if filters is None:
+            if filters is None or len(filters) == 0:
                 return items
 
             for filter_str in filters:
