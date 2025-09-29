@@ -344,6 +344,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
              subnet_id, bussubnet_id) = get_networks(cluster, task_info, host_file, cluster_dir)
             db_cluster.admin_network_id = network_id
             db_cluster.admin_subnet_id = subnet_id
+            
             db_cluster.bus_network_id = bus_network_id
             db_cluster.bus_subnet_id = bussubnet_id
             db_cluster.private_key = private_key_content
@@ -353,6 +354,10 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
 
             if cluster.use_existing_network:
                 db_cluster.admin_subnet_id = cluster.admin_subnet_id
+            else:
+                cluster.admin_subnet_id = subnet_id
+                cluster.admin_network_id = network_id
+
 
             if bussubnet_id != "":
                 neutron_api = neutron.API()
@@ -536,7 +541,8 @@ def deploy_kubernetes(cluster: ClusterObject, cluster_tf: ClusterTFVarsObject, l
             "external_openstack_lbaas_enabled": True,
             "external_openstack_lbaas_floating_network_id": cluster_tf.external_net,
             "external_openstack_lbaas_floating_subnet_id": cluster_tf.external_subnetids[0],
-            #"external_openstack_lbaas_subnet_ids": cluster.network_config.admin_subnet_id,
+            "external_openstack_lbaas_subnet_ids": cluster_tf.admin_subnet_id,
+            "external_openstack_lbaas_network_id": cluster_tf.admin_network_id
         }
         target_dir = os.path.join(WORK_DIR, "ansible-deploy", "inventory", str(cluster.id), "group_vars", "all")
         os.makedirs(target_dir, exist_ok=True)
