@@ -18,7 +18,8 @@ from kubernetes.client import V1PersistentVolumeClaim, V1ObjectMeta, V1Persisten
     V1ResourceRequirements, V1PodTemplateSpec, V1StatefulSet, V1LabelSelector, V1Container, V1VolumeMount, V1Volume, \
     V1ConfigMapVolumeSource, V1EnvVar, V1PodSpec, V1StatefulSetSpec, V1ContainerPort, V1Toleration, V1Affinity, \
     V1PodAffinity, \
-    V1WeightedPodAffinityTerm, V1PodAffinityTerm, V1LabelSelectorRequirement, V1HostPathVolumeSource, V1SecurityContext
+    V1WeightedPodAffinityTerm, V1PodAffinityTerm, V1LabelSelectorRequirement, V1HostPathVolumeSource, V1SecurityContext, \
+    V1EmptyDirVolumeSource
 from kubernetes import client
 from kubernetes.stream import stream
 
@@ -1137,6 +1138,10 @@ class AiInstanceService:
                 mount_path="/etc/localtime",  # 容器内的挂载路径
                 read_only=True  # 将此挂载设置为只读
             ),
+            V1VolumeMount(
+                name="dshm",  # 共享内存
+                mount_path="/dev/shm"  # 容器内的挂载路径
+            )
 
         ]
         pod_volumes = [
@@ -1159,6 +1164,13 @@ class AiInstanceService:
                     path="/etc/localtime",  # 宿主机上的时区路径
                 )
             ),
+            V1Volume(
+                name="dshm",  # 共享内存
+                empty_dir=V1EmptyDirVolumeSource(
+                    medium="Memory",  # 使用内存作为存储介质
+                    size_limit="32Gi"  # 设置卷的大小限制为 32GiB
+                )
+            )
 
         ]
         # 大容量存储处理
