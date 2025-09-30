@@ -787,7 +787,7 @@ class ClusterService:
             traceback.print_exc()
             raise e
     
-    def add_existing_nodes_to_cluster(self, cluster_id: str, server_details: list, token: str, private_key=None, user=None, password=None):
+    def add_existing_nodes_to_cluster(self, cluster_id: str, server_details: list, token: str, private_key=None, user=None, password=None, network_id=None):
         """将已有的服务器节点添加到K8s集群中"""
         try:
             # 1. 验证集群状态
@@ -811,7 +811,7 @@ class ClusterService:
             # 3. 调用Celery任务异步处理
             result = celery_app.send_task(
                 "dingo_command.celery_api.workers.add_existing_nodes", 
-                args=[cluster_id, server_details, user, private_key if private_key else "", password if password else ""]
+                args=[cluster_id, server_details, user, private_key if private_key else "", password if password else "", network_id if network_id else ""]
             )
             
             return {

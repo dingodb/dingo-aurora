@@ -224,6 +224,7 @@ async def add_node(cluster_id:str, servers: List[ExistingNodeObject], token: str
             raise HTTPException(status_code=400, detail="the cluster is removing, please wait")
         
         # 通过server_ids查询虚拟机信息
+        network_id = ""
         server_details = []
         for server in servers:
             try:
