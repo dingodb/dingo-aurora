@@ -1042,3 +1042,28 @@ class K8sCommonOperate:
             else:
                 dingo_print(f"Failed to patch default ServiceAccount in namespace '{namespace}': {e}")
                 raise
+
+
+    def get_alayanew_share_volume(self, custom_v1: client.CustomObjectsApi, tenant_id: str):
+        # 1. 查询特定的 SharedVolume 资源
+        try:
+            # 标签过滤
+            kwargs = {
+                "label_selector": f"fs=ceph-vcluster-share,org={tenant_id},status!=delete"
+            }
+            shared_volume = custom_v1.list_namespaced_custom_object(
+                group="datacanvas.com",
+                version="v1",
+                namespace="gcp",
+                plural="sharedvolumes",
+                **kwargs
+            )
+            items = shared_volume.get('items', [])
+            if items:
+                return items[0]
+            else:
+                dingo_print(f"found {len(items)} shared_volume for tenant_id={tenant_id}")
+        except ApiException as e:
+            error_msg = f"read shared_volume {tenant_id} fail: {e.reason} (status: {e.status})"
+            dingo_print(error_msg)
+            return None

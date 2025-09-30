@@ -10,6 +10,7 @@ from dingo_command.db.models.ai_instance.models import AiK8sConfigs
 from dingo_command.db.models.ai_instance.sql import AiInstanceSQL
 import yaml
 
+from dingo_command.db.models.system.sql import SystemSQL
 from dingo_command.utils.constant import KUBECONFIG_DIR_DEFAULT
 from typing import Type, TypeVar, Any
 import logging
@@ -188,3 +189,136 @@ def _parse_contexts(kubeconfig_content: str) -> list[str]:
     except Exception as e:
         logger.error(f"Unexpected error parsing contexts: {str(e)}")
         return []
+
+
+def get_alayanew_k8s_client(alayanew_k8s_kubeconfig_key: str, client_type: Type[T], **kwargs: Any) -> T:
+    """
+    通用 Kubernetes 客户端获取函数
+
+    Args:
+        k8s_id: Kubernetes 集群 ID
+        client_type: 要获取的客户端类 (如 CoreV1Api, AppsV1Api 等)
+        **kwargs: 传递给客户端构造函数的额外参数
+
+    Returns:
+        指定类型的 Kubernetes 客户端实例
+    """
+
+    alayanew_k8s_kubeconfig_system_config = SystemSQL.get_system_support_config_by_config_key(alayanew_k8s_kubeconfig_key)
+    if not alayanew_k8s_kubeconfig_system_config:
+        error_msg = f"alayanew kubeconfig system config not exist"
+        dingo_print(error_msg)
+        return None
+
+    alayanew_kubeconfig = alayanew_k8s_kubeconfig_system_config.config_value
+
+    if not alayanew_kubeconfig:
+        error_msg = "alayanew_k8s_kubeconfig is empty"
+        dingo_print(error_msg)
+        return None
+
+
+    # 2. 确定 kubeconfig 文件路径和上下文名称
+    config_file = _resolve_alayanew_kubeconfig_path(alayanew_kubeconfig)
+    context_name = _resolve_alayanew_context_name(alayanew_kubeconfig)
+
+    # 3. 加载配置
+    try:
+        config.load_kube_config(
+            config_file=config_file,
+            context=context_name  # None 时自动使用 current-context
+        )
+        dingo_print(
+            f"loaded alayanew kubeconfig: config_file={config_file}, context={context_name or 'current-context'}")
+    except Exception as e:
+        error_msg = f"load kubeconfig fail: {str(e)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg) from e
+
+    # 4. 创建并返回请求的客户端
+    try:
+        # 检查是否是有效的客户端类型
+        if not hasattr(client, client_type.__name__):
+            error_msg = f"invalid alayanew Kubernetes client: {client_type.__name__}"
+            logger.error(error_msg)
+            raise TypeError(error_msg)
+
+        # 实例化客户端
+        api_client = client_type(**kwargs)
+        logger.debug(f"success alayanew create {client_type.__name__} client")
+        return api_client
+
+    except Exception as e:
+        error_msg = f"create alayanew {client_type.__name__} client fail: {str(e)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg) from e
+
+
+def _resolve_alayanew_kubeconfig_path(kubeconfig: str) -> str:
+    """
+    解析kubeconfig文件路径（优先检查已有文件，否则动态生成）
+
+    Returns:
+        str: 最终使用的kubeconfig文件绝对路径
+    """
+
+    # 情况2: 需要从内容生成文件
+    if not kubeconfig:
+        raise FileNotFoundError("无有效的kubeconfig文件或内容")
+
+    # 确保目录存在
+    os.makedirs(KUBECONFIG_DIR_DEFAULT, mode=0o755, exist_ok=True)
+
+    # 生成文件名格式: kubeconfig_{k8s_id}
+    kubeconfig_file_name = f"alayanew_kubeconfig_k8s"
+    config_file = os.path.join(KUBECONFIG_DIR_DEFAULT, kubeconfig_file_name)
+
+    logger.debug(f"config_file：{config_file}")
+    if os.path.exists(config_file):
+        logger.info(f"文件[{config_file}]已存在不再重复生成")
+        return config_file
+
+    # 确保输入是字典格式
+    if isinstance(kubeconfig, str):
+        try:
+            # 尝试解析字符串形式的JSON
+            config_data = json.loads(kubeconfig)
+        except json.JSONDecodeError:
+            # 如果已经是YAML格式则直接使用
+            config_data = yaml.safe_load(kubeconfig)
+    else:
+        # 如果已经是YAML格式则直接使用
+        config_data = yaml.safe_load(kubeconfig)
+
+    # 验证基本结构
+    if not all(key in config_data for key in ['apiVersion', 'kind', 'clusters']):
+        raise ValueError("无效的kubeconfig格式")
+
+    # 写入文件
+    with open(config_file, 'w') as f:
+        yaml.dump(
+            config_data,
+            f,
+            indent=2,  # 标准2空格缩进
+            default_flow_style=False  # 保持多行格式
+        )
+
+    return config_file
+
+
+def _resolve_alayanew_context_name(kubeconfig: str) -> Optional[str]:
+    """解析上下文名称（显式指定 > 自动解析）"""
+
+    # 优先级2: 从kubeconfig内容解析admin上下文
+    if kubeconfig:
+        contexts = _parse_contexts(kubeconfig)
+        return contexts[0] if contexts else None
+    else:
+        # 返回None（将使用current-context）
+        return None
+
+
+def get_alayanew_k8s_custom_object_client(alayanew_k8s_kubeconfig_key: str) -> client.CustomObjectsApi:
+    """获取 NetworkingV1Api 客户端"""
+    return get_alayanew_k8s_client(alayanew_k8s_kubeconfig_key, client.CustomObjectsApi)
+
