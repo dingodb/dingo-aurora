@@ -54,7 +54,7 @@ def run_playbook(playbook_name, inventory, data_dir, ssh_key, extravars=None, li
         "CURRENT_DIR": inventory,
     }
     # 如果指定了 netns，则修改环境变量
-    if netns:
+    if netns and netns != "":
         # Create the netns_ssh.sh script
         script_path = os.path.join(data_dir, "netns_ssh.sh")
         with open(script_path, "w") as f:

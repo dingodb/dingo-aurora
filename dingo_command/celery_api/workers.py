@@ -742,7 +742,7 @@ def scale_kubernetes(cluster_id, scale_nodes, task_id, netns: str = None, app_cr
                     task_name = event['event_data'].get('task')
                     host = event['event_data'].get('host')
                     task_status = event['event'].split('_')[-1]  # 例如 runner_on_ok -> ok
-                    # print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
+                    print(f"任务 {task_name} 在主机 {host} 上 Status: {event['event']}")
                     # print(f"task_name is: {task_name}")
                     if task_name == scale_download_images and host is not None:
                         if not runtime_bool:
@@ -2318,7 +2318,7 @@ def delete_instance(self, openstack_info, instance):
         raise ValueError(e)
 
 @celery_app.task(bind=True,time_limit=TASK_TIMEOUT, soft_time_limit=SOFT_TASK_TIMEOUT)
-def add_existing_nodes(self, cluster_id, server_details, user, private_key: str = "", password: str = ""):
+def add_existing_nodes(self, cluster_id, server_details, user, private_key: str = "", password: str = "", network_id: str = ""):
     """将已有的虚拟机节点添加到K8s集群中"""
     try:
         task_id = str(self.request.id)
@@ -2443,8 +2443,11 @@ def add_existing_nodes(self, cluster_id, server_details, user, private_key: str 
             os.environ['CURRENT_CLUSTER_DIR']=cluster_dir
             scale_nodes = ",".join([name.split(":")[0] for name in node_names])
             print("准备扩容的节点: %s", scale_nodes)
-            ansible_result = scale_kubernetes(cluster_id, scale_nodes, task_id, download_enabled=True)
-            
+            netns = ""
+            if network_id and network_id != "":
+                netns = "qdhcp-" + network_id
+            ansible_result = scale_kubernetes(cluster_id, scale_nodes, task_id, netns=netns, download_enabled=True)
+
             if not ansible_result[0]:
                 raise Exception(f"Ansible 扩容失败: {ansible_result[1]}")
         
