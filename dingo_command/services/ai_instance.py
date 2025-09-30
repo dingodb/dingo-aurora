@@ -1386,14 +1386,6 @@ class AiInstanceService:
         existing_sts.spec.template.spec.volumes = pod_volumes
         existing_sts.spec.template.spec.containers[0].volume_mounts = volume_mounts
 
-
-        # 为每个容器添加新的volumeMounts
-        for container in existing_sts.spec.template.spec.containers:
-            if volume_mounts:
-                if not hasattr(container, 'volume_mounts') or not container.volume_mounts:
-                    container.volume_mounts = []
-                container.volume_mounts.extend(volume_mounts)
-
         # 更新existing_sts的各个字段
         existing_sts.metadata.resource_version = None
         existing_sts.spec.replicas = 1
