@@ -354,6 +354,7 @@ def create_infrastructure(cluster:ClusterTFVarsObject, task_info:Taskinfo, scale
 
             if cluster.use_existing_network:
                 db_cluster.admin_subnet_id = cluster.admin_subnet_id
+
             else:
                 cluster.admin_subnet_id = subnet_id
                 cluster.admin_network_id = network_id
@@ -2352,21 +2353,6 @@ def add_existing_nodes(self, cluster_id, server_details, user, private_key: str 
         with session.begin():
             for i, server_detail in enumerate(server_details):
                 
-                # 获取 base64 编码的 user_data
-                user_data_b64 = server_detail.get("OS-EXT-SRV-ATTR:user_data")
-                if not user_data_b64:
-                    return None
-
-                # 解码
-                user_data = base64.b64decode(user_data_b64).decode("utf-8")
-                user_pass = ""
-                # 正则提取 passwd 脚本内容
-                passwd_script = re.search(r"#!/bin/sh\s*echo\s+'([^']+)' \| chpasswd", user_data)
-                if passwd_script:
-                    user_pass = passwd_script.group(1)
-                if user_pass:
-                    username, password = user_pass.split(":", 1)
-                
                 # 创建Node记录
                 node_db = NodeInfo()
                 node_db.id = str(uuid.uuid4())
@@ -2382,7 +2368,8 @@ def add_existing_nodes(self, cluster_id, server_details, user, private_key: str 
                 node_db.gpu = 0  # 默认为0，可根据需要扩展
                 node_db.region = cluster_db.region_name
                 node_db.password = password
-                node_db.user = username
+                node_db.user = user
+                node_db.private_key = private_key
                 node_db.create_time = datetime.now()
                 node_db.update_time = datetime.now()
                 node_db.node_type = "vm"
@@ -2405,7 +2392,10 @@ def add_existing_nodes(self, cluster_id, server_details, user, private_key: str 
                 instance_db.server_id = server_detail.get("id")
                 instance_db.node_type = "vm"
                 instance_db.status = "joining"
+                instance_db.private_key = private_key
                 instance_db.region = cluster_db.region_name
+                instance_db.user = user
+                instance_db.password = password
                 instance_db.flavor_id = server_detail.get("flavor", {}).get("id", "")
                 instance_db.image_id = server_detail.get("image", {}).get("id", "")
                 instance_db.create_time = datetime.now()
