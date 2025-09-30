@@ -286,7 +286,7 @@ async def add_node(cluster_id:str, servers: List[ExistingNodeObject], token: str
                 raise HTTPException(status_code=400, detail=f"Failed to get server {server.id} details: {str(e)}")
         
         # 调用添加节点的服务方法
-        result = cluster_service.add_existing_nodes_to_cluster(cluster_id, server_details, token, private_key=server.private_key, user=server.user, password=server.password)
+        result = cluster_service.add_existing_nodes_to_cluster(cluster_id, server_details, token, private_key=server.private_key, user=server.user, password=server.password, network_id=network_id)
 
         return result
         

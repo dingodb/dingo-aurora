@@ -26,6 +26,7 @@ def start():
 
 
 def check_instance_status():
+
     """
     定期检查k8s集群状态并更新数据库
     """
@@ -56,7 +57,7 @@ def check_instance_status():
                     if server.get("status") == "ERROR" and instance.status not in ("error", "deleting"):
                         instance.status = "error"
                         instance.status_msg = server.get("fault").get("details")
-                    elif server.get("status") == "ACTIVE" and instance.status not in  ("deleting", "running"):
+                    elif server.get("status") == "ACTIVE" and instance.status not in  ("deleting", "running", "joining"):
                         instance.status = "running"
                         instance.status_msg = ""
                     elif server.get("status") == "BUILD" and instance.status not in ("creating", "deleting"):
@@ -116,7 +117,7 @@ def check_node_status():
                     if server.get("status") == "ERROR" and node.status not in ("error", "deleting"):
                         node.status = "error"
                         node.status_msg = server.get("fault").get("details")
-                    elif server.get("status") == "ACTIVE" and node.status not in ("deleting", "running"):
+                    elif server.get("status") == "ACTIVE" and node.status not in ("deleting", "running", "joining"):
                         node.status = "running"
                         node.status_msg = ""
                     elif server.get("status") == "BUILD" and node.status not in ("creating", "deleting"):
