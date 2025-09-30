@@ -1034,9 +1034,9 @@ class K8sCommonOperate:
                     )
                     dingo_print(f"ServiceAccount {secret_name} created successfully in namespace '{namespace}'.")
                     return api_response
-                except ApiException as e:
-                    dingo_print(f"create ServiceAccount {secret_name} in namespace '{namespace}' failed: {e}")
-                    if e.status == 409:
+                except ApiException as e1:
+                    dingo_print(f"create ServiceAccount {secret_name} in namespace '{namespace}' failed: {e1}")
+                    if e1.status == 409:
                         dingo_print(f"Default ServiceAccount in namespace '{namespace}' ready yet")
                     raise
             else:
@@ -1051,6 +1051,9 @@ class K8sCommonOperate:
             kwargs = {
                 "label_selector": f"fs=ceph-vcluster-share,org={tenant_id},status!=delete"
             }
+
+            dingo_print(f"list shared_volume for tenant_id={tenant_id}")
+
             shared_volume = custom_v1.list_namespaced_custom_object(
                 group="datacanvas.com",
                 version="v1",
@@ -1059,10 +1062,16 @@ class K8sCommonOperate:
                 **kwargs
             )
             items = shared_volume.get('items', [])
+
+            dingo_print(f"found {len(items)} shared_volume for tenant_id={tenant_id}, items={items}")
+
             if items:
+                dingo_print(f"found shared_volume for tenant_id={tenant_id}, items={items[0]}")
                 return items[0]
             else:
                 dingo_print(f"found {len(items)} shared_volume for tenant_id={tenant_id}")
+                return None  # 显式返回None，表示没有找到数据
+
         except ApiException as e:
             error_msg = f"read shared_volume {tenant_id} fail: {e.reason} (status: {e.status})"
             dingo_print(error_msg)

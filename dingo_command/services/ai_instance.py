@@ -1000,12 +1000,19 @@ class AiInstanceService:
             self.networking_k8s_client, namespace_name, ai_instance_db.instance_real_name,
             host_domain, nb_prefix
         )
+        dingo_print(f"create cci ingress rule :{namespace_name}/{ai_instance_db.instance_real_name}-{INGRESS_SIGN}, host:{host_domain}, path:{nb_prefix}")
         self._wait_for_resource(self.core_k8s_client, self.app_k8s_client, self.networking_k8s_client,
                                 namespace_name, f"{ai_instance_db.instance_real_name}-{INGRESS_SIGN}", client.V1Ingress)
 
+        dingo_print(f"create cci ingress rule success:{namespace_name}/{ai_instance_db.instance_real_name}-{INGRESS_SIGN}")
+
         # 6、创建StatefulSet
         sts_data = self._assemble_sts_data(ai_instance, ai_instance_db, namespace_name, resource_config, nb_prefix)
+        dingo_print(f"create cci sts data :{sts_data}")
+
         k8s_common_operate.create_sts_pod(self.app_k8s_client, namespace_name, sts_data)
+
+        dingo_print(f"create cci sts success:{namespace_name}/{ai_instance_db.instance_real_name}")
 
 
     def _wait_for_resource(self, core_v1_client, app_v1_client, networking_v1_client, namespace, name, resource_type, timeout=60):
@@ -1104,14 +1111,22 @@ class AiInstanceService:
         Returns:
             V1StatefulSet: 组装好的Kubernetes StatefulSet对象。
         """
+
+        dingo_print(f"_assemble_sts_data===start ai_instance:{ai_instance} ai_instance_db:{ai_instance_db}, resource_config:{resource_config}, nb_prefix:{nb_prefix}, namespace_name:{namespace_name}")
+
         # 解包资源配置
         resource_limits = resource_config['resource_limits']
         resource_requests = resource_config['resource_requests']
-        node_selector_gpu = resource_config['node_selector_gpu']
-        toleration_gpus = resource_config['toleration_gpus']
+        # node_selector_gpu = resource_config['node_selector_gpu']
+        # toleration_gpus = resource_config['toleration_gpus']
+
+        dingo_print(f"_assemble_sts_data===resource_limits:{resource_limits}, resource_requests:{resource_requests}")
 
         # 环境变量处理
         env_vars_dict = json.loads(ai_instance_db.instance_envs) if ai_instance_db.instance_envs else {}
+
+        dingo_print(f"_assemble_sts_data===before env_vars_dict:{env_vars_dict}, resource_limits:{resource_limits}")
+        
         env_vars_dict['NB_PREFIX'] = nb_prefix
         if "JUPYTER_TOKEN" not in env_vars_dict.keys():
             env_vars_dict['JUPYTER_TOKEN'] = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
@@ -1120,6 +1135,7 @@ class AiInstanceService:
             for key, value in env_vars_dict.items()
         ]
 
+        dingo_print(f"_assemble_sts_data===before env_list:{env_list}, resource_limits:{resource_limits}")
 
         # 准备Volume和VolumeMount
         volume_mounts = [
@@ -1140,6 +1156,8 @@ class AiInstanceService:
             )
 
         ]
+
+        dingo_print(f"_assemble_sts_data===before pod_volumes volume_mounts:{volume_mounts}")
 
         pod_volumes = [
             V1Volume(
@@ -1164,23 +1182,35 @@ class AiInstanceService:
 
         ]
 
+        dingo_print(f"_assemble_sts_data===before gpu check pod_volumes count:{len(pod_volumes)}, volume_mounts count:{len(volume_mounts)}, resource_limits:{resource_limits}")
+
+        # 检查是否包含GPU资源，如果有则添加共享内存卷
+        gpu_detected = False
         for key in resource_limits:
-            if key.startswith("nvidia.com/gpu"):
-                dingo_print(f"_assemble_sts_data===gpu key:{key}")
+            if key.startswith("nvidia.com/gpu") or key.startswith("amd.com/gpu"):
+                dingo_print(f"_assemble_sts_data===detected GPU resource key:{key}, adding shared memory volume")
+                
+                # 添加共享内存卷挂载（GPU任务通常需要大容量共享内存）
                 volume_mounts.append(V1VolumeMount(
-                    name="dshm",  # 共享内存
+                    name="dshm",  # 共享内存卷名
                     mount_path="/dev/shm"  # 容器内的挂载路径
                 ))
+                
+                # 添加共享内存卷定义
                 pod_volumes.append(V1Volume(
-                name="dshm",  # 共享内存
-                empty_dir=V1EmptyDirVolumeSource(
+                    name="dshm",  # 共享内存卷名，与上面的name对应
+                    empty_dir=V1EmptyDirVolumeSource(
                         medium="Memory",  # 使用内存作为存储介质
-                        size_limit="32Gi"  # 设置卷的大小限制为 32GiB
+                        size_limit="32Gi"  # 设置卷的大小限制为32GiB，满足GPU计算需求
                     )
                 ))
-                break
-
-        dingo_print(f"_assemble_sts_data===pod_volumes:{pod_volumes}, volume_mounts:{volume_mounts}")
+                gpu_detected = True
+                break  # 只需要添加一次共享内存卷
+        
+        if gpu_detected:
+            dingo_print(f"_assemble_sts_data===GPU instance detected, added shared memory volume")
+        else:
+            dingo_print(f"_assemble_sts_data===CPU-only instance, no shared memory volume needed")
 
         # 大容量存储处理
         pod_volumes, volume_mounts = self.get_large_capacity_storage_mount_info(ai_instance_db, pod_volumes, volume_mounts)
@@ -1303,9 +1333,12 @@ class AiInstanceService:
         return sts_data
 
     def get_large_capacity_storage_mount_info(self, ai_instance_db, pod_volumes, volume_mounts):
+
+        dingo_print(f"get_large_capacity_storage_mount_info===start ai_instance_db:{ai_instance_db}, pod_volumes:{pod_volumes}, volume_mounts:{volume_mounts}")
+        
         if not pod_volumes:
             pod_volumes = []
-        if not pod_volumes:
+        if not volume_mounts:
             volume_mounts = []
 
         # 查询alayanew 大容量存储路径
@@ -1328,6 +1361,8 @@ class AiInstanceService:
                 )
             )
 
+        dingo_print(f"get_large_capacity_storage_mount_info===end pod_volumes:{pod_volumes}, volume_mounts:{volume_mounts}")
+        
         return pod_volumes, volume_mounts
 
     def start_ai_instance_by_id(self, id, request):
@@ -2796,15 +2831,37 @@ class AiInstanceService:
 
 
     def get_large_capacity_storage_fs_shared_volume_path(self, tenant_id: str):
+        dingo_print(f"get_large_capacity_storage_fs_shared_volume_path tenant_id:{tenant_id}")
+        
         custom_client = self.get_alayanew_cached_custom_client("alayanew_k8s_kubeconfig_key")
         if custom_client:
+            dingo_print(f"get_large_capacity_storage_fs_shared_volume_path get custom_client success, tenant_id:{tenant_id}")
+            
             alayanew_share_volume = k8s_common_operate.get_alayanew_share_volume(custom_client, tenant_id)
-            dingo_print(f"get_large_capacity_storage_fs_shared_volume_path volume_path size:{len(alayanew_share_volume)}")
+
             if alayanew_share_volume:
-                if alayanew_share_volume.getattr('spec'):
-                    volume_path = alayanew_share_volume.getattr('spec').get('fsSharedVolumePath')
-                    dingo_print(f"get_large_capacity_storage_fs_shared_volume_path volume_path:{volume_path}")
-                    return volume_path
-        dingo_print("get_large_capacity_storage_fs_shared_volume_path is empty")
+                # 安全地获取长度，alayanew_share_volume可能是字典类型
+                volume_info = alayanew_share_volume if isinstance(alayanew_share_volume, dict) else {}
+                dingo_print(f"get_large_capacity_storage_fs_shared_volume_path volume_path found, tenant_id:{tenant_id}, volume_keys:{list(volume_info.keys()) if volume_info else 'unknown'}")
+                
+                # 根据对象类型使用不同的访问方式
+                if isinstance(alayanew_share_volume, dict):
+                    # 如果是字典，直接使用字典访问
+                    spec = alayanew_share_volume.get('spec')
+                    if spec:
+                        volume_path = spec.get('fsSharedVolumePath') if isinstance(spec, dict) else getattr(spec, 'fsSharedVolumePath', None)
+                        dingo_print(f"get_large_capacity_storage_fs_shared_volume_path volume_path:{volume_path}")
+                        return volume_path
+                else:
+                    # 如果是对象，使用getattr访问
+                    if hasattr(alayanew_share_volume, 'spec'):
+                        spec = getattr(alayanew_share_volume, 'spec', None)
+                        if spec:
+                            volume_path = spec.get('fsSharedVolumePath') if hasattr(spec, 'get') else getattr(spec, 'fsSharedVolumePath', None)
+                            dingo_print(f"get_large_capacity_storage_fs_shared_volume_path volume_path:{volume_path}")
+                            return volume_path
+
+        dingo_print(f"get_large_capacity_storage_fs_shared_volume_path is empty, tenant_id:{tenant_id}")
+
         return None
 
