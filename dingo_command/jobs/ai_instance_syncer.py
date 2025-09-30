@@ -118,6 +118,7 @@ def sync_single_k8s_cluster(k8s_id: str, core_client, apps_client, networking_cl
 
         # 2. 按namespace分组处理
         tenant_id_list = [instance.instance_tenant_id for instance in db_instances if instance.instance_tenant_id]
+        tenant_id_list = list(set(tenant_id_list))
         dingo_print(f"fetch_ai_instance_info k8s {k8s_id} need handle namespace size: {len(tenant_id_list)}")
 
         # 3. 逐个namespace处理
