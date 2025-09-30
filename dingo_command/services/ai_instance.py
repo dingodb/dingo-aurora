@@ -1137,13 +1137,10 @@ class AiInstanceService:
                 name="tz",
                 mount_path="/etc/localtime",  # 容器内的挂载路径
                 read_only=True  # 将此挂载设置为只读
-            ),
-            V1VolumeMount(
-                name="dshm",  # 共享内存
-                mount_path="/dev/shm"  # 容器内的挂载路径
             )
 
         ]
+
         pod_volumes = [
             V1Volume(
                 name=JUPYTER_INIT_MOUNT_NAME,
@@ -1163,18 +1160,32 @@ class AiInstanceService:
                 host_path=V1HostPathVolumeSource(
                     path="/etc/localtime",  # 宿主机上的时区路径
                 )
-            ),
-            V1Volume(
-                name="dshm",  # 共享内存
-                empty_dir=V1EmptyDirVolumeSource(
-                    medium="Memory",  # 使用内存作为存储介质
-                    size_limit="32Gi"  # 设置卷的大小限制为 32GiB
-                )
             )
 
         ]
+
+        for key in resource_limits:
+            if key.startswith("nvidia.com/gpu"):
+                dingo_print(f"_assemble_sts_data===gpu key:{key}")
+                volume_mounts.append(V1VolumeMount(
+                    name="dshm",  # 共享内存
+                    mount_path="/dev/shm"  # 容器内的挂载路径
+                ))
+                pod_volumes.append(V1Volume(
+                name="dshm",  # 共享内存
+                empty_dir=V1EmptyDirVolumeSource(
+                        medium="Memory",  # 使用内存作为存储介质
+                        size_limit="32Gi"  # 设置卷的大小限制为 32GiB
+                    )
+                ))
+                break
+
+        dingo_print(f"_assemble_sts_data===pod_volumes:{pod_volumes}, volume_mounts:{volume_mounts}")
+
         # 大容量存储处理
         pod_volumes, volume_mounts = self.get_large_capacity_storage_mount_info(ai_instance_db, pod_volumes, volume_mounts)
+
+        dingo_print(f"_assemble_sts_data===after get_large_capacity_storage_mount_info pod_volumes:{pod_volumes}, volume_mounts:{volume_mounts}")
 
         # 处理PVC (从ai_instance.volumes中获取信息)
         pvc_template = None
@@ -1191,6 +1202,7 @@ class AiInstanceService:
                     )
                 )
             )
+        dingo_print(f"_assemble_sts_data===after pvc_template pod_volumes:{pod_volumes}, volume_mounts:{volume_mounts}, pvc_template:{pvc_template}")
 
         # 添加SSH公钥的ConfigMap (固定逻辑)
         configmap_name_ssh = CONFIGMAP_PREFIX + ai_instance.user_id
