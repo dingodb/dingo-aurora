@@ -1175,6 +1175,17 @@ def remove_bastion_fip_from_state(cluster_dir):
             )
             print(f"rm cluster_router from terraform state ")
             return True
+        elif "module.network.openstack_networking_router_interface_v2.cluster_interface[0]" in state_resources:
+            # 执行 terraform state rm 移除资源
+            remove_result = subprocess.run(
+                ["terraform", "state", "rm",
+                 "module.network.openstack_networking_router_interface_v2.cluster_interface[0]"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            print(f"rm cluster_interface from terraform state ")
+            return True
         else:
             print(f"resource {target_resource} not exist in state ")
             return True
