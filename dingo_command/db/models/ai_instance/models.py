@@ -22,6 +22,7 @@ class AiK8sConfigs(Base):
     harbor_username = Column(String(length=128), nullable=True)
     harbor_password = Column(String(length=128), nullable=True)
     cpu_overcommit_ratio = Column(String(length=128), nullable=True)
+    gpu_relation_ib_device = Column(String(length=255), nullable=True)
     create_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
     update_time = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"))
 

@@ -810,7 +810,7 @@ class AiInstanceService:
 
     def _create_single_instance(self, ai_instance, ai_instance_db):
         """创建单个实例"""
-        resource_config = self._prepare_resource_config(ai_instance.instance_config)
+        resource_config = self._prepare_resource_config(ai_instance.instance_config, ai_instance_db.instance_k8s_id)
 
         # 设置实例ID
         ai_instance_db.id = ai_instance.instance_id or uuid.uuid4().hex
@@ -826,7 +826,7 @@ class AiInstanceService:
 
     def _create_multiple_instances(self, ai_instance, ai_instance_db, namespace_name):
         """创建多个实例副本"""
-        resource_config = self._prepare_resource_config(ai_instance.instance_config)
+        resource_config = self._prepare_resource_config(ai_instance.instance_config, ai_instance_db.instance_k8s_id)
         results = []
 
         for i in range(ai_instance.instance_config.replica_count):
@@ -847,7 +847,7 @@ class AiInstanceService:
 
         return results
 
-    def _prepare_resource_config(self, instance_config):
+    def _prepare_resource_config(self, instance_config, K8s_id):
         resource_limits = []
         resource_requests = []
         node_selector_gpu = {}
@@ -863,13 +863,13 @@ class AiInstanceService:
             # 定义资源requests
             resource_requests = {'cpu': int(instance_config.compute_cpu), 'memory': instance_config.compute_memory + "Gi",
                                gpu_card_info.gpu_key: instance_config.gpu_count, 'ephemeral-storage': "1024Mi"}
-            # node_selector_gpu['nvidia.com/gpu.product'] = gpu_card_info.gpu_node_label
-            # 容忍度
-            # toleration_gpus.append(V1Toleration(
-            #     key=gpu_card_info.gpu_node_label,
-            #     operator="Exists",
-            #     effect="NoSchedule"
-            # ))
+            if instance_config.gpu_count == 8:
+                ai_k8s_configs_db = AiInstanceSQL.get_k8s_configs_info_by_k8s_id(K8s_id)
+                if ai_k8s_configs_db and ai_k8s_configs_db.gpu_relation_ib_device:
+                    # GPU 8卡场景，添加RDMA支持
+                    resource_limits.update(json.loads(ai_k8s_configs_db.gpu_relation_ib_device))
+                    resource_requests.update(json.loads(ai_k8s_configs_db.gpu_relation_ib_device))
+                    dingo_print(f"gpu 8 count scene, ai instance {instance_config.gpu_model} gpu model[{instance_config.gpu_model}] resource_limits:{resource_limits}, resource_requests:{resource_requests}")
         elif instance_config.compute_cpu:
             # 定义资源requests
             resource_requests = {'cpu': self.safe_divide(instance_config.compute_cpu),
@@ -1085,7 +1085,17 @@ class AiInstanceService:
                 name=JUPYTER_INIT_MOUNT_NAME,  # 卷名称，需与下面定义的卷匹配
                 mount_path=JUPYTER_INIT_MOUNT_PATH,  # 容器内的挂载路径
                 read_only = True # 将此挂载设置为只读
-            )
+            ),
+            V1VolumeMount(
+                name="public",  # 卷名称
+                mount_path="/root/public",  # 容器内的挂载路径
+            ),
+            V1VolumeMount(
+                name="tz",
+                mount_path="/etc/localtime",  # 容器内的挂载路径
+                read_only=True  # 将此挂载设置为只读
+            ),
+
         ]
         pod_volumes = [
             V1Volume(
@@ -1094,7 +1104,20 @@ class AiInstanceService:
                     path="/" + JUPYTER_INIT_MOUNT_NAME,  # 宿主机上的路径
                     type="DirectoryOrCreate"  # 类型: 如果目录不存在则创建
                 )
-            )
+            ),
+            V1Volume(
+                name="public",
+                host_path=V1HostPathVolumeSource(
+                    path="/mnt/public",  # 宿主机上的路径
+                )
+            ),
+            V1Volume(
+                name="tz",
+                host_path=V1HostPathVolumeSource(
+                    path="/etc/localtime",  # 宿主机上的时区路径
+                )
+            ),
+
         ]
 
         # 处理PVC (从ai_instance.volumes中获取信息)
@@ -1631,9 +1654,9 @@ class AiInstanceService:
         # 原sts 数据
         existing_sts = k8s_common_operate.read_sts_info(app_k8s_client, real_name, namespace_name)
         if start_request and start_request.instance_config:
-            resource_config = self._prepare_resource_config(start_request.instance_config)
+            resource_config = self._prepare_resource_config(start_request.instance_config, ai_instance_info_db.instance_k8s_id)
         else:
-            resource_config = self._prepare_resource_config(json.loads(ai_instance_info_db.instance_config))
+            resource_config = self._prepare_resource_config(json.loads(ai_instance_info_db.instance_config), ai_instance_info_db.instance_k8s_id)
         image_name_temp = SAVE_TO_IMAGE_CCI_PREFIX + ai_instance_info_db.id
         if start_request and start_request.image:
             image_name = start_request.image
