@@ -1089,6 +1089,7 @@ class AiInstanceService:
             V1VolumeMount(
                 name="public",  # 卷名称
                 mount_path="/root/public",  # 容器内的挂载路径
+                read_only=True  # 将此挂载设置为只读
             ),
             V1VolumeMount(
                 name="tz",
