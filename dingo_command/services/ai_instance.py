@@ -39,7 +39,7 @@ from dingo_command.utils.constant import CCI_NAMESPACE_PREFIX, RESOURCE_TYPE_KEY
     HYPHEN_SIGN, POINT_SIGN, JUPYTER_INIT_MOUNT_NAME, JUPYTER_INIT_MOUNT_PATH, HARBOR_PULL_IMAGE_SUFFIX, \
     CPU_OVER_COMMIT, MIN_CPU_REQUEST, CPU_POD_SLOT_KEY, CCI_SYNC_K8S_NODE_REDIS_KEY, CCI_TIME_OUT_DEFAULT
 from dingo_command.utils.customer_thread_pool import queuedThreadPool
-from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client, get_k8s_networking_client
+from dingo_command.utils.k8s_client import get_k8s_core_client, get_k8s_app_client, get_k8s_networking_client, get_alayanew_k8s_custom_object_client
 from dingo_command.services.custom_exception import Fail
 import threading
 from typing import Dict, Any
@@ -113,24 +113,24 @@ class AiInstanceService:
     # 类级别的客户端缓存和线程锁
     _k8s_clients_cache: dict[str, dict[str, object]] = {}
     _cache_lock = threading.Lock()
-    
+
     @classmethod
     def _get_cached_k8s_clients(cls, k8s_id):
         """
         获取缓存的K8s客户端实例（线程安全）
-        
+
         Args:
             k8s_id: Kubernetes集群ID
-            
+
         Returns:
             dict: 包含core、app、networking三种客户端的字典
-            
+
         Note:
-            使用双重检查锁定模式确保线程安全: 
+            使用双重检查锁定模式确保线程安全:
             1. 首次检查避免不必要的锁获取
             2. 加锁后再次检查确保只有一个线程创建客户端
             3. 每个k8s_id的客户端只创建一次并缓存
-            
+
         Warning:
             K8s Python客户端不是线程安全的，多线程环境下需要谨慎使用
             建议每个线程使用独立的客户端实例
@@ -149,8 +149,44 @@ class AiInstanceService:
                     dingo_print(f"Created and cached K8s clients for k8s_id: {k8s_id}")
         else:
             dingo_print(f"Using cached K8s clients for k8s_id: {k8s_id}")
-        
+
         return cls._k8s_clients_cache[k8s_id]
+
+    @classmethod
+    def _get_alayanew_cached_k8s_clients(cls, alayanew_k8s_kubeconfig_key=None):
+        """
+        获取缓存的K8s客户端实例（线程安全）
+
+        Args:
+            k8s_id: Kubernetes集群ID
+
+        Returns:
+            dict: 包含core、app、networking三种客户端的字典
+
+        Note:
+            使用双重检查锁定模式确保线程安全:
+            1. 首次检查避免不必要的锁获取
+            2. 加锁后再次检查确保只有一个线程创建客户端
+            3. 每个k8s_id的客户端只创建一次并缓存
+
+        Warning:
+            K8s Python客户端不是线程安全的，多线程环境下需要谨慎使用
+            建议每个线程使用独立的客户端实例
+        """
+        # 双重检查锁定模式（Double-Checked Locking）
+        if alayanew_k8s_kubeconfig_key and alayanew_k8s_kubeconfig_key not in cls._k8s_clients_cache:
+            with cls._cache_lock:
+                # 再次检查，防止其他线程已经创建了客户端
+                if alayanew_k8s_kubeconfig_key not in cls._k8s_clients_cache:
+                    # 创建并缓存客户端实例
+                    cls._k8s_clients_cache[alayanew_k8s_kubeconfig_key] = {
+                       "alayanew_custom": get_alayanew_k8s_custom_object_client(alayanew_k8s_kubeconfig_key)
+                    }
+                    dingo_print(f"Created and cached K8s clients for k8s_id: {alayanew_k8s_kubeconfig_key}")
+        else:
+            dingo_print(f"Using cached K8s clients for alayanew_k8s_kubeconfig_key: {alayanew_k8s_kubeconfig_key}")
+
+        return cls._k8s_clients_cache[alayanew_k8s_kubeconfig_key]
     
     @classmethod
     def _clear_k8s_clients_cache(cls, k8s_id=None):
@@ -180,6 +216,11 @@ class AiInstanceService:
     def get_cached_networking_client(cls, k8s_id):
         """获取缓存的网络K8s客户端"""
         return cls._get_cached_k8s_clients(k8s_id)['networking']
+
+    @classmethod
+    def get_alayanew_cached_custom_client(cls, alayanew_kubeconfig_key):
+        """获取缓存的核心K8s客户端"""
+        return cls._get_alayanew_cached_k8s_clients(alayanew_kubeconfig_key)['alayanew_custom']
     
     @classmethod
     def create_thread_local_clients(cls, k8s_id):
@@ -1120,6 +1161,8 @@ class AiInstanceService:
             ),
 
         ]
+        # 大容量存储处理
+        pod_volumes, volume_mounts = self.get_large_capacity_storage_mount_info(ai_instance_db, pod_volumes, volume_mounts)
 
         # 处理PVC (从ai_instance.volumes中获取信息)
         pvc_template = None
@@ -1235,6 +1278,34 @@ class AiInstanceService:
 
         return sts_data
 
+    def get_large_capacity_storage_mount_info(self, ai_instance_db, pod_volumes, volume_mounts):
+        if not pod_volumes:
+            pod_volumes = []
+        if not pod_volumes:
+            volume_mounts = []
+
+        # 查询alayanew 大容量存储路径
+        large_capacity_storage_path = self.get_large_capacity_storage_fs_shared_volume_path(ai_instance_db.instance_tenant_id)
+        if large_capacity_storage_path:
+            dingo_print(f"large_capacity_storage_path: {large_capacity_storage_path}")
+            volume_mounts.append(
+                V1VolumeMount(
+                    name="large-capacity-storage",
+                    mount_path="/root/userdata"  # 容器内的挂载路径,
+                )
+            )
+            pod_volumes.append(
+                V1Volume(
+                    name="large-capacity-storage",
+                    host_path=V1HostPathVolumeSource(
+                        path=f"/mnt/capacity{large_capacity_storage_path}/share",  # 宿主机上的路径
+
+                    )
+                )
+            )
+
+        return pod_volumes, volume_mounts
+
     def start_ai_instance_by_id(self, id, request):
         try:
 
@@ -1302,15 +1373,26 @@ class AiInstanceService:
         # 提取资源配置
         resource_limits = resource_config.get('resource_limits', {})
         resource_requests = resource_config.get('resource_requests', {})
-        node_selector_gpu = resource_config.get('node_selector_gpu', {})
-        toleration_gpus = resource_config.get('toleration_gpus', [])
         system_disk_size = resource_config.get('system_disk_size', 50)
-
-        # 创建亲和性配置
-        # affinity = self.create_affinity(node_selector_gpu)
 
         # 构建Pod模板标签
         pod_template_labels = self.build_pod_template_labels(ai_instance_info_db, request.product_code if request and request.product_code else ai_instance_info_db.product_code, resource_limits)
+
+        # 处理大容量存储挂载信息
+        pod_volumes, volume_mounts = self.handle_large_capacity_storage_mount_info(ai_instance_info_db, existing_sts)
+
+        # 3. 应用新的存储配置
+        # 添加新的卷到volumes、mount列表
+        existing_sts.spec.template.spec.volumes = pod_volumes
+        existing_sts.spec.template.spec.containers[0].volume_mounts = volume_mounts
+
+
+        # 为每个容器添加新的volumeMounts
+        for container in existing_sts.spec.template.spec.containers:
+            if volume_mounts:
+                if not hasattr(container, 'volume_mounts') or not container.volume_mounts:
+                    container.volume_mounts = []
+                container.volume_mounts.extend(volume_mounts)
 
         # 更新existing_sts的各个字段
         existing_sts.metadata.resource_version = None
@@ -1319,6 +1401,7 @@ class AiInstanceService:
         existing_sts.spec.template.spec.containers[0].name = ai_instance_info_db.instance_real_name
         existing_sts.spec.template.spec.containers[0].image = image_name
         existing_sts.spec.template.spec.containers[0].image_pull_policy = "Always"
+
         if resource_limits:
             existing_sts.spec.template.spec.containers[0].resources = V1ResourceRequirements(
                 requests=resource_requests,
@@ -1326,6 +1409,29 @@ class AiInstanceService:
             )
 
         return existing_sts
+
+    def handle_large_capacity_storage_mount_info(self, ai_instance_info_db, existing_sts):
+        # 1. 移除旧的 large-capacity-storage 卷配置
+        # 从 volumes 中移除
+        if hasattr(existing_sts.spec.template.spec, 'volumes') and existing_sts.spec.template.spec.volumes:
+            existing_sts.spec.template.spec.volumes = [
+                volume for volume in existing_sts.spec.template.spec.volumes
+                if volume.name != 'large-capacity-storage'
+            ]
+        # 从每个容器的 volumeMounts 中移除
+        for container in existing_sts.spec.template.spec.containers:
+            if hasattr(container, 'volume_mounts') and container.volume_mounts:
+                container.volume_mounts = [
+                    mount for mount in container.volume_mounts
+                    if mount.name != 'large-capacity-storage'
+                ]
+        # 2. 获取新的大容量存储挂载信息
+        pod_volumes, volume_mounts = self.get_large_capacity_storage_mount_info(
+            ai_instance_info_db,
+            existing_sts.spec.template.spec.volumes,  # 传入移除了大容量存储volumes
+            existing_sts.spec.template.spec.containers[0].volume_mounts  # 传入现存的移除了大容量存储的volume_mounts开
+        )
+        return pod_volumes, volume_mounts
 
     def build_pod_template_labels(self, ai_instance_info_db, product_code, resource_limits):
         """构建Pod模板的标签"""
@@ -2671,3 +2777,18 @@ class AiInstanceService:
         for i in range(1, 1001):
             # 测试线程池
             queuedThreadPool.submit(partial(print, f"Hello World Number {i}"))
+
+
+    def get_large_capacity_storage_fs_shared_volume_path(self, tenant_id: str):
+        custom_client = self.get_alayanew_cached_custom_client("alayanew_k8s_kubeconfig_key")
+        if custom_client:
+            alayanew_share_volume = k8s_common_operate.get_alayanew_share_volume(custom_client, tenant_id)
+            dingo_print(f"get_large_capacity_storage_fs_shared_volume_path volume_path size:{len(alayanew_share_volume)}")
+            if alayanew_share_volume:
+                if alayanew_share_volume.getattr('spec'):
+                    volume_path = alayanew_share_volume.getattr('spec').get('fsSharedVolumePath')
+                    dingo_print(f"get_large_capacity_storage_fs_shared_volume_path volume_path:{volume_path}")
+                    return volume_path
+        dingo_print("get_large_capacity_storage_fs_shared_volume_path is empty")
+        return None
+
