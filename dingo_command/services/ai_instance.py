@@ -827,6 +827,10 @@ class AiInstanceService:
             k8s_common_operate.create_ai_instance_ns(self.core_k8s_client, namespace_name)
             dingo_print(f"Created namespace: {namespace_name}")
 
+            # create network policy for namespace
+            k8s_common_operate.create_network_policy(self.networking_k8s_client, namespace_name)
+            dingo_print(f"Created network policy for namespace: {namespace_name}")
+
         return namespace_name
 
     def _convert_to_db_model(self, ai_instance) -> AiInstanceInfo:

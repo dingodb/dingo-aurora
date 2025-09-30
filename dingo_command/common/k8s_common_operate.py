@@ -1076,3 +1076,113 @@ class K8sCommonOperate:
             error_msg = f"read shared_volume {tenant_id} fail: {e.reason} (status: {e.status})"
             dingo_print(error_msg)
             return None
+
+    def create_network_policy(self, custom_v1: client.CustomObjectsApi, namespace: str, 
+                            policy_name: str = "deny-cross-cci",
+                            k8s_service_cidr: str = "10.96.0.0/12",
+                            private_cidrs: list = None):
+        """
+        为指定命名空间创建 Calico NetworkPolicy，限制 CCI 命名空间之间的跨访问
+        
+        Args:
+            custom_v1: CustomObjectsApi 客户端实例
+            namespace: 目标命名空间
+            policy_name: 网络策略名称，默认为 "deny-cross-cci"
+            k8s_service_cidr: Kubernetes 服务网段，默认为 "10.96.0.0/12"
+            private_cidrs: 要排除的内网网段列表，默认为标准私网段
+        
+        Returns:
+            创建或更新的 NetworkPolicy 对象
+        """
+        if private_cidrs is None:
+            private_cidrs = [
+                "192.168.0.0/16"   # 排除192.168.x.x存储网
+            ]
+
+        # 定义 Calico NetworkPolicy 对象
+        network_policy = {
+            "apiVersion": "crd.projectcalico.org/v1",
+            "kind": "NetworkPolicy",
+            "metadata": {
+                "name": policy_name,
+                "namespace": namespace
+            },
+            "spec": {
+                "selector": "all()",
+                "types": ["Egress"],
+                "egress": [
+                    # 允许访问同一命名空间
+                    {
+                        "action": "Allow",
+                        "destination": {
+                            "namespaceSelector": f"kubernetes.io/metadata.name=='{namespace}'"
+                        }
+                    },
+                    # 允许访问非CCI命名空间
+                    {
+                        "action": "Allow", 
+                        "destination": {
+                            "namespaceSelector": "!(kubernetes.io/metadata.name starts with 'cci-')"
+                        }
+                    },
+                    # 允许访问Kubernetes服务网段
+                    {
+                        "action": "Allow",
+                        "destination": {
+                            "nets": [k8s_service_cidr]
+                        }
+                    },
+                    # 允许访问公网，但排除内网段
+                    {
+                        "action": "Allow",
+                        "destination": {
+                            "notNets": private_cidrs
+                        }
+                    }
+                ]
+            }
+        }
+
+        try:
+            # 首先尝试创建
+            api_response = custom_v1.create_namespaced_custom_object(
+                group="crd.projectcalico.org",
+                version="v1",
+                namespace=namespace,
+                plural="networkpolicies",
+                body=network_policy
+            )
+            dingo_print(f"Successfully created NetworkPolicy '{policy_name}' in namespace '{namespace}'")
+            return api_response
+
+        except ApiException as e:
+            # 如果异常原因是 409 Conflict，则尝试更新已有的 NetworkPolicy
+            if e.status == 409:
+                dingo_print(f"NetworkPolicy '{policy_name}' already exists in namespace '{namespace}', attempting update...")
+                try:
+                    api_response = custom_v1.replace_namespaced_custom_object(
+                        group="crd.projectcalico.org", 
+                        version="v1",
+                        namespace=namespace,
+                        plural="networkpolicies",
+                        name=policy_name,
+                        body=network_policy
+                    )
+                    dingo_print(f"Successfully updated NetworkPolicy '{policy_name}' in namespace '{namespace}'")
+                    return api_response
+                except Exception as update_e:
+                    dingo_print(f"Failed to update NetworkPolicy '{policy_name}' in namespace '{namespace}': {update_e}")
+                    import traceback
+                    traceback.print_exc()
+                    raise update_e
+            else:
+                # 如果是其他错误，直接抛出
+                dingo_print(f"Failed to create NetworkPolicy '{policy_name}' in namespace '{namespace}': {e}")
+                import traceback
+                traceback.print_exc()
+                raise e
+        except Exception as e:
+            dingo_print(f"Unexpected error during NetworkPolicy creation: {e}")
+            import traceback
+            traceback.print_exc()
+            raise e
